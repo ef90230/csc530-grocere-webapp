@@ -9,6 +9,13 @@ At major retailers, aisles are organized in a way to group similar items togethe
 <img width="421" height="471" alt="pickpathexample" src="https://github.com/user-attachments/assets/f6e1af12-57c5-43a6-931b-c523f94b23de" />
 
 ## Fulfill Orders With Ease
+### Shop Quickly and Efficiently
+As customers place orders, their items will appear in sorted commodities. Separating the items this way, alongside the pick paths set by employees or the AI, will maximize picking efficiency and simplify shopping procedure. Grocer-E ensures employees will only have to focus on one type of item (ambient, chilled, frozen, hot, or oversized) on any given pick walk.
+### Keep Things Organized
+Grocer-E provides the digital infrastructure for employees to organize the items from different walk types. Move item groups into one location with the Staging screen to ensure customers get every item they ordered.
+### Manage the Parking Lot
+Customers can check in with one button to let stores know they're ready to pick up their orders.
+When they check in, customer orders will appear at the top to alert you to hand the order off quickly. Use Grocer-E's prioritization tools to reduce wait times in the parking lot and keep shoppers happy. Order scheduling and timeslot limits prevent stores from being overwhelmed by excessive order volume.
 
 ## Get Feedback For Your Work
 Grocer-E tracks store and employee fulfillment metrics to give you instant feedback on performance. From pick rate to wait times and beyond, Grocer-E gives your store powerful tools to fuel your operations decisions.
