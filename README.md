@@ -8,6 +8,12 @@ At major retailers, aisles are organized in a way to group similar items togethe
 
 <img width="421" height="471" alt="pickpathexample" src="https://github.com/user-attachments/assets/f6e1af12-57c5-43a6-931b-c523f94b23de" />
 
+To make your store's pick paths as efficient as possible:
+- Your path should make a single loop around the store, from the backroom door back to the backroom door. Set the location of your backroom door and the aisles.
+- As the picker moves through the aisles within a zone, they should snake from aisle to aisle. This ensures they don't leave an aisle the way they came in (which would increase times).
+- Set one path each for ambient, chilled, frozen, and hot temperature levels. Mark the temperature type for every item and every location or those items will end up in Unknown, slowing you down.
+- Keep all items locked behind magnets or cases within the Restricted commodity to eliminate the likelihood that a picker not expecting to need keys backtracking to get them.
+
 ## Fulfill Orders With Ease
 ### Shop Quickly and Efficiently
 As customers place orders, their items will appear in sorted commodities. Separating the items this way, alongside the pick paths set by employees or the AI, will maximize picking efficiency and simplify shopping procedure. Grocer-E ensures employees will only have to focus on one type of item (ambient, chilled, frozen, hot, or oversized) on any given pick walk.
