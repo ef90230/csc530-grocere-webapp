@@ -1,10 +1,5 @@
 const { Employee, Store, Order } = require('../models');
 
-/**
- * @desc    Get all employees
- * @route   GET /api/employees
- * @access  Private (Manager)
- */
 const getEmployees = async (req, res) => {
   try {
     const { storeId, role, isActive } = req.query;
@@ -38,11 +33,6 @@ const getEmployees = async (req, res) => {
   }
 };
 
-/**
- * @desc    Get single employee
- * @route   GET /api/employees/:id
- * @access  Private
- */
 const getEmployee = async (req, res) => {
   try {
     const employee = await Employee.findByPk(req.params.id, {
@@ -70,11 +60,6 @@ const getEmployee = async (req, res) => {
   }
 };
 
-/**
- * @desc    Create new employee
- * @route   POST /api/employees
- * @access  Private (Manager)
- */
 const createEmployee = async (req, res) => {
   try {
     const employee = await Employee.create(req.body);
@@ -95,11 +80,6 @@ const createEmployee = async (req, res) => {
   }
 };
 
-/**
- * @desc    Update employee
- * @route   PUT /api/employees/:id
- * @access  Private (Manager or self)
- */
 const updateEmployee = async (req, res) => {
   try {
     const employee = await Employee.findByPk(req.params.id);
@@ -108,7 +88,6 @@ const updateEmployee = async (req, res) => {
       return res.status(404).json({ message: 'Employee not found' });
     }
 
-    // Don't allow updating password through this endpoint
     delete req.body.password;
 
     await employee.update(req.body);
@@ -126,11 +105,6 @@ const updateEmployee = async (req, res) => {
   }
 };
 
-/**
- * @desc    Delete employee (soft delete by setting isActive to false)
- * @route   DELETE /api/employees/:id
- * @access  Private (Manager)
- */
 const deleteEmployee = async (req, res) => {
   try {
     const employee = await Employee.findByPk(req.params.id);
@@ -151,11 +125,6 @@ const deleteEmployee = async (req, res) => {
   }
 };
 
-/**
- * @desc    Get employee performance metrics
- * @route   GET /api/employees/:id/metrics
- * @access  Private
- */
 const getEmployeeMetrics = async (req, res) => {
   try {
     const employee = await Employee.findByPk(req.params.id, {
@@ -177,7 +146,6 @@ const getEmployeeMetrics = async (req, res) => {
       return res.status(404).json({ message: 'Employee not found' });
     }
 
-    // Get recent orders
     const recentOrders = await Order.findAll({
       where: { assignedPickerId: employee.id },
       limit: 20,

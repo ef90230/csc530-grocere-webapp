@@ -1,11 +1,6 @@
 const { Item, ItemLocation, Location, Aisle, Store } = require('../models');
 const { Op } = require('sequelize');
 
-/**
- * @desc    Get all items with optional filters
- * @route   GET /api/items
- * @access  Public
- */
 const getItems = async (req, res) => {
   try {
     const {
@@ -63,7 +58,6 @@ const getItems = async (req, res) => {
       order
     });
 
-    // Filter for items with no location if requested
     let filteredItems = items;
     if (noLocation === 'true' && storeId) {
       filteredItems = items.filter(item => item.locations.length === 0);
@@ -80,11 +74,6 @@ const getItems = async (req, res) => {
   }
 };
 
-/**
- * @desc    Get single item
- * @route   GET /api/items/:id
- * @access  Public
- */
 const getItem = async (req, res) => {
   try {
     const { storeId } = req.query;
@@ -129,11 +118,6 @@ const getItem = async (req, res) => {
   }
 };
 
-/**
- * @desc    Create new item
- * @route   POST /api/items
- * @access  Private (Manager)
- */
 const createItem = async (req, res) => {
   try {
     const item = await Item.create(req.body);
@@ -151,11 +135,6 @@ const createItem = async (req, res) => {
   }
 };
 
-/**
- * @desc    Update item
- * @route   PUT /api/items/:id
- * @access  Private (Manager)
- */
 const updateItem = async (req, res) => {
   try {
     const item = await Item.findByPk(req.params.id);
@@ -176,11 +155,6 @@ const updateItem = async (req, res) => {
   }
 };
 
-/**
- * @desc    Delete item (soft delete by setting isActive to false)
- * @route   DELETE /api/items/:id
- * @access  Private (Manager)
- */
 const deleteItem = async (req, res) => {
   try {
     const item = await Item.findByPk(req.params.id);
@@ -201,11 +175,6 @@ const deleteItem = async (req, res) => {
   }
 };
 
-/**
- * @desc    Get items by store with availability
- * @route   GET /api/items/store/:storeId/available
- * @access  Public
- */
 const getAvailableItems = async (req, res) => {
   try {
     const storeId = req.params.storeId;
@@ -257,11 +226,6 @@ const getAvailableItems = async (req, res) => {
   }
 };
 
-/**
- * @desc    Check item availability at store
- * @route   GET /api/items/:id/availability/:storeId
- * @access  Public
- */
 const checkItemAvailability = async (req, res) => {
   try {
     const { id, storeId } = req.params;
@@ -316,11 +280,6 @@ const checkItemAvailability = async (req, res) => {
   }
 };
 
-/**
- * @desc    Update item location inventory
- * @route   PUT /api/items/:id/location/:locationId
- * @access  Private (Manager or Picker)
- */
 const updateItemInventory = async (req, res) => {
   try {
     const { id, locationId } = req.params;

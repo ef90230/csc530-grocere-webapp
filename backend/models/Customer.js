@@ -61,8 +61,6 @@ const Customer = sequelize.define('Customer', {
   tableName: 'customers',
   timestamps: true
 });
-
-// Hash password before saving
 Customer.beforeCreate(async (customer) => {
   if (customer.password) {
     const salt = await bcrypt.genSalt(10);
@@ -76,8 +74,6 @@ Customer.beforeUpdate(async (customer) => {
     customer.password = await bcrypt.hash(customer.password, salt);
   }
 });
-
-// Method to compare password
 Customer.prototype.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };

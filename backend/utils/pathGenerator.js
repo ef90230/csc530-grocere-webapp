@@ -1,20 +1,6 @@
-/**
- * Path Generation Utility for Pick Paths
- * 
- * This utility generates efficient pick paths for different commodities
- * following best practices:
- * - Single loop from backroom to backroom
- * - Snake pattern through aisles
- * - Minimize backtracking
- * - Group by temperature/commodity
- */
-
 const { Location, Aisle, Store } = require('../models');
 const { Op } = require('sequelize');
 
-/**
- * Calculate distance between two coordinates
- */
 const calculateDistance = (coord1, coord2) => {
   if (!coord1 || !coord2 || !coord1.x || !coord2.x) return 0;
   
@@ -23,13 +9,8 @@ const calculateDistance = (coord1, coord2) => {
   return Math.sqrt(dx * dx + dy * dy);
 };
 
-/**
- * Generate an optimized pick path using a greedy nearest-neighbor algorithm
- * with snake pattern optimization
- */
 const generateOptimizedPath = async (storeId, commodity, backroomCoords) => {
   try {
-    // Get all locations for this commodity at the store
     const locations = await Location.findAll({
       where: {
         storeId,
@@ -56,7 +37,6 @@ const generateOptimizedPath = async (storeId, commodity, backroomCoords) => {
       };
     }
 
-    // Group locations by aisle
     const aisleGroups = {};
     locations.forEach(location => {
       const aisleId = location.aisle.id;
@@ -69,13 +49,11 @@ const generateOptimizedPath = async (storeId, commodity, backroomCoords) => {
       aisleGroups[aisleId].locations.push(location);
     });
 
-    // Generate snake pattern through aisles
     const path = [];
     const aisleIds = Object.keys(aisleGroups).sort((a, b) => {
       const aisleA = aisleGroups[a].aisle;
       const aisleB = aisleGroups[b].aisle;
       
-      // Sort by aisle number if available
       if (aisleA.aisleNumber && aisleB.aisleNumber) {
         return aisleA.aisleNumber.localeCompare(aisleB.aisleNumber, undefined, { numeric: true });
       }
@@ -90,7 +68,6 @@ const generateOptimizedPath = async (storeId, commodity, backroomCoords) => {
       const group = aisleGroups[aisleId];
       let aisleLocations = [...group.locations];
 
-      // Snake pattern: alternate direction for each aisle
       if (shouldReverse) {
         aisleLocations.reverse();
       }
@@ -98,7 +75,6 @@ const generateOptimizedPath = async (storeId, commodity, backroomCoords) => {
       aisleLocations.forEach(location => {
         path.push(location.id);
         
-        // Calculate distance from previous location
         if (location.coordinates && previousLocation) {
           totalDistance += calculateDistance(previousLocation, location.coordinates);
           previousLocation = location.coordinates;
@@ -108,13 +84,10 @@ const generateOptimizedPath = async (storeId, commodity, backroomCoords) => {
       shouldReverse = !shouldReverse;
     });
 
-    // Calculate distance back to backroom
     if (previousLocation && backroomCoords) {
       totalDistance += calculateDistance(previousLocation, backroomCoords);
     }
 
-    // Calculate efficiency score (lower distance = higher score)
-    // Perfect score of 100 for minimal distance
     const averageDistancePerLocation = locations.length > 0 ? totalDistance / locations.length : 0;
     const efficiencyScore = Math.max(0, 100 - (averageDistancePerLocation * 2));
 
@@ -131,9 +104,6 @@ const generateOptimizedPath = async (storeId, commodity, backroomCoords) => {
   }
 };
 
-/**
- * Generate paths for all commodities at a store
- */
 const generateAllPaths = async (storeId) => {
   try {
     const store = await Store.findByPk(storeId);
@@ -158,15 +128,10 @@ const generateAllPaths = async (storeId) => {
   }
 };
 
-/**
- * Validate a path sequence
- */
 const validatePath = (pathSequence, locationIds) => {
-  // Check that all required locations are in the path
   const pathSet = new Set(pathSequence);
   const missingLocations = locationIds.filter(id => !pathSet.has(id));
   
-  // Check for duplicates
   const duplicates = pathSequence.filter((id, index) => pathSequence.indexOf(id) !== index);
   
   return {
@@ -177,9 +142,6 @@ const validatePath = (pathSequence, locationIds) => {
   };
 };
 
-/**
- * Calculate efficiency metrics for a path
- */
 const calculatePathMetrics = async (pathSequence, storeId) => {
   try {
     if (pathSequence.length === 0) {
@@ -209,7 +171,6 @@ const calculatePathMetrics = async (pathSequence, storeId) => {
       if (currentLoc && nextLoc && currentLoc.coordinates && nextLoc.coordinates) {
         totalDistance += calculateDistance(currentLoc.coordinates, nextLoc.coordinates);
 
-        // Check for backtracking (visiting same aisle twice non-consecutively)
         if (visitedAisles.has(currentLoc.aisleId) && currentLoc.aisleId !== nextLoc.aisleId) {
           backtrackingCount++;
         }

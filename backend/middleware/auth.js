@@ -1,9 +1,6 @@
 const jwt = require('jsonwebtoken');
 const { Employee, Customer } = require('../models');
 
-/**
- * Middleware to protect routes requiring authentication
- */
 const protect = async (req, res, next) => {
   let token;
 
@@ -12,13 +9,10 @@ const protect = async (req, res, next) => {
     req.headers.authorization.startsWith('Bearer')
   ) {
     try {
-      // Get token from header
       token = req.headers.authorization.split(' ')[1];
 
-      // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // Add user from payload
       if (decoded.type === 'employee') {
         req.user = await Employee.findByPk(decoded.id, {
           attributes: { exclude: ['password'] }
@@ -47,9 +41,6 @@ const protect = async (req, res, next) => {
   }
 };
 
-/**
- * Middleware to restrict access to specific roles
- */
 const restrictTo = (...roles) => {
   return (req, res, next) => {
     if (req.userType !== 'employee') {
@@ -68,9 +59,6 @@ const restrictTo = (...roles) => {
   };
 };
 
-/**
- * Generate JWT token
- */
 const generateToken = (id, type) => {
   return jwt.sign({ id, type }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRE || '30d'

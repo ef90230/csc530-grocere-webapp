@@ -1,8 +1,5 @@
 const { body, validationResult } = require('express-validator');
 
-/**
- * Middleware to handle validation errors
- */
 const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -14,9 +11,6 @@ const handleValidationErrors = (req, res, next) => {
   next();
 };
 
-/**
- * Password validation rules with minimum character limits
- */
 const passwordValidation = () => {
   const minLength = parseInt(process.env.MIN_PASSWORD_LENGTH) || 8;
   
@@ -35,9 +29,6 @@ const passwordValidation = () => {
   ];
 };
 
-/**
- * Login validation rules
- */
 const loginValidation = () => {
   return [
     body('email')
@@ -50,9 +41,6 @@ const loginValidation = () => {
   ];
 };
 
-/**
- * Registration validation rules for employees
- */
 const employeeRegistrationValidation = () => {
   return [
     body('employeeId')
@@ -87,9 +75,6 @@ const employeeRegistrationValidation = () => {
   ];
 };
 
-/**
- * Registration validation rules for customers
- */
 const customerRegistrationValidation = () => {
   return [
     body('customerId')
@@ -120,9 +105,6 @@ const customerRegistrationValidation = () => {
   ];
 };
 
-/**
- * Order creation validation
- */
 const orderValidation = () => {
   return [
     body('customerId')
@@ -154,9 +136,6 @@ const orderValidation = () => {
   ];
 };
 
-/**
- * Item creation/update validation
- */
 const itemValidation = () => {
   return [
     body('upc')

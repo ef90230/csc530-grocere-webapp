@@ -1,10 +1,5 @@
 const { Customer, Order, Store } = require('../models');
 
-/**
- * @desc    Get all customers
- * @route   GET /api/customers
- * @access  Private (Manager)
- */
 const getCustomers = async (req, res) => {
   try {
     const { search, isCheckedIn } = req.query;
@@ -36,11 +31,6 @@ const getCustomers = async (req, res) => {
   }
 };
 
-/**
- * @desc    Get single customer
- * @route   GET /api/customers/:id
- * @access  Private
- */
 const getCustomer = async (req, res) => {
   try {
     const customer = await Customer.findByPk(req.params.id, {
@@ -68,11 +58,6 @@ const getCustomer = async (req, res) => {
   }
 };
 
-/**
- * @desc    Update customer
- * @route   PUT /api/customers/:id
- * @access  Private (Self or Manager)
- */
 const updateCustomer = async (req, res) => {
   try {
     const customer = await Customer.findByPk(req.params.id);
@@ -81,7 +66,6 @@ const updateCustomer = async (req, res) => {
       return res.status(404).json({ message: 'Customer not found' });
     }
 
-    // Don't allow updating password through this endpoint
     delete req.body.password;
 
     await customer.update(req.body);
@@ -99,11 +83,6 @@ const updateCustomer = async (req, res) => {
   }
 };
 
-/**
- * @desc    Check in customer (for pickup)
- * @route   POST /api/customers/:id/checkin
- * @access  Private (Customer)
- */
 const checkIn = async (req, res) => {
   try {
     const customer = await Customer.findByPk(req.params.id);
@@ -137,11 +116,6 @@ const checkIn = async (req, res) => {
   }
 };
 
-/**
- * @desc    Check out customer (after pickup)
- * @route   POST /api/customers/:id/checkout
- * @access  Private (Employee or Customer)
- */
 const checkOut = async (req, res) => {
   try {
     const customer = await Customer.findByPk(req.params.id);
@@ -166,16 +140,10 @@ const checkOut = async (req, res) => {
   }
 };
 
-/**
- * @desc    Get checked-in customers at a store
- * @route   GET /api/customers/checkedin/:storeId
- * @access  Private (Employee)
- */
 const getCheckedInCustomers = async (req, res) => {
   try {
     const storeId = req.params.storeId;
 
-    // Get customers with active orders at this store who are checked in
     const customers = await Customer.findAll({
       where: { isCheckedIn: true },
       attributes: { exclude: ['password'] },

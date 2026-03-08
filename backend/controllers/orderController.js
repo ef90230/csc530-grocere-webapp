@@ -1,11 +1,6 @@
 const { Order, OrderItem, Customer, Store, Employee, Item, ItemLocation } = require('../models');
 const { Op } = require('sequelize');
 
-/**
- * @desc    Get all orders with filters
- * @route   GET /api/orders
- * @access  Private
- */
 const getOrders = async (req, res) => {
   try {
     const { storeId, customerId, status, date } = req.query;
@@ -69,11 +64,6 @@ const getOrders = async (req, res) => {
   }
 };
 
-/**
- * @desc    Get single order
- * @route   GET /api/orders/:id
- * @access  Private
- */
 const getOrder = async (req, res) => {
   try {
     const order = await Order.findByPk(req.params.id, {
@@ -134,19 +124,12 @@ const getOrder = async (req, res) => {
   }
 };
 
-/**
- * @desc    Create new order
- * @route   POST /api/orders
- * @access  Private (Customer)
- */
 const createOrder = async (req, res) => {
   try {
     const { customerId, storeId, scheduledPickupTime, items } = req.body;
 
-    // Generate order number
     const orderNumber = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
-    // Calculate total amount
     let totalAmount = 0;
     for (const item of items) {
       const itemData = await Item.findByPk(item.itemId);
@@ -155,7 +138,6 @@ const createOrder = async (req, res) => {
       }
     }
 
-    // Create order
     const order = await Order.create({
       orderNumber,
       customerId,
@@ -164,7 +146,6 @@ const createOrder = async (req, res) => {
       totalAmount: totalAmount.toFixed(2)
     });
 
-    // Create order items
     const orderItems = await Promise.all(
       items.map(async (item) => {
         const itemData = await Item.findByPk(item.itemId);
@@ -177,7 +158,7 @@ const createOrder = async (req, res) => {
       })
     );
 
-    // Fetch complete order with relations
+
     const completeOrder = await Order.findByPk(order.id, {
       include: [
         {
@@ -208,11 +189,6 @@ const createOrder = async (req, res) => {
   }
 };
 
-/**
- * @desc    Update order status
- * @route   PUT /api/orders/:id/status
- * @access  Private (Employee)
- */
 const updateOrderStatus = async (req, res) => {
   try {
     const order = await Order.findByPk(req.params.id);
@@ -252,11 +228,6 @@ const updateOrderStatus = async (req, res) => {
   }
 };
 
-/**
- * @desc    Update order item status
- * @route   PUT /api/orders/:id/items/:itemId
- * @access  Private (Picker)
- */
 const updateOrderItem = async (req, res) => {
   try {
     const { id, itemId } = req.params;
@@ -296,11 +267,6 @@ const updateOrderItem = async (req, res) => {
   }
 };
 
-/**
- * @desc    Get orders grouped by commodity for picking
- * @route   GET /api/orders/picking/:storeId
- * @access  Private (Picker)
- */
 const getOrdersForPicking = async (req, res) => {
   try {
     const storeId = req.params.storeId;
@@ -333,7 +299,6 @@ const getOrdersForPicking = async (req, res) => {
       order: [['scheduledPickupTime', 'ASC']]
     });
 
-    // Filter orders that have items matching the commodity
     const filteredOrders = commodity
       ? orders.filter(order => order.items.length > 0)
       : orders;
@@ -349,11 +314,6 @@ const getOrdersForPicking = async (req, res) => {
   }
 };
 
-/**
- * @desc    Cancel order
- * @route   DELETE /api/orders/:id
- * @access  Private (Customer or Manager)
- */
 const cancelOrder = async (req, res) => {
   try {
     const order = await Order.findByPk(req.params.id);

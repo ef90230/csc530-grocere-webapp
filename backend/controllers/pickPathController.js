@@ -6,11 +6,6 @@ const {
   calculatePathMetrics
 } = require('../utils/pathGenerator');
 
-/**
- * @desc    Get all pick paths for a store
- * @route   GET /api/pickpaths/store/:storeId
- * @access  Private (Manager)
- */
 const getPickPaths = async (req, res) => {
   try {
     const { storeId } = req.params;
@@ -43,11 +38,6 @@ const getPickPaths = async (req, res) => {
   }
 };
 
-/**
- * @desc    Get single pick path
- * @route   GET /api/pickpaths/:id
- * @access  Private
- */
 const getPickPath = async (req, res) => {
   try {
     const pickPath = await PickPath.findByPk(req.params.id, {
@@ -64,7 +54,6 @@ const getPickPath = async (req, res) => {
       return res.status(404).json({ message: 'Pick path not found' });
     }
 
-    // Get location details for the path
     const locations = await Location.findAll({
       where: {
         id: pickPath.pathSequence
@@ -78,7 +67,6 @@ const getPickPath = async (req, res) => {
       ]
     });
 
-    // Sort locations according to path sequence
     const sortedLocations = pickPath.pathSequence.map(locId =>
       locations.find(loc => loc.id === locId)
     ).filter(loc => loc !== undefined);
@@ -96,11 +84,6 @@ const getPickPath = async (req, res) => {
   }
 };
 
-/**
- * @desc    Generate AI-optimized pick path
- * @route   POST /api/pickpaths/generate
- * @access  Private (Manager)
- */
 const generatePickPath = async (req, res) => {
   try {
     const { storeId, commodity, pathName, userId } = req.body;
@@ -112,7 +95,6 @@ const generatePickPath = async (req, res) => {
 
     const backroomCoords = store.backroomDoorLocation || { x: 0, y: 0 };
 
-    // Generate optimized path
     const pathData = await generateOptimizedPath(storeId, commodity, backroomCoords);
 
     if (pathData.path.length === 0) {
@@ -122,7 +104,6 @@ const generatePickPath = async (req, res) => {
       });
     }
 
-    // Create pick path
     const pickPath = await PickPath.create({
       storeId,
       commodity,
@@ -149,11 +130,6 @@ const generatePickPath = async (req, res) => {
   }
 };
 
-/**
- * @desc    Generate all pick paths for a store (all commodities)
- * @route   POST /api/pickpaths/generate/all
- * @access  Private (Manager)
- */
 const generateAllPickPaths = async (req, res) => {
   try {
     const { storeId, userId } = req.body;
@@ -195,16 +171,10 @@ const generateAllPickPaths = async (req, res) => {
   }
 };
 
-/**
- * @desc    Create custom pick path
- * @route   POST /api/pickpaths
- * @access  Private (Manager)
- */
 const createPickPath = async (req, res) => {
   try {
     const { storeId, commodity, pathName, pathSequence, userId } = req.body;
 
-    // Validate the path
     const locations = await Location.findAll({
       where: {
         storeId,
@@ -224,7 +194,6 @@ const createPickPath = async (req, res) => {
       });
     }
 
-    // Calculate metrics for the custom path
     const metrics = await calculatePathMetrics(pathSequence, storeId);
     const efficiencyScore = Math.max(0, 100 - (parseFloat(metrics.averageDistance) * 2));
 
@@ -249,11 +218,6 @@ const createPickPath = async (req, res) => {
   }
 };
 
-/**
- * @desc    Update pick path
- * @route   PUT /api/pickpaths/:id
- * @access  Private (Manager)
- */
 const updatePickPath = async (req, res) => {
   try {
     const pickPath = await PickPath.findByPk(req.params.id);
@@ -262,9 +226,8 @@ const updatePickPath = async (req, res) => {
       return res.status(404).json({ message: 'Pick path not found' });
     }
 
-    const { pathSequence, pathName, isActive } = req.body;
+    const { pathSequence } = req.body;
 
-    // If updating path sequence, recalculate metrics
     if (pathSequence) {
       const metrics = await calculatePathMetrics(pathSequence, pickPath.storeId);
       const efficiencyScore = Math.max(0, 100 - (parseFloat(metrics.averageDistance) * 2));
@@ -283,11 +246,6 @@ const updatePickPath = async (req, res) => {
   }
 };
 
-/**
- * @desc    Delete pick path
- * @route   DELETE /api/pickpaths/:id
- * @access  Private (Manager)
- */
 const deletePickPath = async (req, res) => {
   try {
     const pickPath = await PickPath.findByPk(req.params.id);
@@ -308,11 +266,6 @@ const deletePickPath = async (req, res) => {
   }
 };
 
-/**
- * @desc    Set active pick path for a commodity
- * @route   PUT /api/pickpaths/:id/activate
- * @access  Private (Manager)
- */
 const activatePickPath = async (req, res) => {
   try {
     const pickPath = await PickPath.findByPk(req.params.id);
@@ -321,7 +274,6 @@ const activatePickPath = async (req, res) => {
       return res.status(404).json({ message: 'Pick path not found' });
     }
 
-    // Deactivate all other paths for this commodity at this store
     await PickPath.update(
       { isActive: false },
       {
@@ -332,7 +284,6 @@ const activatePickPath = async (req, res) => {
       }
     );
 
-    // Activate this path
     await pickPath.update({ isActive: true });
 
     res.json({

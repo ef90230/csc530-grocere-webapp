@@ -45,7 +45,6 @@ const Employee = sequelize.define('Employee', {
     type: DataTypes.BOOLEAN,
     defaultValue: true
   },
-  // Performance metrics
   pickRate: {
     type: DataTypes.DECIMAL(10, 2),
     defaultValue: 0.00
@@ -74,8 +73,6 @@ const Employee = sequelize.define('Employee', {
   tableName: 'employees',
   timestamps: true
 });
-
-// Hash password before saving
 Employee.beforeCreate(async (employee) => {
   if (employee.password) {
     const salt = await bcrypt.genSalt(10);
@@ -89,8 +86,6 @@ Employee.beforeUpdate(async (employee) => {
     employee.password = await bcrypt.hash(employee.password, salt);
   }
 });
-
-// Method to compare password
 Employee.prototype.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };

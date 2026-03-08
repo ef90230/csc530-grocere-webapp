@@ -14,9 +14,6 @@ const {
   handleValidationErrors
 } = require('../middleware/validation');
 
-// @route   POST /api/auth/login
-// @desc    Login user (employee or customer)
-// @access  Public
 router.post(
   '/login',
   loginValidation(),
@@ -24,9 +21,6 @@ router.post(
   login
 );
 
-// @route   POST /api/auth/register/employee
-// @desc    Register new employee
-// @access  Public (should be restricted in production)
 router.post(
   '/register/employee',
   employeeRegistrationValidation(),
@@ -34,9 +28,6 @@ router.post(
   registerEmployee
 );
 
-// @route   POST /api/auth/register/customer
-// @desc    Register new customer
-// @access  Public
 router.post(
   '/register/customer',
   customerRegistrationValidation(),
@@ -44,9 +35,6 @@ router.post(
   registerCustomer
 );
 
-// @route   GET /api/auth/me
-// @desc    Get current user profile
-// @access  Private
 router.get('/me', protect, getMe);
 
 module.exports = router;
