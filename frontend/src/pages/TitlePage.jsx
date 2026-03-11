@@ -1,9 +1,9 @@
 import {} from 'react';
 
-const CartScreen = () => {
+const TitlePage = () => {
     return (
     
     );
 };
 
-export default CartScreen;
+export default TitlePage;
