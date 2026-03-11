@@ -8,7 +8,8 @@ const {
   deleteItem,
   getAvailableItems,
   checkItemAvailability,
-  updateItemInventory
+  updateItemInventory,
+  getOrganizationInsights
 } = require('../controllers/itemController');
 const { protect, restrictTo } = require('../middleware/auth');
 const { itemValidation, handleValidationErrors } = require('../middleware/validation');
@@ -16,6 +17,8 @@ const { itemValidation, handleValidationErrors } = require('../middleware/valida
 router.get('/', getItems);
 
 router.get('/store/:storeId/available', getAvailableItems);
+
+router.get('/store/:storeId/insights', protect, restrictTo('manager'), getOrganizationInsights);
 
 router.get('/:id', getItem);
 
