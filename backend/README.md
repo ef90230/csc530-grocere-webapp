@@ -175,6 +175,7 @@ The server will start on `http://localhost:5000`
 - `GET /api/items` - Get all items (with filters)
 - `GET /api/items/:id` - Get item by ID
 - `GET /api/items/store/:storeId/available` - Get available items at store
+- `GET /api/items/store/:storeId/insights` - Manager organization insights
 - `GET /api/items/:id/availability/:storeId` - Check item availability
 - `POST /api/items` - Create item (Manager)
 - `PUT /api/items/:id` - Update item (Manager)
@@ -192,13 +193,20 @@ The server will start on `http://localhost:5000`
 
 ### Pick Paths
 - `GET /api/pickpaths/store/:storeId` - Get pick paths for store
+- `GET /api/pickpaths/store/:storeId/linked-list` - Generate linked list of next locations
 - `GET /api/pickpaths/:id` - Get pick path by ID
 - `POST /api/pickpaths/generate` - Generate AI-optimized path (Manager)
 - `POST /api/pickpaths/generate/all` - Generate all paths (Manager)
+- `POST /api/pickpaths/generate/ai` - AI API-assisted path generation and weak-point analysis
 - `POST /api/pickpaths` - Create custom path (Manager)
 - `PUT /api/pickpaths/:id` - Update pick path (Manager)
 - `PUT /api/pickpaths/:id/activate` - Activate pick path (Manager)
 - `DELETE /api/pickpaths/:id` - Delete pick path (Manager)
+
+### AI Provider Setup
+- Add `GEMINI_API_KEY` in `.env` to enable Gemini free-tier path analysis.
+- Optional: set `GEMINI_MODEL` (default `gemini-1.5-flash`).
+- If API key is missing, the backend falls back to heuristic weak-point analysis.
 
 ## Database Schema
 

@@ -21,7 +21,8 @@
     "jsonwebtoken": "^9.0.2",
     "dotenv": "^16.3.1",
     "cors": "^2.8.5",
-    "express-validator": "^7.0.1"
+    "express-validator": "^7.0.1",
+    "node-fetch": "^2.7.0"
   },
   "devDependencies": {
     "jest": "^29.7.0",

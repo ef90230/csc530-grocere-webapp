@@ -318,6 +318,88 @@ const updateItemInventory = async (req, res) => {
   }
 };
 
+const getOrganizationInsights = async (req, res) => {
+  try {
+    const { storeId } = req.params;
+
+    const itemLocations = await ItemLocation.findAll({
+      where: { storeId },
+      include: [
+        {
+          model: Item,
+          as: 'item',
+          where: { isActive: true },
+          attributes: ['id', 'name', 'department', 'category', 'commodity']
+        },
+        {
+          model: Location,
+          as: 'location',
+          include: [
+            {
+              model: Aisle,
+              as: 'aisle',
+              attributes: ['id', 'aisleNumber', 'aisleName', 'category']
+            }
+          ]
+        }
+      ]
+    });
+
+    const totalTrackedItems = itemLocations.length;
+    const outOfStockCount = itemLocations.filter(row => row.quantityOnHand <= 0).length;
+    const inStockCount = totalTrackedItems - outOfStockCount;
+
+    const misplaced = itemLocations.filter(row => {
+      const itemDepartment = (row.item?.department || '').toLowerCase().trim();
+      const aisleCategory = (row.location?.aisle?.category || '').toLowerCase().trim();
+      if (!itemDepartment || !aisleCategory) {
+        return false;
+      }
+      return itemDepartment !== aisleCategory;
+    });
+
+    const aisleWorkload = {};
+    itemLocations.forEach(row => {
+      const aisleNumber = row.location?.aisle?.aisleNumber || 'unknown';
+      if (!aisleWorkload[aisleNumber]) {
+        aisleWorkload[aisleNumber] = { aisleNumber, itemCount: 0, outOfStockCount: 0 };
+      }
+      aisleWorkload[aisleNumber].itemCount += 1;
+      if (row.quantityOnHand <= 0) {
+        aisleWorkload[aisleNumber].outOfStockCount += 1;
+      }
+    });
+
+    const aisleSummary = Object.values(aisleWorkload)
+      .sort((a, b) => b.outOfStockCount - a.outOfStockCount)
+      .slice(0, 10);
+
+    res.json({
+      success: true,
+      storeId,
+      summary: {
+        totalTrackedItems,
+        inStockCount,
+        outOfStockCount,
+        misplacedCount: misplaced.length
+      },
+      weakPoints: {
+        topAislesByOutOfStock: aisleSummary,
+        misplacedSamples: misplaced.slice(0, 25).map(row => ({
+          itemId: row.item.id,
+          itemName: row.item.name,
+          itemDepartment: row.item.department,
+          aisleNumber: row.location?.aisle?.aisleNumber || null,
+          aisleCategory: row.location?.aisle?.category || null
+        }))
+      }
+    });
+  } catch (error) {
+    console.error('Get organization insights error:', error);
+    res.status(500).json({ message: 'Server error retrieving organization insights' });
+  }
+};
+
 module.exports = {
   getItems,
   getItem,
@@ -326,5 +408,6 @@ module.exports = {
   deleteItem,
   getAvailableItems,
   checkItemAvailability,
-  updateItemInventory
+  updateItemInventory,
+  getOrganizationInsights
 };

@@ -102,6 +102,9 @@ CREATE DATABASE grocere_db;
    JWT_EXPIRE=30d
    
    MIN_PASSWORD_LENGTH=8
+
+  GEMINI_API_KEY=your_gemini_api_key
+  GEMINI_MODEL=gemini-1.5-flash
    ```
    
    **Platform Notes**:
@@ -118,6 +121,26 @@ npm start
 ```
 
 The API will be available at `http://localhost:5000`
+
+### Step 5: Verify AI Path API (Optional)
+Use a manager JWT token and call:
+
+```bash
+curl -X POST http://localhost:5000/api/pickpaths/generate/ai \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_MANAGER_JWT" \
+  -d '{
+    "storeId": 1,
+    "commodity": "ambient",
+    "userId": 1,
+    "pathName": "AI Suggested Ambient Path",
+    "savePath": true
+  }'
+```
+
+Additional manager endpoints:
+- `GET /api/pickpaths/store/:storeId/linked-list?commodity=ambient`
+- `GET /api/items/store/:storeId/insights`
 
 ## 📋 API Endpoints Summary
 

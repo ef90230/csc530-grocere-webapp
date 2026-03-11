@@ -2,9 +2,12 @@ const { PickPath, Store, Location, Aisle } = require('../models');
 const {
   generateOptimizedPath,
   generateAllPaths,
+  generateAvailableLocationPath,
+  buildLinkedList,
   validatePath,
   calculatePathMetrics
 } = require('../utils/pathGenerator');
+const { analyzePathWithAI, evaluatePath } = require('../services/aiPathService');
 
 const getPickPaths = async (req, res) => {
   try {
@@ -297,11 +300,127 @@ const activatePickPath = async (req, res) => {
   }
 };
 
+const generateLinkedListPath = async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    const { commodity } = req.query;
+
+    const store = await Store.findByPk(storeId);
+    if (!store) {
+      return res.status(404).json({ message: 'Store not found' });
+    }
+
+    const backroomCoords = store.backroomDoorLocation || { x: 0, y: 0 };
+    const pathData = await generateAvailableLocationPath(storeId, commodity, backroomCoords);
+
+    if (pathData.path.length === 0) {
+      return res.status(404).json({
+        message: 'No in-stock locations found for linked-list generation'
+      });
+    }
+
+    const linkedList = buildLinkedList(pathData.path);
+
+    res.json({
+      success: true,
+      storeId,
+      commodity: commodity || 'all',
+      linkedList,
+      metrics: {
+        distance: pathData.distance,
+        efficiencyScore: pathData.efficiencyScore,
+        locationCount: pathData.locationCount,
+        aisleCount: pathData.aisleCount
+      }
+    });
+  } catch (error) {
+    console.error('Generate linked-list path error:', error);
+    res.status(500).json({ message: 'Server error generating linked-list path' });
+  }
+};
+
+const generateAIPickPath = async (req, res) => {
+  try {
+    const { storeId, commodity, pathName, userId, existingPathSequence, savePath } = req.body;
+
+    const store = await Store.findByPk(storeId);
+    if (!store) {
+      return res.status(404).json({ message: 'Store not found' });
+    }
+
+    const backroomCoords = store.backroomDoorLocation || { x: 0, y: 0 };
+    const candidate = await generateAvailableLocationPath(storeId, commodity, backroomCoords);
+
+    if (candidate.path.length === 0) {
+      return res.status(400).json({
+        message: `No stocked locations found for commodity: ${commodity || 'all'}`
+      });
+    }
+
+    const locations = await Location.findAll({
+      where: { id: candidate.path },
+      include: [
+        {
+          model: Aisle,
+          as: 'aisle',
+          attributes: ['id', 'aisleNumber', 'aisleName', 'category']
+        }
+      ]
+    });
+
+    const metrics = await evaluatePath({
+      storeId,
+      pathSequence: candidate.path
+    });
+
+    const aiAnalysis = await analyzePathWithAI({
+      storeId,
+      commodity,
+      candidatePath: candidate.path,
+      existingPath: existingPathSequence,
+      locations,
+      metrics
+    });
+
+    const linkedList = buildLinkedList(aiAnalysis.suggestedPath);
+    let savedPickPath = null;
+
+    if (savePath === true) {
+      savedPickPath = await PickPath.create({
+        storeId,
+        commodity: commodity || 'ambient',
+        pathName: pathName || `AI API Suggested ${commodity || 'Mixed'} Path`,
+        pathSequence: aiAnalysis.suggestedPath,
+        isAiGenerated: true,
+        efficiencyScore: candidate.efficiencyScore,
+        createdBy: userId
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      provider: aiAnalysis.provider,
+      suggestedPath: aiAnalysis.suggestedPath,
+      linkedList,
+      weakPoints: aiAnalysis.weakPoints,
+      recommendations: aiAnalysis.recommendations,
+      rationale: aiAnalysis.rationale,
+      metrics,
+      savedPickPath
+    });
+  } catch (error) {
+    console.error('Generate AI pick path error:', error);
+    res.status(500).json({ message: 'Server error generating AI pick path' });
+  }
+};
+
 module.exports = {
   getPickPaths,
   getPickPath,
   generatePickPath,
   generateAllPickPaths,
+  generateLinkedListPath,
+  generateAIPickPath,
   createPickPath,
   updatePickPath,
   deletePickPath,
