@@ -9,6 +9,7 @@ const ItemLocation = require('./ItemLocation');
 const Order = require('./Order');
 const OrderItem = require('./OrderItem');
 const PickPath = require('./PickPath');
+const Timeslot = require('./Timeslot');
 Store.hasMany(Employee, { foreignKey: 'storeId', as: 'employees' });
 Store.hasMany(Aisle, { foreignKey: 'storeId', as: 'aisles' });
 Store.hasMany(Location, { foreignKey: 'storeId', as: 'locations' });
@@ -36,11 +37,14 @@ Order.belongsTo(Store, { foreignKey: 'storeId', as: 'store' });
 Order.belongsTo(Employee, { foreignKey: 'assignedPickerId', as: 'picker' });
 Order.belongsTo(Employee, { foreignKey: 'assignedDispenserId', as: 'dispenser' });
 Order.hasMany(OrderItem, { foreignKey: 'orderId', as: 'items' });
+Order.hasOne(Timeslot, { foreignKey: 'orderNumber', sourceKey: 'orderNumber', as: 'timeslot' });
 OrderItem.belongsTo(Order, { foreignKey: 'orderId', as: 'order' });
 OrderItem.belongsTo(Item, { foreignKey: 'itemId', as: 'item' });
 OrderItem.belongsTo(Item, { foreignKey: 'substitutedItemId', as: 'substitutedItem' });
 PickPath.belongsTo(Store, { foreignKey: 'storeId', as: 'store' });
 PickPath.belongsTo(Employee, { foreignKey: 'createdBy', as: 'creator' });
+Timeslot.belongsTo(Order, { foreignKey: 'orderNumber', targetKey: 'orderNumber', as: 'order' });
+Timeslot.belongsTo(OrderItem, { foreignKey: 'items', as: 'itemList' });
 const syncDatabase = async (force = false) => {
   try {
     await sequelize.sync({ force });
@@ -62,5 +66,6 @@ module.exports = {
   Order,
   OrderItem,
   PickPath,
+  Timeslot,
   syncDatabase
 };
