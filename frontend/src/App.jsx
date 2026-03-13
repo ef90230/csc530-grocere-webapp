@@ -8,6 +8,7 @@ import HomePage from './pages/HomePage';
 import InventoryScreen from './pages/InventoryScreen';
 import LoginPage from './pages/LoginPage';
 import TitlePage from './pages/TitlePage';
+import StorefrontPage from './pages/StorefrontPage';
 // import MapScreen from './pages/MapScreen';
 import OrderListPage from './pages/OrderListPage';
 import PickingPage from './pages/PickingPage';
@@ -31,6 +32,16 @@ function App() {
                         <Route path="/" element={<TitlePage />} />
                         <Route path="/login" element={<LoginPage />} />
                         <Route path="/signup" element={<SignupPage />} />
+
+                        {/* Customer routes */}
+                        <Route
+                            path="/storefront"
+                            element={
+                                <ProtectedRoute>
+                                    <StorefrontPage />
+                                </ProtectedRoute>
+                            }
+                        />
 
                         {/* Employee protected routes */}
                         <Route

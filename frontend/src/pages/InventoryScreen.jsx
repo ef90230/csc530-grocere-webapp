@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Navbar from '../components/common/Navbar';
 import './InventoryScreen.css';
 
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 const SORT_OPTIONS = [
   { value: 'name_asc', label: 'Name (A‑Z)' },
   { value: 'name_desc', label: 'Name (Z‑A)' },
@@ -14,7 +16,7 @@ const SORT_OPTIONS = [
 const InventoryScreen = () => {
   const [items, setItems] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState('name_asc');
+  const [sortBy, setSortBy] = useState('aisle');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -25,7 +27,7 @@ const InventoryScreen = () => {
       const params = new URLSearchParams();
       if (searchTerm) params.append('search', searchTerm);
 
-      const res = await fetch(`/api/items?${params.toString()}`);
+      const res = await fetch(`${API_BASE}/api/items?${params.toString()}`);
       if (!res.ok) {
         throw new Error('Failed to load items');
       }

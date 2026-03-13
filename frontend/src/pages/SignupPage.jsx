@@ -16,7 +16,7 @@ const SignupPage = () => {
             if (formData.userType === 'employee') {
                 navigate('/home');
             } else {
-                navigate('/cart');
+                navigate('/storefront');
             }
         } catch (err) {
             setError(err.message || 'Registration failed');

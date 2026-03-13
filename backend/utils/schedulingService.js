@@ -10,6 +10,8 @@ const { Op } = require('sequelize');
  * 5. Schedules purged 48 hours after midnight of that day
  */
 
+const MAX_ORDERS_PER_HOUR = 20;
+
 /**
  * Check if a time is within operating hours (8 AM - 11:59 PM)
  */
@@ -88,11 +90,8 @@ const validateScheduleTime = async (scheduledTime, storeId, nowTime = new Date()
   hourEnd.setHours(hourEnd.getHours() + 1);
 
   const orderCountForHour = await getOrderCountForHour(storeId, hourStart, hourEnd);
-  if (orderCountForHour >= 20) {
-    errors.push(
-      `The requested time slot (${hourStart.getHours()}:00) is fully booked. ` +
-      `Please select a different time.`
-    );
+  if (orderCountForHour >= MAX_ORDERS_PER_HOUR) {
+    errors.push('Scheduling capacity exceeded for that hour');
   }
 
   return {
@@ -140,7 +139,7 @@ const getAvailableTimeSlots = async (storeId, startDate, endDate, nowTime = new 
       hourEnd.setHours(hourEnd.getHours() + 1);
 
       const orderCount = await getOrderCountForHour(storeId, hourStart, hourEnd);
-      const isAvailable = orderCount < 20;
+      const isAvailable = orderCount < MAX_ORDERS_PER_HOUR;
 
       slots.push({
         time: new Date(hourStart),

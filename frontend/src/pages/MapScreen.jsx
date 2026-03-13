@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import Navbar from '../components/common/Navbar';
 import './MapScreen.css';
 
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 const GRID_SIZE = 40; // pixels per grid cell
 const DEFAULT_STORE_ID = 1; // TODO: get from auth context or URL param
 const DEFAULT_USER_ID = 1; // TODO: get from auth context
@@ -30,14 +32,15 @@ const MapScreen = () => {
 
   // Redraw canvas when aisles change
   useEffect(() => {
-    drawCanvas();
+    drawCanvas()
+    ;
   }, [aisles, draggingId, aiProposal]);
 
   const fetchAisles = async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/aisles/store/${DEFAULT_STORE_ID}`);
+      const res = await fetch(`${API_BASE}/api/aisles/store/${DEFAULT_STORE_ID}`);
       if (!res.ok) {
         throw new Error('Failed to load aisles');
       }
@@ -124,7 +127,7 @@ const MapScreen = () => {
     setGeneratingAI(true);
     setProposalError(null);
     try {
-      const res = await fetch('/api/pickpaths/generate/ai', {
+      const res = await fetch(`${API_BASE}/api/pickpaths/generate/ai`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -155,7 +158,7 @@ const MapScreen = () => {
     if (!aiProposal) return;
 
     try {
-      const res = await fetch('/api/pickpaths', {
+      const res = await fetch(`${API_BASE}/api/pickpaths`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -326,7 +329,7 @@ const MapScreen = () => {
         coordinates: aisle.coordinates
       }));
 
-      const res = await fetch('/api/aisles/batch/update', {
+      const res = await fetch(`${API_BASE}/api/aisles/batch/update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ aisles: aisleUpdates })
@@ -347,7 +350,7 @@ const MapScreen = () => {
   };
 
   const revertChanges = () => {
-    if (confirm('Are you sure you want to revert all changes?')) {
+    if (window.confirm('Are you sure you want to revert all changes?')) {
       setAisles(JSON.parse(JSON.stringify(originalAisles)));
       setHasChanges(false);
     }
@@ -514,283 +517,6 @@ const MapScreen = () => {
         <div className="error-banner">{proposalError}</div>
       )}
 
-      <Navbar />
-    </div>
-  );
-};
-
-export default MapScreen;
-
-  // Fetch aisles on mount
-  useEffect(() => {
-    fetchAisles();
-  }, []);
-
-  // Redraw canvas when aisles change
-  useEffect(() => {
-    drawCanvas();
-  }, [aisles, draggingId]);
-
-  const fetchAisles = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/aisles/store/${DEFAULT_STORE_ID}`);
-      if (!res.ok) {
-        throw new Error('Failed to load aisles');
-      }
-      const data = await res.json();
-      if (!data.success) {
-        throw new Error(data.message || 'Unexpected response');
-      }
-      setAisles(data.aisles || []);
-      setOriginalAisles(JSON.parse(JSON.stringify(data.aisles)));
-    } catch (err) {
-      console.error('Fetch aisles error:', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const getAisleCoordinates = aisle => {
-    if (aisle.coordinates) {
-      return aisle.coordinates;
-    }
-    // Default positioning if no coordinates
-    return { x: Math.random() * 200, y: Math.random() * 200 };
-  };
-
-  const handleCanvasMouseDown = e => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    // Check if clicking on an aisle
-    for (const aisle of aisles) {
-      const coords = getAisleCoordinates(aisle);
-      const px = coords.x * GRID_SIZE;
-      const py = coords.y * GRID_SIZE;
-      const size = 30;
-
-      if (x >= px && x <= px + size && y >= py && y <= py + size) {
-        setDraggingId(aisle.id);
-        setDragOffset({
-          x: x - px,
-          y: y - py
-        });
-        return;
-      }
-    }
-  };
-
-  const handleCanvasMouseMove = e => {
-    if (draggingId === null) return;
-
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    const newX = Math.max(0, Math.floor((x - dragOffset.x) / GRID_SIZE));
-    const newY = Math.max(0, Math.floor((y - dragOffset.y) / GRID_SIZE));
-
-    setAisles(prev =>
-      prev.map(aisle =>
-        aisle.id === draggingId
-          ? {
-              ...aisle,
-              coordinates: { x: newX, y: newY }
-            }
-          : aisle
-      )
-    );
-
-    setHasChanges(true);
-  };
-
-  const handleCanvasMouseUp = () => {
-    setDraggingId(null);
-  };
-
-  const drawCanvas = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const width = canvas.width;
-    const height = canvas.height;
-
-    // Clear canvas
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, width, height);
-
-    // Draw grid
-    ctx.strokeStyle = '#e0e0e0';
-    ctx.lineWidth = 0.5;
-    for (let i = 0; i <= width; i += GRID_SIZE) {
-      ctx.beginPath();
-      ctx.moveTo(i, 0);
-      ctx.lineTo(i, height);
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.moveTo(0, i);
-      ctx.lineTo(width, i);
-      ctx.stroke();
-    }
-
-    // Draw path connecting aisles in their current positions
-    if (aisles.length > 1) {
-      ctx.strokeStyle = '#999';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([5, 5]);
-
-      const sortedByPosition = [...aisles].sort((a, b) => {
-        const coordsA = getAisleCoordinates(a);
-        const coordsB = getAisleCoordinates(b);
-        if (coordsA.y !== coordsB.y) return coordsA.y - coordsB.y;
-        return coordsA.x - coordsB.x;
-      });
-
-      ctx.beginPath();
-      const first = sortedByPosition[0];
-      const firstCoords = getAisleCoordinates(first);
-      ctx.moveTo(firstCoords.x * GRID_SIZE + 15, firstCoords.y * GRID_SIZE + 15);
-
-      for (let i = 1; i < sortedByPosition.length; i++) {
-        const coords = getAisleCoordinates(sortedByPosition[i]);
-        ctx.lineTo(coords.x * GRID_SIZE + 15, coords.y * GRID_SIZE + 15);
-      }
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-
-    // Draw aisles
-    aisles.forEach(aisle => {
-      const coords = getAisleCoordinates(aisle);
-      const x = coords.x * GRID_SIZE;
-      const y = coords.y * GRID_SIZE;
-      const size = 30;
-
-      // Draw box
-      if (aisle.id === draggingId) {
-        ctx.fillStyle = '#4CAF50';
-      } else {
-        ctx.fillStyle = '#2196F3';
-      }
-      ctx.fillRect(x, y, size, size);
-
-      // Draw border
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x, y, size, size);
-
-      // Draw aisle number
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 12px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(aisle.aisleNumber, x + size / 2, y + size / 2);
-    });
-  };
-
-  const saveChanges = async () => {
-    try {
-      const aisleUpdates = aisles.map(aisle => ({
-        id: aisle.id,
-        coordinates: aisle.coordinates
-      }));
-
-      const res = await fetch('/api/aisles/batch/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ aisles: aisleUpdates })
-      });
-
-      if (!res.ok) {
-        throw new Error('Failed to save changes');
-      }
-
-      const data = await res.json();
-      setOriginalAisles(JSON.parse(JSON.stringify(aisles)));
-      setHasChanges(false);
-      alert('Layout saved successfully!');
-    } catch (err) {
-      console.error('Save error:', err);
-      alert(`Error: ${err.message}`);
-    }
-  };
-
-  const revertChanges = () => {
-    if (confirm('Are you sure you want to revert all changes?')) {
-      setAisles(JSON.parse(JSON.stringify(originalAisles)));
-      setHasChanges(false);
-    }
-  };
-
-  return (
-    <div className="map-screen">
-      <div className="page-content">
-        <h1>Store Layout & Path</h1>
-        <div className="map-toolbar">
-          <div className="toolbar-info">
-            <p>Drag aisles to rearrange them. The dashed line shows the pickup path.</p>
-          </div>
-          <div className="toolbar-buttons">
-            <button
-              className="btn btn-primary"
-              onClick={saveChanges}
-              disabled={!hasChanges || loading}
-            >
-              Save Layout
-            </button>
-            <button
-              className="btn btn-secondary"
-              onClick={revertChanges}
-              disabled={!hasChanges}
-            >
-              Revert Changes
-            </button>
-          </div>
-        </div>
-
-        {loading && <p>Loading aisles…</p>}
-        {error && <p style={{ color: 'red' }}>{error}</p>}
-
-        {!loading && !error && (
-          <canvas
-            ref={canvasRef}
-            className="map-canvas"
-            width={800}
-            height={600}
-            onMouseDown={handleCanvasMouseDown}
-            onMouseMove={handleCanvasMouseMove}
-            onMouseUp={handleCanvasMouseUp}
-            onMouseLeave={handleCanvasMouseUp}
-          />
-        )}
-
-        <div className="map-legend">
-          <p>
-            <span className="legend-item">
-              <span className="legend-color" style={{ backgroundColor: '#2196F3' }} />
-              Aisle
-            </span>
-            <span className="legend-item">
-              <span className="legend-color" style={{ backgroundColor: '#4CAF50' }} />
-              Dragging
-            </span>
-          </p>
-        </div>
-      </div>
       <Navbar />
     </div>
   );

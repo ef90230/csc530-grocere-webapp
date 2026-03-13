@@ -137,6 +137,7 @@ const getEmployeeMetrics = async (req, res) => {
         'firstTimePickPercent',
         'preSubstitutionPercent',
         'postSubstitutionPercent',
+        'percentNotFound',
         'onTimePercent',
         'weightedEfficiency'
       ]

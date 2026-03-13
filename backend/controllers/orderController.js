@@ -6,6 +6,7 @@ const {
   getNextAvailableSlot,
   purgeOldSchedules
 } = require('../utils/schedulingService');
+const { updateEmployeeMetrics } = require('../utils/employeeMetricsService');
 
 const getOrders = async (req, res) => {
   try {
@@ -278,6 +279,14 @@ const updateOrderItem = async (req, res) => {
     }
 
     await orderItem.update(updateData);
+
+    // If picker is assigned and an item was successfully picked, update their metrics.
+    if (['found', 'substituted'].includes(status)) {
+      const order = await Order.findByPk(id);
+      if (order && order.assignedPickerId) {
+        await updateEmployeeMetrics(order.assignedPickerId);
+      }
+    }
 
     res.json({
       success: true,

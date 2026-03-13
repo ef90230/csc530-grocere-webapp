@@ -4,70 +4,73 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 
 // match backend registration schemas (employee vs customer)
-export const signupSchema = z.discriminatedUnion('userType', [
-  z
-    .object({
-      userType: z.literal('employee'),
-      employeeId: z.string().min(1, 'Employee ID is required'),
-      firstName: z
-        .string()
-        .min(1, 'First name is required')
-        .min(2, 'First name must be at least 2 characters'),
-      lastName: z
-        .string()
-        .min(1, 'Last name is required')
-        .min(2, 'Last name must be at least 2 characters'),
-      email: z
-        .string()
-        .min(1, 'Email is required')
-        .email('Please enter a valid email address'),
-      password: z
-        .string()
-        .min(1, 'Password is required')
-        .min(8, 'Password must be at least 8 characters')
-        .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
-        .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
-        .regex(/[0-9]/, 'Password must contain at least one number'),
-      confirmPassword: z.string().min(1, 'Please confirm your password'),
-      role: z.string().optional(),
-      storeId: z.string().min(1, 'Store ID is required'),
-    })
-    .refine((data) => data.password === data.confirmPassword, {
-      message: 'Passwords do not match',
-      path: ['confirmPassword'],
-    }),
-  z
-    .object({
-      userType: z.literal('customer'),
-      customerId: z.string().min(1, 'Customer ID is required'),
-      firstName: z
-        .string()
-        .min(1, 'First name is required')
-        .min(2, 'First name must be at least 2 characters'),
-      lastName: z
-        .string()
-        .min(1, 'Last name is required')
-        .min(2, 'Last name must be at least 2 characters'),
-      email: z
-        .string()
-        .min(1, 'Email is required')
-        .email('Please enter a valid email address'),
-      password: z
-        .string()
-        .min(1, 'Password is required')
-        .min(8, 'Password must be at least 8 characters')
-        .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
-        .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
-        .regex(/[0-9]/, 'Password must contain at least one number'),
-      confirmPassword: z.string().min(1, 'Please confirm your password'),
-      phone: z.string().min(1, 'Phone is required'),
-      preferredStoreId: z.string().min(1, 'Preferred store is required'),
-    })
-    .refine((data) => data.password === data.confirmPassword, {
-      message: 'Passwords do not match',
-      path: ['confirmPassword'],
-    }),
-]);
+const employeeSchema = z
+  .object({
+    userType: z.literal('employee'),
+    employeeId: z.string().min(1, 'Employee ID is required'),
+    firstName: z
+      .string()
+      .min(1, 'First name is required')
+      .min(2, 'First name must be at least 2 characters'),
+    lastName: z
+      .string()
+      .min(1, 'Last name is required')
+      .min(2, 'Last name must be at least 2 characters'),
+    email: z
+      .string()
+      .min(1, 'Email is required')
+      .email('Please enter a valid email address'),
+    password: z
+      .string()
+      .min(1, 'Password is required')
+      .min(8, 'Password must be at least 8 characters')
+      .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+      .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+      .regex(/[0-9]/, 'Password must contain at least one number')
+      .regex(/[!@#$%^&*(),.?":{}|<>]/, 'Password must contain at least one special character'),
+    confirmPassword: z.string().min(1, 'Please confirm your password'),
+    role: z.string().optional(),
+    storeId: z.string().min(1, 'Store ID is required'),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
+  });
+
+const customerSchema = z
+  .object({
+    userType: z.literal('customer'),
+    customerId: z.string().min(1, 'Customer ID is required'),
+    firstName: z
+      .string()
+      .min(1, 'First name is required')
+      .min(2, 'First name must be at least 2 characters'),
+    lastName: z
+      .string()
+      .min(1, 'Last name is required')
+      .min(2, 'Last name must be at least 2 characters'),
+    email: z
+      .string()
+      .min(1, 'Email is required')
+      .email('Please enter a valid email address'),
+    password: z
+      .string()
+      .min(1, 'Password is required')
+      .min(8, 'Password must be at least 8 characters')
+      .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+      .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+      .regex(/[0-9]/, 'Password must contain at least one number')
+      .regex(/[!@#$%^&*(),.?":{}|<>]/, 'Password must contain at least one special character'),
+    confirmPassword: z.string().min(1, 'Please confirm your password'),
+    phone: z.string().min(1, 'Phone is required').regex(/^\+?[1-9]\d{1,14}$/, 'Please provide a valid phone number'),
+    preferredStoreId: z.string().optional(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
+  });
+
+export const signupSchema = z.union([employeeSchema, customerSchema]);
 
 const SignupForm = ({ onSubmit }) => {
   const {
@@ -78,6 +81,9 @@ const SignupForm = ({ onSubmit }) => {
   } = useForm({
     resolver: zodResolver(signupSchema),
     mode: 'onSubmit',
+    defaultValues: {
+      userType: 'customer',
+    },
   });
 
   const userType = watch('userType');
@@ -86,7 +92,7 @@ const SignupForm = ({ onSubmit }) => {
     <form onSubmit={handleSubmit(onSubmit)} className="signup-form">
       <div className="form-group">
         <label>User Type</label>
-        <select {...register('userType')} defaultValue="customer">
+        <select {...register('userType')}>
           <option value="customer">Customer</option>
           <option value="employee">Employee</option>
         </select>

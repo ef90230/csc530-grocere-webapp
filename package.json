@@ -2,9 +2,7 @@
     "name": "grocere-app",
     "version": "1.0.0",
     "main": "index.js",
-    "scripts": {
-
-    },
+    "scripts": {},
     "keywords": [
         "shopping",
         "grocery",
@@ -15,6 +13,6 @@
     "license": "ISC",
     "description": "Grocer-E - Order Fulfillment Solution",
     "devDependencies": {
-        "cypress": ""
+        "cypress": "^15.12.0"
     }
 }
