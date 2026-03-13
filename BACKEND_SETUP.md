@@ -46,6 +46,41 @@ npm install
 
 ### Step 2: Set Up Database
 
+#### Quick Setup (Recommended)
+Run the automated setup script:
+
+**Windows:**
+```bash
+# Run the setup script (it will prompt for password)
+setup-db.bat
+```
+
+**macOS/Linux:**
+```bash
+# Make script executable and run
+chmod +x setup-db.sh
+./setup-db.sh
+```
+
+**Diagnose Issues:**
+If you're having connection problems, run the diagnostic script:
+
+```bash
+# Windows
+diagnose-db.bat
+```
+
+The diagnostic script will check:
+- PostgreSQL installation and PATH
+- Service status
+- Authentication methods
+- Database existence
+- Connection permissions
+
+#### Manual Setup
+
+If you prefer to set up manually:
+
 #### For macOS (Homebrew):
 ```bash
 # Start PostgreSQL
@@ -61,19 +96,68 @@ ALTER USER your_mac_username WITH PASSWORD 'your_password';
 ```
 
 #### For Windows:
+**Important: You must run these commands as Administrator**
+
+1. **Start PostgreSQL Service:**
+   ```bash
+   # Open Command Prompt as Administrator (right-click → Run as administrator)
+   
+   # Start the service
+   net start postgresql-x64-18
+   
+   # Or use PowerShell as Administrator:
+   Start-Service postgresql-x64-18
+   ```
+
+2. **Set up the postgres user:**
+   ```bash
+   # Navigate to PostgreSQL bin directory
+   cd "C:\Program Files\PostgreSQL\18\bin"
+   
+   # Connect and set password
+   psql -U postgres
+   
+   # Inside psql, run:
+   ALTER USER postgres PASSWORD 'your_password_here';
+   ALTER USER postgres CREATEDB;
+   \q
+   ```
+
+3. **Create database:**
+   ```bash
+   # Create the database
+   psql -U postgres -c "CREATE DATABASE grocere_db;"
+   
+   # Grant permissions
+   psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE grocere_db TO postgres;"
+   ```
+
+4. **Test connection:**
+   ```bash
+   psql -U postgres -d grocere_db -c "SELECT version();"
+   ```
+
+**Alternative: Use your Windows username**
+If you prefer not to use 'postgres', you can use your Windows username:
 ```bash
-# PostgreSQL should auto-start as a service
-# Open Command Prompt/PowerShell as Administrator
+# Create database with your Windows username
+createdb grocere_db
 
-# Navigate to PostgreSQL bin (adjust version)
-cd "C:\Program Files\PostgreSQL\16\bin"
+# Set a password for your user
+psql -d grocere_db
+ALTER USER "YourWindowsUsername" WITH PASSWORD 'your_password';
+\q
+```
 
-# Create database (enter postgres password when prompted)
-createdb -U postgres grocere_db
+**Alternative: Use your Windows username**
+If you prefer not to use 'postgres', you can use your Windows username:
+```bash
+# Create database with your Windows username
+createdb grocere_db
 
-# Or using psql
-psql -U postgres
-CREATE DATABASE grocere_db;
+# Set a password for your user
+psql -d grocere_db
+ALTER USER "YourWindowsUsername" WITH PASSWORD 'your_password';
 \q
 ```
 
@@ -95,32 +179,143 @@ CREATE DATABASE grocere_db;
    DB_HOST=localhost
    DB_PORT=5432
    DB_NAME=grocere_db
-   DB_USER=your_username
-   DB_PASSWORD=your_database_password
+   DB_USER=postgres
+   DB_PASSWORD=your_password_here
    
    JWT_SECRET=super_secret_key_change_this
    JWT_EXPIRE=30d
    
    MIN_PASSWORD_LENGTH=8
 
-  GEMINI_API_KEY=your_gemini_api_key
-  GEMINI_MODEL=gemini-1.5-flash
+   GEMINI_API_KEY=your_gemini_api_key
+   GEMINI_MODEL=gemini-1.5-flash
    ```
    
-   **Platform Notes**:
-   - **Mac**: Use your macOS username as DB_USER (e.g., `koentanner`)
-   - **Windows**: Use `postgres` as DB_USER (or custom user from installation)
-
-### Step 4: Start the Server
-```bash
-# Development mode (auto-reload)
-npm run dev
-
-# Or production mode
-npm start
+   **Important**: If you created the postgres user with a password in Step 2, use that password here. If you're using your Windows username instead, change `DB_USER` to your Windows username.
 ```
 
 The API will be available at `http://localhost:5000`
+
+## 🔧 Troubleshooting Database Connection Issues
+
+### Quick Fix: Use Setup Scripts
+If you're having issues, try the automated setup scripts:
+- **Windows**: Run `setup-db.bat`
+- **macOS/Linux**: Run `chmod +x setup-db.sh && ./setup-db.sh`
+
+These scripts handle user creation, database setup, and permission granting automatically.
+
+#### Quick Fix for "role postgres does not exist"
+
+If you're getting database connection errors, run this quick fix:
+
+**Windows (Run as Administrator):**
+```bash
+# Navigate to backend folder
+cd backend
+
+# Run the quick fix script
+fix-postgres.bat
+```
+
+**Manual Steps (if script doesn't work):**
+
+1. **Start PostgreSQL as Administrator:**
+   ```bash
+   # Open Command Prompt as Administrator
+   net start postgresql-x64-18
+   ```
+
+2. **Create postgres user:**
+   ```bash
+   cd "C:\Program Files\PostgreSQL\18\bin"
+   psql -U postgres
+   ```
+   
+   Inside psql, run:
+   ```sql
+   CREATE USER postgres WITH PASSWORD 'sPec!aloN1on';
+   ALTER USER postgres CREATEDB;
+   CREATE DATABASE grocere_db;
+   GRANT ALL PRIVILEGES ON DATABASE grocere_db TO postgres;
+   \q
+   ```
+
+3. **Update .env file:**
+   ```env
+   DB_HOST=localhost
+   DB_USER=postgres
+   DB_PASSWORD=sPec!aloN1on
+   ```
+
+4. **Test connection:**
+   ```bash
+   psql -U postgres -d grocere_db -c "SELECT version();"
+   ```
+
+### "PostgreSQL service is not running" Error
+PostgreSQL service needs to be started as Administrator:
+
+```bash
+# As Administrator
+net start postgresql-x64-18
+
+# Or use Services GUI:
+# 1. Press Win+R, type services.msc
+# 2. Find postgresql-x64-18
+# 3. Right-click → Start
+```
+
+### "authentication failed for user 'postgres'" Error
+The postgres user exists but the password is wrong. Reset it:
+
+```bash
+psql -U postgres
+ALTER USER postgres PASSWORD 'your_new_password';
+\q
+```
+
+### "database 'grocere_db' does not exist" Error
+Create the database:
+
+```bash
+psql -U postgres -c "CREATE DATABASE grocere_db;"
+```
+
+### Connection Refused
+- Make sure PostgreSQL service is running: `pg_ctl status` or check Windows Services
+- Verify DB_HOST and DB_PORT in .env match your PostgreSQL installation
+- Try connecting manually: `psql -U postgres -d grocere_db`
+
+### Permission Denied
+Grant proper permissions:
+
+```bash
+psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE grocere_db TO postgres;"
+```
+
+### Authentication Issues
+If you get "authentication failed" errors:
+
+1. **Check pg_hba.conf** (usually at `C:\Program Files\PostgreSQL\18\data\pg_hba.conf`):
+   - Look for lines allowing local connections
+   - You might need to change `md5` to `trust` for local development
+
+2. **Reset postgres password**:
+   ```bash
+   # Stop PostgreSQL service first
+   pg_ctl stop
+
+   # Start in single-user mode
+   pg_ctl start -o "-c listen_addresses=''"
+
+   # In another terminal, reset password
+   psql -U postgres -c "ALTER USER postgres PASSWORD 'new_password';"
+
+   # Stop and restart normally
+   pg_ctl stop
+   pg_ctl start
+   ```
 
 ### Step 5: Verify AI Path API (Optional)
 Use a manager JWT token and call:

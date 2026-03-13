@@ -1,5 +1,11 @@
 const { Order, OrderItem, Customer, Store, Employee, Item, ItemLocation } = require('../models');
 const { Op } = require('sequelize');
+const {
+  validateScheduleTime,
+  getAvailableTimeSlots,
+  getNextAvailableSlot,
+  purgeOldSchedules
+} = require('../utils/schedulingService');
 
 const getOrders = async (req, res) => {
   try {
@@ -128,6 +134,22 @@ const createOrder = async (req, res) => {
   try {
     const { customerId, storeId, scheduledPickupTime, items } = req.body;
 
+    if (!scheduledPickupTime) {
+      return res.status(400).json({ message: 'scheduledPickupTime is required' });
+    }
+
+    // Validate scheduling constraints
+    const scheduledTime = new Date(scheduledPickupTime);
+    const validation = await validateScheduleTime(scheduledTime, storeId);
+
+    if (!validation.isValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid scheduled pickup time',
+        errors: validation.errors
+      });
+    }
+
     const orderNumber = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
     let totalAmount = 0;
@@ -142,7 +164,7 @@ const createOrder = async (req, res) => {
       orderNumber,
       customerId,
       storeId,
-      scheduledPickupTime,
+      scheduledPickupTime: scheduledTime,
       totalAmount: totalAmount.toFixed(2)
     });
 
@@ -338,6 +360,118 @@ const cancelOrder = async (req, res) => {
   }
 };
 
+// Get available time slots for scheduling orders
+const getAvailableScheduleSlots = async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    const { startDate, endDate } = req.query;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({
+        message: 'startDate and endDate query parameters are required (ISO format)'
+      });
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return res.status(400).json({
+        message: 'Invalid date format. Use ISO format (e.g., 2026-03-15)'
+      });
+    }
+
+    const slots = await getAvailableTimeSlots(storeId, start, end);
+
+    res.json({
+      success: true,
+      storeId,
+      dateRange: {
+        startDate: start.toISOString(),
+        endDate: end.toISOString()
+      },
+      slots: slots
+    });
+  } catch (error) {
+    console.error('Get available schedule slots error:', error);
+    res.status(500).json({ message: 'Server error retrieving available time slots' });
+  }
+};
+
+// Get next available slot for a store
+const getNextAvailableSlotForStore = async (req, res) => {
+  try {
+    const { storeId } = req.params;
+
+    const nextSlot = await getNextAvailableSlot(storeId);
+
+    if (!nextSlot) {
+      return res.status(200).json({
+        success: true,
+        nextSlot: null,
+        message: 'No available slots within the next 7 days'
+      });
+    }
+
+    res.json({
+      success: true,
+      nextSlot
+    });
+  } catch (error) {
+    console.error('Get next available slot error:', error);
+    res.status(500).json({ message: 'Server error retrieving next available slot' });
+  }
+};
+
+// Validate if a specific time is available for scheduling
+const validateOrderScheduleTime = async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    const { scheduledPickupTime } = req.body;
+
+    if (!scheduledPickupTime) {
+      return res.status(400).json({
+        message: 'scheduledPickupTime is required in request body'
+      });
+    }
+
+    const scheduledTime = new Date(scheduledPickupTime);
+    if (isNaN(scheduledTime.getTime())) {
+      return res.status(400).json({
+        message: 'Invalid date format for scheduledPickupTime'
+      });
+    }
+
+    const validation = await validateScheduleTime(scheduledTime, storeId);
+
+    res.json({
+      success: validation.isValid,
+      isValid: validation.isValid,
+      errors: validation.errors,
+      proposedTime: scheduledTime.toISOString()
+    });
+  } catch (error) {
+    console.error('Validate order schedule time error:', error);
+    res.status(500).json({ message: 'Server error validating schedule time' });
+  }
+};
+
+// Trigger manual schedule purge (for admin/maintenance)
+const triggerSchedulePurge = async (req, res) => {
+  try {
+    const purgedCount = await purgeOldSchedules();
+
+    res.json({
+      success: true,
+      message: `Schedule purge completed. Removed ${purgedCount} completed/cancelled orders older than 48 hours from their scheduled date`,
+      purgedCount
+    });
+  } catch (error) {
+    console.error('Schedule purge error:', error);
+    res.status(500).json({ message: 'Server error during schedule purge' });
+  }
+};
+
 module.exports = {
   getOrders,
   getOrder,
@@ -345,5 +479,9 @@ module.exports = {
   updateOrderStatus,
   updateOrderItem,
   getOrdersForPicking,
-  cancelOrder
+  cancelOrder,
+  getAvailableScheduleSlots,
+  getNextAvailableSlotForStore,
+  validateOrderScheduleTime,
+  triggerSchedulePurge
 };

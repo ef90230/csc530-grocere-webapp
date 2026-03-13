@@ -4,6 +4,7 @@ require('dotenv').config();
 
 const { testConnection } = require('./config/db');
 const { syncDatabase } = require('./models');
+const { initializeSchedulingMaintenance } = require('./utils/schedulingMaintenance');
 
 const app = express();
 
@@ -28,6 +29,8 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/employees', require('./routes/employees'));
 app.use('/api/customers', require('./routes/customers'));
 app.use('/api/items', require('./routes/items'));
+app.use('/api/aisles', require('./routes/aisles'));
+app.use('/api/cart', require('./routes/cart'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/pickpaths', require('./routes/pickPaths'));
 
@@ -41,6 +44,8 @@ app.get('/', (req, res) => {
       employees: '/api/employees',
       customers: '/api/customers',
       items: '/api/items',
+      aisles: '/api/aisles',
+      cart: '/api/cart',
       orders: '/api/orders',
       pickPaths: '/api/pickpaths'
     }
@@ -68,6 +73,7 @@ const startServer = async () => {
   try {
     await testConnection();
     await syncDatabase(false);
+    initializeSchedulingMaintenance();
     
     app.listen(PORT, () => {
       console.log(`\nServer running on port ${PORT}`);

@@ -1,0 +1,20 @@
+{
+    "name": "grocere-app",
+    "version": "1.0.0",
+    "main": "index.js",
+    "scripts": {
+
+    },
+    "keywords": [
+        "shopping",
+        "grocery",
+        "order fulfillment",
+        "e-commerce"
+    ],
+    "author": "",
+    "license": "ISC",
+    "description": "Grocer-E - Order Fulfillment Solution",
+    "devDependencies": {
+        "cypress": ""
+    }
+}

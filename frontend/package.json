@@ -1,0 +1,43 @@
+{
+  "name": "grocere-frontend",
+  "version": "1.0.0",
+  "description": "Frontend for Grocer-E fulfillment system",
+  "private": true,
+  "dependencies": {
+    "@hookform/resolvers": "^3.3.2",
+    "jsdom": "^28.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-hook-form": "^7.48.0",
+    "react-router-dom": "^6.18.0",
+    "zod": "^3.22.4"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject",
+    "cypress:open": "cypress open",
+    "cypress:run": "cypress run"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "react-scripts": "5.0.1"
+  }
+}

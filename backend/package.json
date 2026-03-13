@@ -6,6 +6,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
+    "stop": "npx kill-port 5000",
+    "restart": "npm run stop && npm run start",
+    "restart:dev": "npm run stop && npm run dev",
     "test": "jest --coverage",
     "test:watch": "jest --watch"
   },
@@ -27,7 +30,8 @@
   "devDependencies": {
     "jest": "^29.7.0",
     "supertest": "^6.3.3",
-    "nodemon": "^3.0.1"
+    "nodemon": "^3.0.1",
+    "kill-port": "^2.0.1"
   },
   "jest": {
     "testEnvironment": "node",
