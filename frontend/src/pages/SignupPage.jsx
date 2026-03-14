@@ -19,7 +19,13 @@ const SignupPage = () => {
                 navigate('/storefront');
             }
         } catch (err) {
-            setError(err.message || 'Registration failed');
+            // Show detailed validation errors if available
+            if (err.errors && Array.isArray(err.errors)) {
+                const errorMessages = err.errors.map(e => e.msg || e.message).join(', ');
+                setError(`Validation failed: ${errorMessages}`);
+            } else {
+                setError(err.message || 'Registration failed');
+            }
         }
     };
 

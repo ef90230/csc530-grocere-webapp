@@ -29,7 +29,7 @@ const employeeSchema = z
       .regex(/[0-9]/, 'Password must contain at least one number')
       .regex(/[!@#$%^&*(),.?":{}|<>]/, 'Password must contain at least one special character'),
     confirmPassword: z.string().min(1, 'Please confirm your password'),
-    role: z.string().optional(),
+    role: z.enum(['', 'manager', 'picker', 'stager', 'dispenser']).optional().transform(val => val === '' ? undefined : val),
     storeId: z.string().min(1, 'Store ID is required'),
   })
   .refine((data) => data.password === data.confirmPassword, {
@@ -118,8 +118,14 @@ const SignupForm = ({ onSubmit }) => {
             )}
           </div>
           <div className="form-group">
-            <label htmlFor="role">Role (optional)</label>
-            <input id="role" {...register('role')} />
+            <label htmlFor="role">Role</label>
+            <select id="role" {...register('role')} defaultValue="">
+              <option value="">None</option>
+              <option value="manager">Manager</option>
+              <option value="picker">Picker</option>
+              <option value="stager">Stager</option>
+              <option value="dispenser">Dispenser</option>
+            </select>
             {errors.role && (
               <span className="error-text">{errors.role.message}</span>
             )}

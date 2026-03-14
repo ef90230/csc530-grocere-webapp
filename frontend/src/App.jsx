@@ -9,7 +9,7 @@ import InventoryScreen from './pages/InventoryScreen';
 import LoginPage from './pages/LoginPage';
 import TitlePage from './pages/TitlePage';
 import StorefrontPage from './pages/StorefrontPage';
-// import MapScreen from './pages/MapScreen';
+import MapScreen from './pages/MapScreen';
 import OrderListPage from './pages/OrderListPage';
 import PickingPage from './pages/PickingPage';
 import SignupPage from './pages/SignupPage';
@@ -92,14 +92,14 @@ function App() {
                                 </ProtectedRoute>
                             }
                         />
-                        {/* <Route
+                        <Route
                             path="/map"
                             element={
                                 <ProtectedRoute>
                                     <MapScreen />
                                 </ProtectedRoute>
                             }
-                        /> */}
+                        />
                         <Route
                             path="/picking"
                             element={

@@ -50,6 +50,46 @@ const getAisle = async (req, res) => {
   }
 };
 
+// Create a new aisle
+const createAisle = async (req, res) => {
+  try {
+    const { storeId, aisleNumber, aisleName, zone, category, coordinates } = req.body;
+
+    if (!storeId || !aisleNumber) {
+      return res.status(400).json({ message: 'storeId and aisleNumber are required' });
+    }
+
+    const existing = await Aisle.findOne({
+      where: {
+        storeId,
+        aisleNumber
+      }
+    });
+
+    if (existing) {
+      return res.status(409).json({ message: 'Aisle number already exists for this store' });
+    }
+
+    const aisle = await Aisle.create({
+      storeId,
+      aisleNumber,
+      aisleName: aisleName || `Aisle ${aisleNumber}`,
+      zone: zone || null,
+      category: category || null,
+      coordinates: coordinates || null
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Aisle created successfully',
+      aisle
+    });
+  } catch (error) {
+    console.error('Create aisle error:', error);
+    res.status(500).json({ message: 'Server error creating aisle' });
+  }
+};
+
 // Update aisle (coordinates, name, zone, category, etc.)
 const updateAisle = async (req, res) => {
   try {
@@ -118,6 +158,7 @@ const batchUpdateAisles = async (req, res) => {
 module.exports = {
   getAisles,
   getAisle,
+  createAisle,
   updateAisle,
   batchUpdateAisles
 };

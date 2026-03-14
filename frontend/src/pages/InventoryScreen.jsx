@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/common/Navbar';
 import './InventoryScreen.css';
 
@@ -14,6 +15,7 @@ const SORT_OPTIONS = [
 ];
 
 const InventoryScreen = () => {
+  const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('aisle');
@@ -107,7 +109,22 @@ const InventoryScreen = () => {
   return (
     <div className="inventory-screen">
       <div className="page-content">
-        <h1>Inventory</h1>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <h1>Inventory</h1>
+          <button
+            onClick={() => navigate('/map')}
+            style={{
+              padding: '0.5rem 1rem',
+              backgroundColor: '#007bff',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            View Map
+          </button>
+        </div>
         <div className="toolbar" style={{ marginBottom: '1rem' }}>
           <input
             type="text"

@@ -9,6 +9,7 @@
     "stop": "npx kill-port 5000",
     "restart": "npm run stop && npm run start",
     "restart:dev": "npm run stop && npm run dev",
+    "seed:inventory": "node scripts/seedInventory.js",
     "test": "jest --coverage",
     "test:watch": "jest --watch"
   },

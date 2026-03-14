@@ -34,7 +34,9 @@ export const useAuth = () => {
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.message || 'Registration failed');
+      const error = new Error(err.message || 'Registration failed');
+      error.errors = err.errors;
+      throw error;
     }
 
     return res.json();
