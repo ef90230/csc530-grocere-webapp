@@ -1,4 +1,4 @@
-import {} from 'react';
+import React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -12,6 +12,7 @@ const loginSchema = z.object({
     .string()
     .min(1, 'Password is required')
     .min(8, 'Password must be at least 8 characters'),
+  userType: z.enum(['customer', 'employee'], { required_error: 'User type is required' }),
 });
 
 const LoginForm = ({ onSubmit }) => {
@@ -25,6 +26,17 @@ const LoginForm = ({ onSubmit }) => {
 
     return (
         <form onSubmit={handleSubmit(onSubmit)} className="login-form">
+            <div className="form-group">
+                <label>User Type</label>
+                <select {...register('userType')} defaultValue="customer">
+                    <option value="customer">Customer</option>
+                    <option value="employee">Employee</option>
+                </select>
+                {errors.userType && (
+                    <span className="error-text">{errors.userType.message}</span>
+                )}
+            </div>
+
             <div className="form-group">   
                 <label htmlFor="email">Email address</label>
                 <input

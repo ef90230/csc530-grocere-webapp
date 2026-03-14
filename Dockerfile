@@ -1,18 +1,32 @@
-FROM node:24-alpine
+# Build stage
+FROM node:24-alpine AS builder
 
-# Set working directory
 WORKDIR /app
 
-# Copy package.json and package-lock.json to leverage Docker cache
-COPY package*.json ./
-
-# Install Node.js dependencies
+# Copy frontend source
+COPY frontend/package*.json ./
 RUN npm install
 
-# Copy the rest of the application code
-COPY . .
+COPY frontend ./
+RUN npm run build
 
-# App will run on port 3000
+# Runtime stage
+FROM node:24-alpine
+
+WORKDIR /app
+
+# Install serve to run the frontend
+RUN npm install -g serve
+
+# Copy built app from builder
+COPY --from=builder /app/build ./build
+
+# Expose frontend port
 EXPOSE 3000
 
-CMD ["npm", "start"]
+# Health check
+HEALTHCHECK --interval=10s --timeout=5s --retries=5 \
+  CMD node -e "require('http').get('http://localhost:3000', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
+
+# Serve the frontend
+CMD ["serve", "-s", "build", "-l", "3000"]

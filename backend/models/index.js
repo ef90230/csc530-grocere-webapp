@@ -9,6 +9,8 @@ const ItemLocation = require('./ItemLocation');
 const Order = require('./Order');
 const OrderItem = require('./OrderItem');
 const PickPath = require('./PickPath');
+const Cart = require('./Cart');
+const CartItem = require('./CartItem');
 const Timeslot = require('./Timeslot');
 Store.hasMany(Employee, { foreignKey: 'storeId', as: 'employees' });
 Store.hasMany(Aisle, { foreignKey: 'storeId', as: 'aisles' });
@@ -22,6 +24,12 @@ Employee.hasMany(Order, { foreignKey: 'assignedDispenserId', as: 'dispensingOrde
 Employee.hasMany(PickPath, { foreignKey: 'createdBy', as: 'createdPickPaths' });
 Customer.hasMany(Order, { foreignKey: 'customerId', as: 'orders' });
 Customer.belongsTo(Store, { foreignKey: 'preferredStoreId', as: 'preferredStore' });
+Customer.hasOne(Cart, { foreignKey: 'customerId', as: 'cart' });
+Cart.belongsTo(Customer, { foreignKey: 'customerId', as: 'customer' });
+Cart.belongsTo(Store, { foreignKey: 'storeId', as: 'store' });
+Cart.hasMany(CartItem, { foreignKey: 'cartId', as: 'items' });
+CartItem.belongsTo(Cart, { foreignKey: 'cartId', as: 'cart' });
+CartItem.belongsTo(Item, { foreignKey: 'itemId', as: 'item' });
 Aisle.belongsTo(Store, { foreignKey: 'storeId', as: 'store' });
 Aisle.hasMany(Location, { foreignKey: 'aisleId', as: 'locations' });
 Location.belongsTo(Store, { foreignKey: 'storeId', as: 'store' });
@@ -66,6 +74,8 @@ module.exports = {
   Order,
   OrderItem,
   PickPath,
+  Cart,
+  CartItem,
   Timeslot,
   syncDatabase
 };

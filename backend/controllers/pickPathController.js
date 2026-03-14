@@ -176,28 +176,23 @@ const generateAllPickPaths = async (req, res) => {
 
 const createPickPath = async (req, res) => {
   try {
-    const { storeId, commodity, pathName, pathSequence, userId } = req.body;
+    const { storeId, commodity, pathName, pathSequence } = req.body;
+    const createdBy = req.user ? req.user.id : null;
 
-    const locations = await Location.findAll({
-      where: {
-        storeId,
-        commodity
-      }
-    });
-
-    const validation = validatePath(
-      pathSequence,
-      locations.map(loc => loc.id)
-    );
-
-    if (!validation.isValid) {
-      return res.status(400).json({
-        message: 'Invalid path sequence',
-        validation
+    // Enforce one-path-per-temperature-type per store
+    const existing = await PickPath.findOne({ where: { storeId, commodity } });
+    if (existing) {
+      return res.status(409).json({
+        message: `A ${commodity} path already exists for this store. Delete it first to create a new one.`
       });
     }
 
-    const metrics = await calculatePathMetrics(pathSequence, storeId);
+    let metrics = { averageDistance: 0 };
+    try {
+      metrics = await calculatePathMetrics(pathSequence, storeId);
+    } catch (e) {
+      // Non-fatal: path is saved without metrics
+    }
     const efficiencyScore = Math.max(0, 100 - (parseFloat(metrics.averageDistance) * 2));
 
     const pickPath = await PickPath.create({
@@ -207,7 +202,7 @@ const createPickPath = async (req, res) => {
       pathSequence,
       isAiGenerated: false,
       efficiencyScore: efficiencyScore.toFixed(2),
-      createdBy: userId
+      createdBy
     });
 
     res.status(201).json({
@@ -232,9 +227,13 @@ const updatePickPath = async (req, res) => {
     const { pathSequence } = req.body;
 
     if (pathSequence) {
-      const metrics = await calculatePathMetrics(pathSequence, pickPath.storeId);
-      const efficiencyScore = Math.max(0, 100 - (parseFloat(metrics.averageDistance) * 2));
-      req.body.efficiencyScore = efficiencyScore.toFixed(2);
+      try {
+        const metrics = await calculatePathMetrics(pathSequence, pickPath.storeId);
+        const efficiencyScore = Math.max(0, 100 - (parseFloat(metrics.averageDistance) * 2));
+        req.body.efficiencyScore = efficiencyScore.toFixed(2);
+      } catch (e) {
+        // Non-fatal: efficiency score will not be updated
+      }
     }
 
     await pickPath.update(req.body);

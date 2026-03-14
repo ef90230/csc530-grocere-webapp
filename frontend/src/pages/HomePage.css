@@ -1,0 +1,81 @@
+.home-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background-color: #fff;
+}
+
+.home-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  padding-bottom: 90px;
+  overflow-y: auto;
+}
+
+.home-content h1 {
+  font-size: 2rem;
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.buttons-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 600px;
+}
+
+.action-button {
+  padding: 2rem;
+  font-size: 1.2rem;
+  font-weight: bold;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  color: white;
+}
+
+.action-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.picking-btn {
+  background-color: #28a745;
+}
+
+.picking-btn:hover {
+  background-color: #218838;
+}
+
+.staging-btn {
+  background-color: #dc3545;
+}
+
+.staging-btn:hover {
+  background-color: #c82333;
+}
+
+.orders-btn {
+  background-color: #6f42c1;
+}
+
+.orders-btn:hover {
+  background-color: #5a32a3;
+}
+
+.inventory-btn {
+  background-color: #007bff;
+}
+
+.inventory-btn:hover {
+  background-color: #0056b3;
+}

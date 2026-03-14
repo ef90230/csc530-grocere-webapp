@@ -143,7 +143,14 @@ Backend API for the Grocer-E grocery fulfillment system. This RESTful API powers
    
    # Production mode
    npm start
+   
+   # Other useful commands:
+   npm run stop        # Kill process on port 5000
+   npm run restart     # Stop and restart production server
+   npm run restart:dev # Stop and restart development server
    ```
+
+   **Windows users**: Run `scripts.bat` to see all available commands.
 
 The server will start on `http://localhost:5000`
 

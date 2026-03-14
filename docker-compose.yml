@@ -1,0 +1,75 @@
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: grocere-db
+    environment:
+      POSTGRES_USER: ${DB_USER:-grocere_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-grocere_password}
+      POSTGRES_DB: ${DB_NAME:-grocere_db}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-grocere_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - grocere-network
+
+  # Backend API Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: grocere-backend
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 5000
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-grocere_db}
+      DB_USER: ${DB_USER:-grocere_user}
+      DB_PASSWORD: ${DB_PASSWORD:-grocere_password}
+      JWT_SECRET: ${JWT_SECRET:-super_secret_key_change_this}
+      JWT_EXPIRE: ${JWT_EXPIRE:-30d}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
+    ports:
+      - "5000:5000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - grocere-network
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+
+  # Frontend Service
+  frontend:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    container_name: grocere-frontend
+    environment:
+      REACT_APP_API_URL: http://grocere-backend:5000
+      NODE_ENV: ${NODE_ENV:-development}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - grocere-network
+    volumes:
+      - ./frontend/src:/app/frontend/src
+
+volumes:
+  postgres_data:
+
+networks:
+  grocere-network:
+    driver: bridge
