@@ -45,33 +45,72 @@ const Employee = sequelize.define('Employee', {
     type: DataTypes.BOOLEAN,
     defaultValue: true
   },
+  // Performance metrics - commented out for database compatibility
+  /*
   pickRate: {
     type: DataTypes.DECIMAL(10, 2),
-    defaultValue: 0.00
+    defaultValue: 0.00,
+    validate: {
+      min: 0
+    }
   },
   firstTimePickPercent: {
     type: DataTypes.DECIMAL(5, 2),
-    defaultValue: 0.00
+    defaultValue: 0.00,
+    validate: {
+      min: 0,
+      max: 100
+    }
   },
   preSubstitutionPercent: {
     type: DataTypes.DECIMAL(5, 2),
-    defaultValue: 0.00
+    defaultValue: 0.00,
+    validate: {
+      min: 0,
+      max: 100
+    }
   },
   postSubstitutionPercent: {
     type: DataTypes.DECIMAL(5, 2),
-    defaultValue: 0.00
+    defaultValue: 0.00,
+    validate: {
+      min: 0,
+      max: 100
+    }
+  },
+  percentNotFound: {
+    type: DataTypes.DECIMAL(5, 2),
+    defaultValue: 0.00,
+    validate: {
+      min: 0,
+      max: 100
+    }
   },
   onTimePercent: {
     type: DataTypes.DECIMAL(5, 2),
-    defaultValue: 0.00
+    defaultValue: 0.00,
+    validate: {
+      min: 0,
+      max: 100
+    }
   },
   weightedEfficiency: {
     type: DataTypes.DECIMAL(5, 2),
-    defaultValue: 0.00
-  }
+    defaultValue: 0.00,
+    validate: {
+      min: 0
+    }
+  */
 }, {
   tableName: 'employees',
-  timestamps: true
+  timestamps: true,
+  validate: {
+    preSubstitutionNotGreaterThanPostSubstitution() {
+      if (this.preSubstitutionPercent > this.postSubstitutionPercent) {
+        throw new Error('preSubstitutionPercent cannot be greater than postSubstitutionPercent');
+      }
+    }
+  }
 });
 Employee.beforeCreate(async (employee) => {
   if (employee.password) {

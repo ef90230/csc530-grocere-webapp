@@ -18,7 +18,11 @@ const getItems = async (req, res) => {
     const where = {};
     
     if (search) {
-      where.name = { [Op.iLike]: `%${search}%` };
+      // allow searching by name or UPC (case-insensitive)
+      where[Op.or] = [
+        { name: { [Op.iLike]: `%${search}%` } },
+        { upc: { [Op.iLike]: `%${search}%` } }
+      ];
     }
     if (category) where.category = category;
     if (department) where.department = department;
@@ -32,35 +36,42 @@ const getItems = async (req, res) => {
     if (sortBy === 'price_desc') order = [['price', 'DESC']];
     if (sortBy === 'category') order = [['category', 'ASC'], ['name', 'ASC']];
 
+    // always include locations so clients can compute stock / aisle info;
+    // if a storeId is provided, add it to the where clause on the join
+    const includeOptions = [
+      {
+        model: ItemLocation,
+        as: 'locations',
+        required: noLocation === 'true' ? false : false,
+        include: [
+          {
+            model: Location,
+            as: 'location',
+            include: [
+              {
+                model: Aisle,
+                as: 'aisle',
+                attributes: ['id', 'aisleNumber', 'aisleName', 'category']
+              }
+            ]
+          }
+        ]
+      }
+    ];
+    if (storeId) {
+      includeOptions[0].where = { storeId };
+    }
+
     const items = await Item.findAll({
       where,
-      include: storeId ? [
-        {
-          model: ItemLocation,
-          as: 'locations',
-          where: { storeId },
-          required: noLocation === 'true' ? false : true,
-          include: [
-            {
-              model: Location,
-              as: 'location',
-              include: [
-                {
-                  model: Aisle,
-                  as: 'aisle',
-                  attributes: ['id', 'aisleNumber', 'aisleName', 'category']
-                }
-              ]
-            }
-          ]
-        }
-      ] : [],
+      include: includeOptions,
       order
     });
 
     let filteredItems = items;
-    if (noLocation === 'true' && storeId) {
-      filteredItems = items.filter(item => item.locations.length === 0);
+    if (noLocation === 'true') {
+      // regardless of storeId, drop items with any location entries
+      filteredItems = items.filter(item => !item.locations || item.locations.length === 0);
     }
 
     res.json({

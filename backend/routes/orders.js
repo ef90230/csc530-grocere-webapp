@@ -7,12 +7,22 @@ const {
   updateOrderStatus,
   updateOrderItem,
   getOrdersForPicking,
-  cancelOrder
+  cancelOrder,
+  getAvailableScheduleSlots,
+  getNextAvailableSlotForStore,
+  validateOrderScheduleTime,
+  triggerSchedulePurge
 } = require('../controllers/orderController');
 const { protect, restrictTo } = require('../middleware/auth');
 const { orderValidation, handleValidationErrors } = require('../middleware/validation');
 
 router.use(protect);
+
+// Scheduling endpoints
+router.get('/scheduling/slots/:storeId', getAvailableScheduleSlots);
+router.get('/scheduling/next/:storeId', getNextAvailableSlotForStore);
+router.post('/scheduling/validate/:storeId', validateOrderScheduleTime);
+router.post('/scheduling/purge', restrictTo('manager'), triggerSchedulePurge);
 
 router.get('/', getOrders);
 

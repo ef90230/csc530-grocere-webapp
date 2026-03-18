@@ -1,0 +1,41 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
+import SignupForm from '../components/auth/SignupForm';
+
+const SignupPage = () => {
+    const [error, setError] = useState('');
+    const { register: registerUser } = useAuth();
+    const navigate = useNavigate();
+
+    const handleSubmit = async (formData) => {
+        setError('');
+        try {
+            await registerUser(formData);
+            // Redirect based on user type
+            if (formData.userType === 'employee') {
+                navigate('/home');
+            } else {
+                navigate('/storefront');
+            }
+        } catch (err) {
+            // Show detailed validation errors if available
+            if (err.errors && Array.isArray(err.errors)) {
+                const errorMessages = err.errors.map(e => e.msg || e.message).join(', ');
+                setError(`Validation failed: ${errorMessages}`);
+            } else {
+                setError(err.message || 'Registration failed');
+            }
+        }
+    };
+
+    return (
+        <div>
+            <h2>Sign Up</h2>
+            {error && <div className="error">{error}</div>}
+            <SignupForm onSubmit={handleSubmit} />
+        </div>
+    );
+};
+
+export default SignupPage;

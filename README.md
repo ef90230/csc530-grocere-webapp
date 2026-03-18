@@ -40,4 +40,145 @@ To power Grocer-E's powerful algorithmic paths, stores are set up with a databas
 - On-Time % - The percent of items shopped without going overdue.
 - Weighted Efficiency - A special score assigned as an aggregate of the employee/store's pick rate and FTP. A perfect score results from a pick rate >= 100.00 items/hour and FTP of 100%.
 
+## Development
+
+### Backend Scripts
+
+The backend includes several npm scripts for development and server management:
+
+- `npm start` - Start the production server
+- `npm run dev` - Start the development server with auto-reload (nodemon)
+- `npm run stop` - Kill any process running on port 5000
+- `npm run restart` - Stop and restart the production server
+- `npm run restart:dev` - Stop and restart the development server
+- `npm test` - Run unit and integration tests with coverage
+- `npm run test:watch` - Run tests in watch mode
+
+### Database Setup
+
+See `BACKEND_SETUP.md` for detailed database configuration instructions.
+
+**Quick Fix for Database Issues:**
+If you get "role postgres does not exist" errors:
+1. Run `backend/fix-postgres.bat` as Administrator
+2. Update `.env`: `DB_HOST=localhost`
+3. Run `npm run dev`
+
+See `backend/POSTGRES_FIX.md` for detailed troubleshooting.
+
+## Testing
+
+Both unit and end-to-end tests are included to validate critical business logic such as the order scheduling rules.  Backend tests are written with Jest and Supertest, and the frontend contains a simple Cypress spec for smoke‑level API checks.
+
+### Backend
+
+1. Configure your database connection using environment variables (Postgres required).
+2. In `backend` run:
+   ```bash
+   npm install
+   npm test       # runs all Jest suites including schedulingService and integration tests
+   npm test -- --runTestsByPath tests/unit/schedulingService.test.js  # run specific file
+   ```
+3. Tests create and tear down their own data; make sure the test database is accessible and can be dropped.
+
+The scheduling unit suite (`backend/tests/unit/schedulingService.test.js`) exercises every restriction:
+- no pickups between midnight–8 AM
+- minimum 3‑hour advance notice
+- maximum seven‑day lead time
+- hourly capacity of 20 orders
+- automatic purge of orders older than 48 hours
+
+Integration/E2E coverage (`backend/tests/integration/schedulingRoutes.test.js`) exercises the corresponding HTTP endpoints, including a manager‑only purge call.
+
+### Frontend
+
+A Cypress spec (`frontend/cypress/E2E/scheduling.spec.js`) makes real HTTP requests against the running API to verify the rules from the customer’s perspective.
+
+Run Cypress with:
+```bash
+cd frontend
+npm install
+npm run cypress:open   # or npm run cypress:run
+```
+
 ## CRUD Pipelines and Other Documentation
+
+The backend exposes a set of RESTful pipelines that correspond to the main domain objects.  Every pipeline uses standard HTTP verbs and JSON bodies, and many are protected by JWT authentication and role checks (see the **Testing** section for examples that exercise these endpoints).
+
+### Authentication
+
+* `POST /api/auth/register/customer` — create a new customer account
+* `POST /api/auth/register/employee` — create a new employee (manager only in production)
+* `POST /api/auth/login` — obtain JWT token for either user type
+* `GET /api/auth/me` — retrieve details about the authenticated user (token required)
+
+Tokens returned from `login` must be sent in the `Authorization: Bearer ...` header on all subsequent protected requests.
+
+### Employees & Customers
+
+These endpoints are restricted to authenticated employees (and in some cases managers):
+
+* `GET /api/employees` — list all employees for the store
+* `GET /api/employees/:id` — fetch one employee
+* `PATCH /api/employees/:id` — update an employee’s profile or role
+* `DELETE /api/employees/:id` — deactivate/remove an employee
+
+* `GET /api/customers` — list registered customers
+* `GET /api/customers/:id` — customer detail
+* `PATCH /api/customers/:id` — update customer info
+* `DELETE /api/customers/:id` — deactivate a customer
+
+### Items, Aisles and Locations
+
+These pipelines allow managers to maintain inventory maps:
+
+* `GET /api/items`, `GET /api/items/:id`, `POST /api/items`, `PATCH /api/items/:id`, `DELETE /api/items/:id`
+* `GET /api/aisles`, `POST /api/aisles`, `PATCH /api/aisles/:id`, `DELETE /api/aisles/:id`
+* `GET /api/locations`, `POST /api/locations`, etc.
+
+Search, filtering, and sorting logic are implemented server‑side and used by the employee UI (see **InventoryScreen** code).
+
+### Cart
+
+Customers manage their shopping cart through these endpoints (all require a valid customer token):
+
+* `GET /api/cart` — retrieve current cart (auto‑created if missing)
+* `POST /api/cart/add` — add or increment an item
+* `PATCH /api/cart/update` — change quantity or notes
+* `DELETE /api/cart/remove` — remove a specific cart item
+* `DELETE /api/cart/clear` — empty the cart
+* `POST /api/cart/store` — select a store for fulfillment
+
+### Orders & Scheduling
+
+The order pipeline handles checkout and many business rules:
+
+* `POST /api/orders` — place an order; body must include `scheduledPickupTime` and will be validated against the five scheduling constraints
+* `GET /api/orders` — list orders (customer sees own orders, employees see store orders)
+* `GET /api/orders/:id` — order detail
+* `PATCH /api/orders/:id` — update order (status changes, assignee assignments)
+* `DELETE /api/orders/:id` — cancel an order
+
+Scheduling-specific helpers (see **schedulingService.js**):
+
+* `GET /api/orders/scheduling/slots/:storeId` — available pickup slots
+* `GET /api/orders/scheduling/next/:storeId` — next open slot
+* `POST /api/orders/scheduling/validate/:storeId` — check a particular timestamp
+* `POST /api/orders/scheduling/purge` — purge aged orders (manager only)
+
+### Pick Paths & Store Layout
+
+Managers configure pick routes with:
+
+* `GET /api/pickpaths` — fetch existing paths
+* `POST /api/pickpaths` — create a new path (often from AI proposal)
+* `PATCH /api/pickpaths/:id` — update coordinates or metadata
+* `DELETE /api/pickpaths/:id` — remove an outdated path
+
+Aisle and location coordinates are updated via a batch endpoint used by the MapScreen canvas.
+
+### Contributing
+
+For development, run the backend with `npm run dev` and the frontend with `npm start`.  The two parts communicate over `http://localhost:5000` by default.  See `BACKEND_SETUP.md` for database configuration and Docker instructions.
+
+Feel free to extend these pipelines as the application grows.
