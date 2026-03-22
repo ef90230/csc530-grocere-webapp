@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/common/Navbar';
+import TopBar from '../components/common/TopBar';
 import './HomePage.css';
 
 const HomePage = () => {
@@ -8,9 +9,10 @@ const HomePage = () => {
 
   return (
     <div className="home-page">
+      <TopBar />
       <div className="home-content">
         <h1>Employee Dashboard</h1>
-        <div className="buttons-grid">
+        <div className="buttons-column">
           <button
             className="action-button picking-btn"
             onClick={() => navigate('/commodityselect')}

@@ -1,0 +1,44 @@
+.topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  background-color: #f2cf4a;
+  color: #000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0.75rem;
+  z-index: 200;
+  border-bottom: 1px solid #c9a725;
+}
+
+.topbar-title {
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: left;
+}
+
+.topbar-menu-button {
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #000;
+  font-size: 1.7rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.topbar-menu-button:hover {
+  background-color: rgba(0, 0, 0, 0.08);
+}
+
+.topbar-spacer {
+  height: 56px;
+}

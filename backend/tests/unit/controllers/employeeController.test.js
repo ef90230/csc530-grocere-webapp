@@ -11,7 +11,7 @@ jest.mock('../../../models', () => ({
 }));
 
 const { Employee, Order } = require('../../../models');
-const { getEmployeeMetrics } = require('../../../controllers/employeeController');
+const { getEmployeeMetrics, getMyAndStoreStats } = require('../../../controllers/employeeController');
 
 const createMockRes = () => {
   const res = {};
@@ -37,9 +37,11 @@ describe('employeeController.getEmployeeMetrics', () => {
         firstName: 'Alex',
         lastName: 'Picker',
         pickRate: '92.00',
+        itemsPicked: 412,
         firstTimePickPercent: '95.00',
         preSubstitutionPercent: '90.00',
         postSubstitutionPercent: '98.00',
+        percentNotFound: '7.60',
         onTimePercent: '99.00',
         weightedEfficiency: '96.00'
       })
@@ -65,9 +67,11 @@ describe('employeeController.getEmployeeMetrics', () => {
         'firstName',
         'lastName',
         'pickRate',
+        'itemsPicked',
         'firstTimePickPercent',
         'preSubstitutionPercent',
         'postSubstitutionPercent',
+        'percentNotFound',
         'onTimePercent',
         'weightedEfficiency'
       ]
@@ -112,5 +116,106 @@ describe('employeeController.getEmployeeMetrics', () => {
 
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({ message: 'Server error retrieving metrics' });
+  });
+});
+
+describe('employeeController.getMyAndStoreStats', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('returns the logged-in employee stats and store aggregates', async () => {
+    const req = {
+      userType: 'employee',
+      user: { id: 3 }
+    };
+    const res = createMockRes();
+
+    Employee.findByPk.mockResolvedValue({
+      id: 3,
+      firstName: 'Jane',
+      lastName: 'Doe',
+      storeId: 77,
+      pickRate: '110.50',
+      itemsPicked: 300,
+      firstTimePickPercent: '94.00',
+      preSubstitutionPercent: '95.00',
+      postSubstitutionPercent: '99.00',
+      percentNotFound: '6.00',
+      onTimePercent: '100.00',
+      weightedEfficiency: '91.00'
+    });
+
+    Employee.findAll.mockResolvedValue([
+      {
+        pickRate: '100.00',
+        itemsPicked: 250,
+        firstTimePickPercent: '92.00',
+        preSubstitutionPercent: '94.00',
+        postSubstitutionPercent: '98.00',
+        percentNotFound: '8.00',
+        onTimePercent: '100.00',
+        weightedEfficiency: '89.00'
+      },
+      {
+        pickRate: '110.00',
+        itemsPicked: 350,
+        firstTimePickPercent: '96.00',
+        preSubstitutionPercent: '96.00',
+        postSubstitutionPercent: '99.00',
+        percentNotFound: '6.00',
+        onTimePercent: '98.00',
+        weightedEfficiency: '91.00'
+      }
+    ]);
+
+    await getMyAndStoreStats(req, res);
+
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      user: {
+        id: 3,
+        firstName: 'Jane',
+        lastName: 'Doe',
+        storeId: 77,
+        stats: {
+          pickRate: 110.5,
+          itemsPicked: 300,
+          firstTimePickPercent: 94,
+          preSubstitutionPercent: 95,
+          postSubstitutionPercent: 99,
+          percentNotFound: 6,
+          onTimePercent: 100,
+          weightedEfficiency: 91
+        }
+      },
+      store: {
+        employeeCount: 2,
+        stats: {
+          pickRate: 105,
+          itemsPicked: 600,
+          firstTimePickPercent: 94,
+          preSubstitutionPercent: 95,
+          postSubstitutionPercent: 98.5,
+          percentNotFound: 7,
+          onTimePercent: 99,
+          weightedEfficiency: 90
+        }
+      }
+    });
+  });
+
+  test('returns 403 when requester is not an employee', async () => {
+    const req = {
+      userType: 'customer',
+      user: { id: 9 }
+    };
+    const res = createMockRes();
+
+    await getMyAndStoreStats(req, res);
+
+    expect(Employee.findByPk).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({ message: 'Only employees can access employee statistics' });
   });
 });

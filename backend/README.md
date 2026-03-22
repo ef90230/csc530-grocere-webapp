@@ -152,6 +152,8 @@ Backend API for the Grocer-E grocery fulfillment system. This RESTful API powers
 
    **Windows users**: Run `scripts.bat` to see all available commands.
 
+   On startup, the backend now ensures the employee performance metric columns exist in the `employees` table. Existing databases will be backfilled automatically if those columns are missing.
+
 The server will start on `http://localhost:5000`
 
 ## API Endpoints

@@ -1,3 +1,4 @@
+const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/db');
 const Employee = require('./Employee');
 const Customer = require('./Customer');
@@ -53,12 +54,101 @@ PickPath.belongsTo(Store, { foreignKey: 'storeId', as: 'store' });
 PickPath.belongsTo(Employee, { foreignKey: 'createdBy', as: 'creator' });
 Timeslot.belongsTo(Order, { foreignKey: 'orderNumber', targetKey: 'orderNumber', as: 'order' });
 Timeslot.belongsTo(OrderItem, { foreignKey: 'items', as: 'itemList' });
+
+const EMPLOYEE_METRIC_COLUMNS = {
+  pickRate: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: false,
+    defaultValue: 0.00
+  },
+  itemsPicked: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0
+  },
+  firstTimePickPercent: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: false,
+    defaultValue: 0.00
+  },
+  preSubstitutionPercent: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: false,
+    defaultValue: 0.00
+  },
+  postSubstitutionPercent: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: false,
+    defaultValue: 0.00
+  },
+  percentNotFound: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: false,
+    defaultValue: 0.00
+  },
+  onTimePercent: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: false,
+    defaultValue: 0.00
+  },
+  weightedEfficiency: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: false,
+    defaultValue: 0.00
+  }
+};
+
+const ensureEmployeeMetricColumns = async () => {
+  const queryInterface = sequelize.getQueryInterface();
+  let employeeTable;
+
+  try {
+    employeeTable = await queryInterface.describeTable('employees');
+  } catch (error) {
+    if (error?.original?.code === '42501') {
+      console.warn(
+        'Skipping employee schema backfill due to insufficient DB permissions while inspecting employees table (code 42501).'
+      );
+      return;
+    }
+    throw error;
+  }
+
+  const missingColumns = Object.entries(EMPLOYEE_METRIC_COLUMNS).filter(
+    ([columnName]) => !employeeTable[columnName]
+  );
+
+  if (missingColumns.length === 0) {
+    return;
+  }
+
+  for (const [columnName, columnDefinition] of missingColumns) {
+    try {
+      await queryInterface.addColumn('employees', columnName, columnDefinition);
+    } catch (error) {
+      if (error?.original?.code === '42501') {
+        console.warn(
+          `Skipping employee schema backfill for column "${columnName}" due to insufficient DB permissions (code 42501).`
+        );
+        return;
+      }
+      throw error;
+    }
+  }
+
+  console.log(
+    `Added employee metric columns: ${missingColumns.map(([columnName]) => columnName).join(', ')}`
+  );
+};
+
 const syncDatabase = async (force = false) => {
   try {
     await sequelize.sync({ force });
+    await ensureEmployeeMetricColumns();
     console.log('Database synchronized successfully');
   } catch (error) {
     console.error('Error synchronizing database:', error);
+    throw error;
   }
 };
 
@@ -77,5 +167,6 @@ module.exports = {
   Cart,
   CartItem,
   Timeslot,
+  ensureEmployeeMetricColumns,
   syncDatabase
 };

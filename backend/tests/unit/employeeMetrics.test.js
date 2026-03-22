@@ -117,6 +117,7 @@ describe('Employee metrics updates', () => {
     await updateEmployeeMetrics(employee.id);
     await employee.reload();
     expect(Number(employee.pickRate)).toBe(0);
+    expect(Number(employee.itemsPicked)).toBe(0);
     expect(Number(employee.firstTimePickPercent)).toBe(0);
     expect(Number(employee.preSubstitutionPercent)).toBe(0);
     expect(Number(employee.postSubstitutionPercent)).toBe(0);
@@ -129,6 +130,7 @@ describe('Employee metrics updates', () => {
     await employee.reload();
 
     expect(Number(employee.pickRate)).toBeGreaterThanOrEqual(1);
+    expect(Number(employee.itemsPicked)).toBeGreaterThanOrEqual(1);
     expect(Number(employee.firstTimePickPercent)).toBeGreaterThanOrEqual(0);
     expect(Number(employee.firstTimePickPercent)).toBeLessThanOrEqual(100);
     expect(Number(employee.preSubstitutionPercent)).toBeLessThanOrEqual(Number(employee.postSubstitutionPercent));
@@ -143,6 +145,7 @@ describe('Employee metrics updates', () => {
     await employee.reload();
 
     expect(Number(employee.pickRate)).toBeGreaterThanOrEqual(2);
+    expect(Number(employee.itemsPicked)).toBeGreaterThanOrEqual(2);
     expect(Number(employee.firstTimePickPercent)).toBeGreaterThanOrEqual(0);
     expect(Number(employee.firstTimePickPercent)).toBeLessThanOrEqual(100);
     expect(Number(employee.preSubstitutionPercent)).toBeLessThanOrEqual(Number(employee.postSubstitutionPercent));

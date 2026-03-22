@@ -26,7 +26,7 @@ EXPOSE 3000
 
 # Health check
 HEALTHCHECK --interval=10s --timeout=5s --retries=5 \
-  CMD node -e "require('http').get('http://localhost:3000', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
+  CMD wget -q -O /dev/null http://localhost:3000 || exit 1
 
 # Serve the frontend
 CMD ["serve", "-s", "build", "-l", "3000"]

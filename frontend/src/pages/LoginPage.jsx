@@ -16,7 +16,7 @@ const LoginPage = () => {
             if (data.userType === 'employee') {
                 navigate('/home');
             } else {
-                navigate('/cart');
+                navigate('/storefront');
             }
         } catch (err) {
             setError(err.message || 'Login failed');

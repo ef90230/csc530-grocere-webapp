@@ -64,6 +64,7 @@ const calculateEmployeeMetrics = async (employeeId) => {
 
   return {
     pickRate: Math.max(0, totalPicks),
+    itemsPicked: Math.max(0, totalPicks),
     firstTimePickPercent: clampPercent(firstTimePickPercent),
     preSubstitutionPercent: clampPercent(preSubstitutionPercent),
     postSubstitutionPercent: clampPercent(postSubstitutionPercent),

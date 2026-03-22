@@ -23,12 +23,12 @@
   text-align: center;
 }
 
-.buttons-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+.buttons-column {
+  display: flex;
+  flex-direction: column;
   gap: 1.5rem;
   width: 100%;
-  max-width: 600px;
+  max-width: 420px;
 }
 
 .action-button {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
 // Import pages
 import CartScreen from './pages/CartScreen';
@@ -16,10 +16,35 @@ import SignupPage from './pages/SignupPage';
 import StagingPage from './pages/StagingPage';
 import StatisticsPage from './pages/StatisticsPage';
 
+const getAuthState = () => {
+    const token = localStorage.getItem('authToken');
+    const userType = localStorage.getItem('userType');
+
+    return {
+        isAuthenticated: Boolean(token),
+        userType
+    };
+};
+
 // Protected route component
-const ProtectedRoute = ({ children }) => {
-  // TODO: Add auth check here
-  return children;
+const ProtectedRoute = ({ children, allowedRole }) => {
+    const { isAuthenticated, userType } = getAuthState();
+
+    if (!isAuthenticated) {
+        return <Navigate to="/" replace />;
+    }
+
+    if (allowedRole && userType !== allowedRole) {
+        if (allowedRole === 'customer') {
+            return <Navigate to="/home" replace />;
+        }
+
+        if (allowedRole === 'employee') {
+            return <Navigate to="/storefront" replace />;
+        }
+    }
+
+    return children;
 };
 
 function App() {
@@ -37,7 +62,7 @@ function App() {
                         <Route
                             path="/storefront"
                             element={
-                                <ProtectedRoute>
+                                <ProtectedRoute allowedRole="customer">
                                     <StorefrontPage />
                                 </ProtectedRoute>
                             }
@@ -47,7 +72,7 @@ function App() {
                         <Route
                             path="/commodityselect"
                             element={
-                                <ProtectedRoute>
+                                <ProtectedRoute allowedRole="employee">
                                     <CommoditySelectPage />
                                 </ProtectedRoute>
                             }
@@ -55,7 +80,7 @@ function App() {
                         <Route
                             path="/home"
                             element={
-                                <ProtectedRoute>
+                                <ProtectedRoute allowedRole="employee">
                                     <HomePage />
                                 </ProtectedRoute>
                             }
@@ -63,7 +88,7 @@ function App() {
                         <Route
                             path="/inventory"
                             element={
-                                <ProtectedRoute>
+                                <ProtectedRoute allowedRole="employee">
                                     <InventoryScreen />
                                 </ProtectedRoute>
                             }
@@ -71,7 +96,7 @@ function App() {
                         <Route
                             path="/orders"
                             element={
-                                <ProtectedRoute>
+                                <ProtectedRoute allowedRole="employee">
                                     <OrderListPage />
                                 </ProtectedRoute>
                             }
@@ -79,7 +104,7 @@ function App() {
                         <Route
                             path="/staging"
                             element={
-                                <ProtectedRoute>
+                                <ProtectedRoute allowedRole="employee">
                                     <StagingPage />
                                 </ProtectedRoute>
                             }
@@ -87,7 +112,7 @@ function App() {
                         <Route
                             path="/stats"
                             element={
-                                <ProtectedRoute>
+                                <ProtectedRoute allowedRole="employee">
                                     <StatisticsPage />
                                 </ProtectedRoute>
                             }
@@ -95,7 +120,7 @@ function App() {
                         <Route
                             path="/map"
                             element={
-                                <ProtectedRoute>
+                                <ProtectedRoute allowedRole="employee">
                                     <MapScreen />
                                 </ProtectedRoute>
                             }
@@ -103,7 +128,7 @@ function App() {
                         <Route
                             path="/picking"
                             element={
-                                <ProtectedRoute>
+                                <ProtectedRoute allowedRole="employee">
                                     <PickingPage />
                                 </ProtectedRoute>
                             }
@@ -113,11 +138,13 @@ function App() {
                         <Route
                             path="/cart"
                             element={
-                                <ProtectedRoute>
+                                <ProtectedRoute allowedRole="customer">
                                     <CartScreen />
                                 </ProtectedRoute>
                             }
                         />
+
+                        <Route path="*" element={<Navigate to="/" replace />} />
                     </Routes>
                 </main>
             </div>
