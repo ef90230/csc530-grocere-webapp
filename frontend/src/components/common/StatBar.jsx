@@ -40,9 +40,29 @@ const resolveStoredName = () => {
   return window.localStorage.getItem('userDisplayName') || '';
 };
 
-const StatBar = ({ userName, pickRate }) => {
+const StatBar = ({
+  userName,
+  pickRate,
+  mode = 'default',
+  walkCompletedUnits = 0,
+  walkTotalUnits = 0,
+  walkStartedAt
+}) => {
   const [profileName, setProfileName] = useState('');
   const [profilePickRate, setProfilePickRate] = useState(null);
+  const [tick, setTick] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (mode !== 'walk') {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setTick(Date.now());
+    }, 15000);
+
+    return () => window.clearInterval(intervalId);
+  }, [mode]);
 
   useEffect(() => {
     const token = window.localStorage.getItem('authToken');
@@ -108,7 +128,53 @@ const StatBar = ({ userName, pickRate }) => {
   }, [pickRate, profilePickRate]);
 
   const resolvedUserName = userName || profileName || resolveStoredName() || 'Employee';
-  const rateState = getRateState(resolvedPickRate);
+
+  const walkTotal = Math.max(Number(walkTotalUnits || 0), 0);
+  const walkCompleted = Math.max(Number(walkCompletedUnits || 0), 0);
+  const walkProgressPercent = walkTotal > 0
+    ? Math.min(100, Math.round((walkCompleted / walkTotal) * 100))
+    : 0;
+
+  const walkElapsedHours = useMemo(() => {
+    if (!walkStartedAt) {
+      return 0;
+    }
+
+    const startTime = new Date(walkStartedAt);
+    if (Number.isNaN(startTime.getTime())) {
+      return 0;
+    }
+
+    const elapsedMs = Math.max(0, tick - startTime.getTime());
+    return elapsedMs / (1000 * 60 * 60);
+  }, [walkStartedAt, tick]);
+
+  const walkPickRate = useMemo(() => {
+    if (walkElapsedHours <= 0) {
+      return 0;
+    }
+
+    return walkCompleted / walkElapsedHours;
+  }, [walkCompleted, walkElapsedHours]);
+
+  const rateState = getRateState(mode === 'walk' ? walkPickRate : resolvedPickRate);
+
+  if (mode === 'walk') {
+    return (
+      <>
+        <section className={`statbar statbar--${rateState}`} aria-label="Current pick walk stats">
+          <div className="statbar-walk-progress">
+            <span className="statbar-walk-progress-count">{walkCompleted}/{walkTotal}</span>
+            <div className="statbar-walk-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={walkProgressPercent}>
+              <div className="statbar-walk-fill" style={{ width: `${walkProgressPercent}%` }} />
+            </div>
+          </div>
+          <span className="statbar-rate">Live Pick Rate: {formatPickRate(walkPickRate)}</span>
+        </section>
+        <div className="statbar-spacer" />
+      </>
+    );
+  }
 
   return (
     <>

@@ -6,7 +6,19 @@ import './TopBar.css';
 
 const CLOSE_ANIMATION_MS = 280;
 
-const TopBar = ({ userName, pickRate }) => {
+const TopBar = ({
+  userName,
+  pickRate,
+  title = 'Welcome',
+  theme = 'default',
+  leftActionLabel,
+  leftActionAriaLabel = 'Top bar action',
+  onLeftAction,
+  statMode = 'default',
+  walkCompletedUnits = 0,
+  walkTotalUnits = 0,
+  walkStartedAt
+}) => {
   const navigate = useNavigate();
   const [isMenuVisible, setIsMenuVisible] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
@@ -58,8 +70,18 @@ const TopBar = ({ userName, pickRate }) => {
 
   return (
     <>
-      <header className="topbar">
-        <span className="topbar-title">Welcome</span>
+      <header className={`topbar topbar--${theme}`}>
+        {onLeftAction ? (
+          <button
+            type="button"
+            className="topbar-left-button"
+            aria-label={leftActionAriaLabel}
+            onClick={onLeftAction}
+          >
+            {leftActionLabel || '×'}
+          </button>
+        ) : null}
+        <span className="topbar-title">{title}</span>
         <button
           type="button"
           className="topbar-menu-button"
@@ -70,7 +92,14 @@ const TopBar = ({ userName, pickRate }) => {
         </button>
       </header>
       <div className="topbar-spacer" />
-      <StatBar userName={userName} pickRate={pickRate} />
+      <StatBar
+        userName={userName}
+        pickRate={pickRate}
+        mode={statMode}
+        walkCompletedUnits={walkCompletedUnits}
+        walkTotalUnits={walkTotalUnits}
+        walkStartedAt={walkStartedAt}
+      />
       {(isMenuVisible || isClosing) && (
         <PopupMenu
           isClosing={isClosing}

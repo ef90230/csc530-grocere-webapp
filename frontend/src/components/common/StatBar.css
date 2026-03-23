@@ -39,6 +39,37 @@
   text-align: right;
 }
 
+.statbar-walk-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.statbar-walk-progress-count {
+  min-width: 3rem;
+  text-align: left;
+  font-weight: 700;
+}
+
+.statbar-walk-track {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.statbar-walk-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: #1ed222;
+  border-radius: 999px;
+}
+
 .statbar-spacer {
   height: 28px;
 }

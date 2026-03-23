@@ -14,10 +14,43 @@
   border-bottom: 1px solid #c9a725;
 }
 
+.topbar--default {
+  background-color: #f2cf4a;
+  border-bottom-color: #c9a725;
+}
+
+.topbar--green {
+  background-color: #9bc67d;
+  border-bottom-color: #6f9454;
+}
+
 .topbar-title {
   font-size: 1rem;
   font-weight: 600;
   text-align: left;
+  margin-right: auto;
+  margin-left: 0.25rem;
+}
+
+.topbar-left-button {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.18);
+  color: #000;
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.topbar-left-button:hover {
+  background: rgba(0, 0, 0, 0.28);
 }
 
 .topbar-menu-button {
