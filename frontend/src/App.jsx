@@ -7,6 +7,7 @@ import CommoditySelectPage from './pages/CommoditySelectPage';
 import HomePage from './pages/HomePage';
 import InventoryScreen from './pages/InventoryScreen';
 import LoginPage from './pages/LoginPage';
+import SchedulingScreen from './pages/SchedulingScreen';
 import TitlePage from './pages/TitlePage';
 import StorefrontPage from './pages/StorefrontPage';
 import MapScreen from './pages/MapScreen';
@@ -140,6 +141,14 @@ function App() {
                             element={
                                 <ProtectedRoute allowedRole="customer">
                                     <CartScreen />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="/schedule"
+                            element={
+                                <ProtectedRoute allowedRole="customer">
+                                    <SchedulingScreen />
                                 </ProtectedRoute>
                             }
                         />

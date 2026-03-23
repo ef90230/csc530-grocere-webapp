@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import CustomerPopupMenu from '../components/customer/CustomerPopupMenu';
+import CustomerItemDetailCard from '../components/customer/CustomerItemDetailCard';
 import './StorefrontPage.css';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
@@ -54,6 +55,8 @@ const StorefrontPage = () => {
   const [activeOrder, setActiveOrder] = useState(null);
   const [quantityByItemId, setQuantityByItemId] = useState({});
   const [addingItemId, setAddingItemId] = useState(null);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [storeAisles, setStoreAisles] = useState([]);
   const [isMenuVisible, setIsMenuVisible] = useState(false);
   const [isMenuClosing, setIsMenuClosing] = useState(false);
 
@@ -173,6 +176,35 @@ const StorefrontPage = () => {
 
     return () => clearTimeout(timeoutId);
   }, [isMenuClosing]);
+
+  useEffect(() => {
+    const loadAislesForSelectedItem = async () => {
+      if (!selectedItem) {
+        setStoreAisles([]);
+        return;
+      }
+
+      const storeId = selectedItem?.locations?.[0]?.storeId;
+      if (!storeId) {
+        setStoreAisles([]);
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE}/api/aisles/store/${storeId}`);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.success) {
+          setStoreAisles([]);
+          return;
+        }
+        setStoreAisles(payload.aisles || []);
+      } catch {
+        setStoreAisles([]);
+      }
+    };
+
+    loadAislesForSelectedItem();
+  }, [selectedItem]);
 
   const visibleItems = useMemo(() => (
     items.filter((item) => item?.isActive !== false)
@@ -319,6 +351,12 @@ const StorefrontPage = () => {
     : activeOrder?.store?.name || 'your store';
 
   const hasAppliedSearch = appliedSearchTerm.trim().length > 0;
+  const selectedItemQuantity = selectedItem ? (quantityByItemId[selectedItem.id] || 1) : 1;
+  const selectedItemOnHandTotal = selectedItem ? getOnHandTotal(selectedItem) : 0;
+  const selectedItemCanDecrease = selectedItemOnHandTotal > 0 && selectedItemQuantity > 1;
+  const selectedItemCanIncrease = selectedItemOnHandTotal > 0 && selectedItemQuantity < selectedItemOnHandTotal;
+  const selectedItemOutOfStock = selectedItemOnHandTotal <= 0;
+  const selectedItemIsAdding = selectedItem ? addingItemId === selectedItem.id : false;
 
   return (
     <div className="storefront-page">
@@ -428,7 +466,11 @@ const StorefrontPage = () => {
             const isOutOfStock = onHandTotal <= 0;
 
             return (
-              <article key={item.id} className="storefront-item-card">
+              <article
+                key={item.id}
+                className="storefront-item-card storefront-item-card--clickable"
+                onClick={() => setSelectedItem(item)}
+              >
                 {item.imageUrl ? (
                   <img
                     src={item.imageUrl}
@@ -447,7 +489,10 @@ const StorefrontPage = () => {
                     <button
                       type="button"
                       className="storefront-quantity-picker__button storefront-quantity-picker__button--minus"
-                      onClick={() => decrementQuantity(item.id, quantity)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        decrementQuantity(item.id, quantity);
+                      }}
                       disabled={!canDecrease}
                       aria-label={`Decrease ${item.name} quantity`}
                     >
@@ -457,7 +502,10 @@ const StorefrontPage = () => {
                     <button
                       type="button"
                       className="storefront-quantity-picker__button storefront-quantity-picker__button--plus"
-                      onClick={() => incrementQuantity(item.id, quantity, onHandTotal)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        incrementQuantity(item.id, quantity, onHandTotal);
+                      }}
                       disabled={!canIncrease}
                       aria-label={`Increase ${item.name} quantity`}
                     >
@@ -468,7 +516,10 @@ const StorefrontPage = () => {
                     type="button"
                     className="storefront-add-cart-button"
                     disabled={isOutOfStock || addingItemId === item.id}
-                    onClick={() => addItemToCart(item)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      addItemToCart(item);
+                    }}
                   >
                     {isOutOfStock ? 'Out of stock' : addingItemId === item.id ? 'Adding...' : 'Add to Cart'}
                   </button>
@@ -490,6 +541,21 @@ const StorefrontPage = () => {
           isClosing={isMenuClosing}
           onClose={closeMenu}
           onLogout={handleLogout}
+        />
+      )}
+      {selectedItem && (
+        <CustomerItemDetailCard
+          item={selectedItem}
+          aisles={storeAisles}
+          quantity={selectedItemQuantity}
+          canDecrease={selectedItemCanDecrease}
+          canIncrease={selectedItemCanIncrease}
+          isOutOfStock={selectedItemOutOfStock}
+          isAdding={selectedItemIsAdding}
+          onClose={() => setSelectedItem(null)}
+          onDecrease={() => decrementQuantity(selectedItem.id, selectedItemQuantity)}
+          onIncrease={() => incrementQuantity(selectedItem.id, selectedItemQuantity, selectedItemOnHandTotal)}
+          onAddToCart={() => addItemToCart(selectedItem)}
         />
       )}
     </div>

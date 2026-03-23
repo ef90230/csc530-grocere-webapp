@@ -12,31 +12,38 @@ const protect = async (req, res, next) => {
       token = req.headers.authorization.split(' ')[1];
 
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      console.log(`[Auth] Token decoded - type: ${decoded.type}, id: ${decoded.id}`);
 
       if (decoded.type === 'employee') {
         req.user = await Employee.findByPk(decoded.id, {
           attributes: { exclude: ['password'] }
         });
         req.userType = 'employee';
+        console.log(`[Auth] Employee access - userId: ${req.user?.id}`);
       } else if (decoded.type === 'customer') {
         req.user = await Customer.findByPk(decoded.id, {
           attributes: { exclude: ['password'] }
         });
         req.userType = 'customer';
+        console.log(`[Auth] Customer access - userId: ${req.user?.id}`);
+      } else {
+        console.log(`[Auth] Unknown token type: ${decoded.type}`);
       }
 
       if (!req.user) {
+        console.log(`[Auth] User not found for id: ${decoded.id}`);
         return res.status(401).json({ message: 'Not authorized' });
       }
 
       next();
     } catch (error) {
-      console.error(error);
+      console.error('[Auth] Token verification failed:', error.message);
       return res.status(401).json({ message: 'Not authorized, token failed' });
     }
   }
 
   if (!token) {
+    console.log(`[Auth] No authorization header`);
     return res.status(401).json({ message: 'Not authorized, no token' });
   }
 };

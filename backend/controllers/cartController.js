@@ -1,5 +1,18 @@
 const { Cart, CartItem, Item } = require('../models');
 
+const cartItemInclude = [
+  {
+    model: Item,
+    as: 'item',
+    attributes: ['id', 'name', 'upc', 'price', 'imageUrl']
+  },
+  {
+    model: Item,
+    as: 'substitutionItem',
+    attributes: ['id', 'name', 'upc', 'price', 'imageUrl']
+  }
+];
+
 // Get customer's cart with all items
 const getCart = async (req, res) => {
   try {
@@ -11,13 +24,7 @@ const getCart = async (req, res) => {
         {
           model: CartItem,
           as: 'items',
-          include: [
-            {
-              model: Item,
-              as: 'item',
-              attributes: ['id', 'name', 'upc', 'price', 'imageUrl']
-            }
-          ]
+          include: cartItemInclude
         }
       ]
     });
@@ -30,12 +37,7 @@ const getCart = async (req, res) => {
           {
             model: CartItem,
             as: 'items',
-            include: [
-              {
-                model: Item,
-                as: 'item'
-              }
-            ]
+            include: cartItemInclude
           }
         ]
       });
@@ -113,13 +115,7 @@ const addToCart = async (req, res) => {
         {
           model: CartItem,
           as: 'items',
-          include: [
-            {
-              model: Item,
-              as: 'item',
-              attributes: ['id', 'name', 'upc', 'price', 'imageUrl']
-            }
-          ]
+          include: cartItemInclude
         }
       ]
     });
@@ -149,7 +145,7 @@ const addToCart = async (req, res) => {
 const updateCartItem = async (req, res) => {
   try {
     const { customerId, cartItemId } = req.params;
-    const { quantity, notes } = req.body;
+    const { quantity, notes, substitutionItemId, substitutionQuantity, clearSubstitution } = req.body;
 
     // Verify cart belongs to customer
     const cart = await Cart.findOne({ where: { customerId } });
@@ -181,6 +177,26 @@ const updateCartItem = async (req, res) => {
       cartItem.notes = notes;
     }
 
+    if (clearSubstitution === true) {
+      cartItem.substitutionItemId = null;
+      cartItem.substitutionQuantity = null;
+    }
+
+    if (substitutionItemId !== undefined && substitutionItemId !== null) {
+      const substitutionItem = await Item.findByPk(substitutionItemId);
+      if (!substitutionItem) {
+        return res.status(404).json({ message: 'Substitution item not found' });
+      }
+
+      const resolvedSubstitutionQuantity = Number(substitutionQuantity || 1);
+      if (resolvedSubstitutionQuantity < 1) {
+        return res.status(400).json({ message: 'Substitution quantity must be at least 1' });
+      }
+
+      cartItem.substitutionItemId = substitutionItemId;
+      cartItem.substitutionQuantity = resolvedSubstitutionQuantity;
+    }
+
     await cartItem.save();
 
     // Return updated cart
@@ -189,13 +205,7 @@ const updateCartItem = async (req, res) => {
         {
           model: CartItem,
           as: 'items',
-          include: [
-            {
-              model: Item,
-              as: 'item',
-              attributes: ['id', 'name', 'upc', 'price', 'imageUrl']
-            }
-          ]
+          include: cartItemInclude
         }
       ]
     });
@@ -252,13 +262,7 @@ const removeFromCart = async (req, res) => {
         {
           model: CartItem,
           as: 'items',
-          include: [
-            {
-              model: Item,
-              as: 'item',
-              attributes: ['id', 'name', 'upc', 'price', 'imageUrl']
-            }
-          ]
+          include: cartItemInclude
         }
       ]
     });
@@ -303,12 +307,7 @@ const clearCart = async (req, res) => {
         {
           model: CartItem,
           as: 'items',
-          include: [
-            {
-              model: Item,
-              as: 'item'
-            }
-          ]
+          include: cartItemInclude
         }
       ]
     });

@@ -133,7 +133,7 @@ const getOrder = async (req, res) => {
 
 const createOrder = async (req, res) => {
   try {
-    const { customerId, storeId, scheduledPickupTime, items } = req.body;
+    const { customerId, storeId, scheduledPickupTime, items, timezoneOffsetMinutes } = req.body;
 
     if (!scheduledPickupTime) {
       return res.status(400).json({ message: 'scheduledPickupTime is required' });
@@ -141,7 +141,7 @@ const createOrder = async (req, res) => {
 
     // Validate scheduling constraints
     const scheduledTime = new Date(scheduledPickupTime);
-    const validation = await validateScheduleTime(scheduledTime, storeId);
+    const validation = await validateScheduleTime(scheduledTime, storeId, new Date(), timezoneOffsetMinutes);
 
     if (!validation.isValid) {
       return res.status(400).json({
@@ -373,7 +373,7 @@ const cancelOrder = async (req, res) => {
 const getAvailableScheduleSlots = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, timezoneOffsetMinutes } = req.query;
 
     if (!startDate || !endDate) {
       return res.status(400).json({
@@ -390,7 +390,7 @@ const getAvailableScheduleSlots = async (req, res) => {
       });
     }
 
-    const slots = await getAvailableTimeSlots(storeId, start, end);
+    const slots = await getAvailableTimeSlots(storeId, startDate, endDate, new Date(), timezoneOffsetMinutes);
 
     res.json({
       success: true,
@@ -411,8 +411,9 @@ const getAvailableScheduleSlots = async (req, res) => {
 const getNextAvailableSlotForStore = async (req, res) => {
   try {
     const { storeId } = req.params;
+    const { timezoneOffsetMinutes } = req.query;
 
-    const nextSlot = await getNextAvailableSlot(storeId);
+    const nextSlot = await getNextAvailableSlot(storeId, new Date(), timezoneOffsetMinutes);
 
     if (!nextSlot) {
       return res.status(200).json({
@@ -436,7 +437,7 @@ const getNextAvailableSlotForStore = async (req, res) => {
 const validateOrderScheduleTime = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const { scheduledPickupTime } = req.body;
+    const { scheduledPickupTime, timezoneOffsetMinutes } = req.body;
 
     if (!scheduledPickupTime) {
       return res.status(400).json({
@@ -451,7 +452,7 @@ const validateOrderScheduleTime = async (req, res) => {
       });
     }
 
-    const validation = await validateScheduleTime(scheduledTime, storeId);
+    const validation = await validateScheduleTime(scheduledTime, storeId, new Date(), timezoneOffsetMinutes);
 
     res.json({
       success: validation.isValid,

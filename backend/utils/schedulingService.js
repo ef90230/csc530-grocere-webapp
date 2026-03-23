@@ -12,11 +12,31 @@ const { Op } = require('sequelize');
 
 const MAX_ORDERS_PER_HOUR = 20;
 
+const normalizeTimezoneOffset = (timezoneOffsetMinutes = 0) => {
+  const parsedOffset = Number(timezoneOffsetMinutes);
+  return Number.isFinite(parsedOffset) ? parsedOffset : 0;
+};
+
+const toClientTimezoneDate = (date, timezoneOffsetMinutes = 0) => {
+  const normalizedOffset = normalizeTimezoneOffset(timezoneOffsetMinutes);
+  return new Date(date.getTime() - normalizedOffset * 60 * 1000);
+};
+
+const fromClientTimezoneParts = (year, monthIndex, day, hour, minute, second, millisecond, timezoneOffsetMinutes = 0) => {
+  const normalizedOffset = normalizeTimezoneOffset(timezoneOffsetMinutes);
+  return new Date(Date.UTC(year, monthIndex, day, hour, minute, second, millisecond) + normalizedOffset * 60 * 1000);
+};
+
+const parseClientDateString = (dateString) => {
+  const [year, month, day] = String(dateString).split('-').map(Number);
+  return { year, monthIndex: month - 1, day };
+};
+
 /**
  * Check if a time is within operating hours (8 AM - 11:59 PM)
  */
 const isWithinOperatingHours = (date) => {
-  const hour = date.getHours();
+  const hour = date.getUTCHours();
   return hour >= 8 && hour < 24;
 };
 
@@ -33,11 +53,11 @@ const meetsMinimumAdvanceTime = (scheduledTime, nowTime) => {
  */
 const isWithin7Days = (scheduledTime, nowTime) => {
   const today = new Date(nowTime);
-  today.setHours(0, 0, 0, 0);
-  
+  today.setUTCHours(0, 0, 0, 0);
+
   const sevenDaysFromToday = new Date(today);
-  sevenDaysFromToday.setDate(sevenDaysFromToday.getDate() + 7);
-  sevenDaysFromToday.setHours(23, 59, 59, 999);
+  sevenDaysFromToday.setUTCDate(sevenDaysFromToday.getUTCDate() + 7);
+  sevenDaysFromToday.setUTCHours(23, 59, 59, 999);
   
   return scheduledTime >= today && scheduledTime <= sevenDaysFromToday;
 };
@@ -62,11 +82,13 @@ const getOrderCountForHour = async (storeId, hourStart, hourEnd) => {
  * Validate a proposed scheduling time against all constraints
  * Returns { isValid: boolean, errors: string[] }
  */
-const validateScheduleTime = async (scheduledTime, storeId, nowTime = new Date()) => {
+const validateScheduleTime = async (scheduledTime, storeId, nowTime = new Date(), timezoneOffsetMinutes = 0) => {
   const errors = [];
+  const clientScheduledTime = toClientTimezoneDate(scheduledTime, timezoneOffsetMinutes);
+  const clientNowTime = toClientTimezoneDate(nowTime, timezoneOffsetMinutes);
 
   // Constraint 1: Check operating hours (8 AM - 11:59 PM)
-  if (!isWithinOperatingHours(scheduledTime)) {
+  if (!isWithinOperatingHours(clientScheduledTime)) {
     errors.push('Orders can only be scheduled between 8:00 AM and 11:59 PM');
   }
 
@@ -79,15 +101,22 @@ const validateScheduleTime = async (scheduledTime, storeId, nowTime = new Date()
   }
 
   // Constraint 3: Check 7-day maximum
-  if (!isWithin7Days(scheduledTime, nowTime)) {
+  if (!isWithin7Days(clientScheduledTime, clientNowTime)) {
     errors.push('Orders can only be scheduled up to 7 days in advance');
   }
 
   // Constraint 4: Check max 20 orders per hour
-  const hourStart = new Date(scheduledTime);
-  hourStart.setMinutes(0, 0, 0);
-  const hourEnd = new Date(hourStart);
-  hourEnd.setHours(hourEnd.getHours() + 1);
+  const hourStart = fromClientTimezoneParts(
+    clientScheduledTime.getUTCFullYear(),
+    clientScheduledTime.getUTCMonth(),
+    clientScheduledTime.getUTCDate(),
+    clientScheduledTime.getUTCHours(),
+    0,
+    0,
+    0,
+    timezoneOffsetMinutes
+  );
+  const hourEnd = new Date(hourStart.getTime() + 60 * 60 * 1000);
 
   const orderCountForHour = await getOrderCountForHour(storeId, hourStart, hourEnd);
   if (orderCountForHour >= MAX_ORDERS_PER_HOUR) {
@@ -104,60 +133,85 @@ const validateScheduleTime = async (scheduledTime, storeId, nowTime = new Date()
  * Get available time slots for a given date range
  * Returns array of available slots with capacity info
  */
-const getAvailableTimeSlots = async (storeId, startDate, endDate, nowTime = new Date()) => {
+const getAvailableTimeSlots = async (storeId, startDate, endDate, nowTime = new Date(), timezoneOffsetMinutes = 0) => {
   const slots = [];
 
-  // Create date range - from the date after the 3-hour minimum, up to 7 days out
-  let current = new Date(nowTime);
+  const startParts = typeof startDate === 'string'
+    ? parseClientDateString(startDate)
+    : {
+        year: startDate.getFullYear(),
+        monthIndex: startDate.getMonth(),
+        day: startDate.getDate()
+      };
+  const endParts = typeof endDate === 'string'
+    ? parseClientDateString(endDate)
+    : {
+        year: endDate.getFullYear(),
+        monthIndex: endDate.getMonth(),
+        day: endDate.getDate()
+      };
 
-  // Advance to the next valid start time (3 hours from now, rounded up to next hour)
-  const threeHoursFromNow = new Date(nowTime.getTime() + 3 * 60 * 60 * 1000);
-  current.setHours(threeHoursFromNow.getHours(), 0, 0, 0);
-  if (current < threeHoursFromNow) {
-    current.setHours(current.getHours() + 1);
-  }
+  let current = new Date(Date.UTC(startParts.year, startParts.monthIndex, startParts.day, 0, 0, 0, 0));
+  const requestedEndDate = new Date(Date.UTC(endParts.year, endParts.monthIndex, endParts.day, 23, 59, 59, 999));
+  const clientNowTime = toClientTimezoneDate(nowTime, timezoneOffsetMinutes);
+  const threeHoursFromNow = new Date(clientNowTime.getTime() + 3 * 60 * 60 * 1000);
 
-  // Don't go before 8 AM
-  if (current.getHours() < 8) {
-    current.setHours(8, 0, 0, 0);
-  }
+  const sevenDaysFromToday = new Date(clientNowTime);
+  sevenDaysFromToday.setUTCDate(sevenDaysFromToday.getUTCDate() + 7);
+  sevenDaysFromToday.setUTCHours(23, 59, 59, 999);
 
-  // End date should be at most 7 days from today
-  const sevenDaysFromToday = new Date(nowTime);
-  sevenDaysFromToday.setDate(sevenDaysFromToday.getDate() + 7);
-  sevenDaysFromToday.setHours(23, 59, 59, 999);
+  const actualEndDate = new Date(Math.min(requestedEndDate.getTime(), sevenDaysFromToday.getTime()));
 
-  const actualEndDate = new Date(Math.min(endDate.getTime(), sevenDaysFromToday.getTime()));
-
-  // Generate hourly slots
   while (current <= actualEndDate) {
-    // Skip if outside operating hours
-    if (isWithinOperatingHours(current)) {
-      const hourStart = new Date(current);
-      hourStart.setMinutes(0, 0, 0);
-      const hourEnd = new Date(hourStart);
-      hourEnd.setHours(hourEnd.getHours() + 1);
+    for (let hour = 8; hour < 24; hour += 1) {
+      const clientHourStart = new Date(Date.UTC(
+        current.getUTCFullYear(),
+        current.getUTCMonth(),
+        current.getUTCDate(),
+        hour,
+        0,
+        0,
+        0
+      ));
+
+      if (clientHourStart > actualEndDate) {
+        continue;
+      }
+
+      const hourStart = fromClientTimezoneParts(
+        clientHourStart.getUTCFullYear(),
+        clientHourStart.getUTCMonth(),
+        clientHourStart.getUTCDate(),
+        clientHourStart.getUTCHours(),
+        0,
+        0,
+        0,
+        timezoneOffsetMinutes
+      );
+      const hourEnd = new Date(hourStart.getTime() + 60 * 60 * 1000);
 
       const orderCount = await getOrderCountForHour(storeId, hourStart, hourEnd);
-      const isAvailable = orderCount < MAX_ORDERS_PER_HOUR;
+      const isAvailable = clientHourStart >= threeHoursFromNow && orderCount < MAX_ORDERS_PER_HOUR;
 
       slots.push({
         time: new Date(hourStart),
-        hour: hourStart.getHours(),
-        date: hourStart.toISOString().split('T')[0],
+        hour,
+        date: `${current.getUTCFullYear()}-${String(current.getUTCMonth() + 1).padStart(2, '0')}-${String(current.getUTCDate()).padStart(2, '0')}`,
         ordersScheduled: orderCount,
-        capacity: 20,
+        capacity: MAX_ORDERS_PER_HOUR,
         isAvailable
       });
     }
 
-    // Move to next hour
-    current.setHours(current.getHours() + 1);
-
-    // Skip to 8 AM if we crossed into a new day before 8 AM
-    if (current.getHours() < 8 && current.getDate() !== new Date(current.getTime() - 24 * 60 * 60 * 1000).getDate()) {
-      current.setHours(8, 0, 0, 0);
-    }
+    current = new Date(Date.UTC(
+      current.getUTCFullYear(),
+      current.getUTCMonth(),
+      current.getUTCDate() + 1,
+      0,
+      0,
+      0,
+      0
+    ));
   }
 
   return slots;
@@ -205,47 +259,96 @@ const purgeOldSchedules = async () => {
 /**
  * Get next available slot for a given store
  */
-const getNextAvailableSlot = async (storeId, nowTime = new Date()) => {
-  let current = new Date(nowTime);
+const getNextAvailableSlot = async (storeId, nowTime = new Date(), timezoneOffsetMinutes = 0) => {
+  const clientNowTime = toClientTimezoneDate(nowTime, timezoneOffsetMinutes);
+  const threeHoursFromNow = new Date(clientNowTime.getTime() + 3 * 60 * 60 * 1000);
 
-  // Advance to the next valid start time (3 hours from now, rounded up to next hour)
-  const threeHoursFromNow = new Date(nowTime.getTime() + 3 * 60 * 60 * 1000);
-  current.setHours(threeHoursFromNow.getHours(), 0, 0, 0);
+  let current = new Date(Date.UTC(
+    threeHoursFromNow.getUTCFullYear(),
+    threeHoursFromNow.getUTCMonth(),
+    threeHoursFromNow.getUTCDate(),
+    threeHoursFromNow.getUTCHours(),
+    0,
+    0,
+    0
+  ));
+
+  // Round up to next hour if not already at hour boundary
   if (current < threeHoursFromNow) {
-    current.setHours(current.getHours() + 1);
+    current = new Date(Date.UTC(
+      current.getUTCFullYear(),
+      current.getUTCMonth(),
+      current.getUTCDate(),
+      current.getUTCHours() + 1,
+      0,
+      0,
+      0
+    ));
   }
 
   // Don't go before 8 AM
-  if (current.getHours() < 8) {
-    current.setHours(8, 0, 0, 0);
+  if (current.getUTCHours() < 8) {
+    current = new Date(Date.UTC(
+      current.getUTCFullYear(),
+      current.getUTCMonth(),
+      current.getUTCDate(),
+      8,
+      0,
+      0,
+      0
+    ));
   }
 
   // Search for next available slot within 7 days
-  const maxSearchDate = new Date(nowTime);
-  maxSearchDate.setDate(maxSearchDate.getDate() + 7);
-  maxSearchDate.setHours(23, 59, 59, 999);
+  const maxSearchDate = new Date(clientNowTime);
+  maxSearchDate.setUTCDate(maxSearchDate.getUTCDate() + 7);
+  maxSearchDate.setUTCHours(23, 59, 59, 999);
 
   while (current <= maxSearchDate) {
-    const hourStart = new Date(current);
-    hourStart.setMinutes(0, 0, 0);
-    const hourEnd = new Date(hourStart);
-    hourEnd.setHours(hourEnd.getHours() + 1);
+    const clientHourStart = new Date(current);
+    const hourStart = fromClientTimezoneParts(
+      clientHourStart.getUTCFullYear(),
+      clientHourStart.getUTCMonth(),
+      clientHourStart.getUTCDate(),
+      clientHourStart.getUTCHours(),
+      0,
+      0,
+      0,
+      timezoneOffsetMinutes
+    );
+    const hourEnd = new Date(hourStart.getTime() + 60 * 60 * 1000);
 
     const orderCount = await getOrderCountForHour(storeId, hourStart, hourEnd);
     if (orderCount < 20) {
       return {
         time: new Date(hourStart),
-        hour: hourStart.getHours(),
+        hour: clientHourStart.getUTCHours(),
         ordersScheduled: orderCount,
         capacity: 20
       };
     }
 
-    current.setHours(current.getHours() + 1);
+    current = new Date(Date.UTC(
+      current.getUTCFullYear(),
+      current.getUTCMonth(),
+      current.getUTCDate(),
+      current.getUTCHours() + 1,
+      0,
+      0,
+      0
+    ));
 
     // Skip to 8 AM if we crossed into a new day before 8 AM
-    if (current.getHours() < 8 && current.getDate() !== new Date(current.getTime() - 24 * 60 * 60 * 1000).getDate()) {
-      current.setHours(8, 0, 0, 0);
+    if (current.getUTCHours() < 8 && current.getUTCDate() !== new Date(current.getTime() - 24 * 60 * 60 * 1000).getUTCDate()) {
+      current = new Date(Date.UTC(
+        current.getUTCFullYear(),
+        current.getUTCMonth(),
+        current.getUTCDate(),
+        8,
+        0,
+        0,
+        0
+      ));
     }
   }
 
