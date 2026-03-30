@@ -114,6 +114,13 @@ const CART_ITEM_OPTION_COLUMNS = {
   }
 };
 
+const ORDER_ITEM_OPTION_COLUMNS = {
+  notes: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  }
+};
+
 const ensureEmployeeMetricColumns = async () => {
   const queryInterface = sequelize.getQueryInterface();
   let employeeTable;
@@ -215,11 +222,45 @@ const ensureCartItemOptionColumns = async () => {
   }
 };
 
+const ensureOrderItemOptionColumns = async () => {
+  try {
+    const [existingColumnsRows] = await sequelize.query(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'order_items'
+        AND column_name IN ('notes');
+    `);
+
+    const existingColumns = new Set(existingColumnsRows.map((row) => row.column_name));
+    const needsNotes = !existingColumns.has('notes');
+
+    if (!needsNotes) {
+      return;
+    }
+
+    await sequelize.query(
+      'ALTER TABLE "order_items" ADD COLUMN IF NOT EXISTS notes TEXT;'
+    );
+
+    console.log('Ensured order_items option columns: notes');
+  } catch (error) {
+    if (error?.original?.code === '42501') {
+      console.warn(
+        'Skipping order_items schema backfill due to insufficient DB permissions (code 42501).'
+      );
+      return;
+    }
+    throw error;
+  }
+};
+
 const syncDatabase = async (force = false) => {
   try {
     await sequelize.sync({ force });
     await ensureEmployeeMetricColumns();
     await ensureCartItemOptionColumns();
+    await ensureOrderItemOptionColumns();
     console.log('Database synchronized successfully');
   } catch (error) {
     console.error('Error synchronizing database:', error);

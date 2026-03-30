@@ -1,4 +1,8 @@
 const { Employee, Store, Order } = require('../models');
+const {
+  calculateAverageWalkPickRate,
+  getCompletedPickWalkHistory
+} = require('../utils/employeeMetricsService');
 
 const METRIC_FIELDS = [
   'pickRate',
@@ -242,6 +246,11 @@ const getMyAndStoreStats = async (req, res) => {
 
     const myStats = mapEmployeeStats(currentEmployee);
     const storeStats = getStoreAggregatedStats(storeEmployees);
+    const walkHistory = await getCompletedPickWalkHistory(currentEmployee.id);
+    const storeWalkHistory = await getCompletedPickWalkHistory(storeEmployees.map((employee) => employee.id));
+
+    myStats.pickRate = calculateAverageWalkPickRate(walkHistory);
+    storeStats.pickRate = calculateAverageWalkPickRate(storeWalkHistory);
 
     res.json({
       success: true,
@@ -250,7 +259,8 @@ const getMyAndStoreStats = async (req, res) => {
         firstName: currentEmployee.firstName,
         lastName: currentEmployee.lastName,
         storeId: currentEmployee.storeId,
-        stats: myStats
+        stats: myStats,
+        walkHistory
       },
       store: {
         employeeCount: storeEmployees.length,

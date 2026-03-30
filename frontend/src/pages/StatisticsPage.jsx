@@ -77,6 +77,21 @@ const toNumber = (value) => {
   return Number.isFinite(numeric) ? numeric : 0;
 };
 
+const formatWalkStartedAt = (value) => {
+    const startedAt = new Date(value);
+    if (Number.isNaN(startedAt.getTime())) {
+        return 'Unknown walk time';
+    }
+
+    return startedAt.toLocaleString([], {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+    });
+};
+
 const formatValue = (metric, value) => {
   const safeValue = toNumber(value);
 
@@ -185,6 +200,10 @@ const StatisticsPage = () => {
         return toNumber(summary?.user?.stats?.pickRate);
     }, [summary]);
 
+    const walkHistory = useMemo(() => {
+        return Array.isArray(summary?.user?.walkHistory) ? summary.user.walkHistory : [];
+    }, [summary]);
+
     return (
         <div className="statistics-page">
             <TopBar userName={userFullName} pickRate={pickRateForTopBar} />
@@ -270,6 +289,47 @@ const StatisticsPage = () => {
                                     );
                                 })}
                             </div>
+
+                            {activeScope === 'you' ? (
+                                <div className="walk-history-section">
+                                    <div className="walk-history-header-row">
+                                        <h3>Pick Walk History</h3>
+                                        <span>{walkHistory.length} walks</span>
+                                    </div>
+
+                                    {walkHistory.length > 0 ? (
+                                        <div className="walk-history-list" role="list" aria-label="Pick walk history">
+                                            {walkHistory.map((walk, index) => (
+                                                <article className="walk-history-card" key={`${walk.startedAt}-${walk.commodity}-${index}`} role="listitem">
+                                                    <div className="walk-history-card-top-row">
+                                                        <div>
+                                                            <p className="walk-history-commodity">{walk.commodityLabel || walk.commodity || 'Commodity'}</p>
+                                                            <p className="walk-history-date">{formatWalkStartedAt(walk.startedAt)}</p>
+                                                        </div>
+                                                        <div className="walk-history-rate-block">
+                                                            <strong>{toNumber(walk.pickRate).toFixed(2)}/hr</strong>
+                                                            <span>Pick rate</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="walk-history-metrics-row">
+                                                        <div>
+                                                            <span className="walk-history-metric-label">Items</span>
+                                                            <strong>{`${Math.round(toNumber(walk.itemsPicked))}/${Math.round(toNumber(walk.initialTotal))}`}</strong>
+                                                        </div>
+                                                        <div>
+                                                            <span className="walk-history-metric-label">Orders</span>
+                                                            <strong>{Math.round(toNumber(walk.orderCount))}</strong>
+                                                        </div>
+                                                    </div>
+                                                </article>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="walk-history-empty">No completed pick walks yet.</p>
+                                    )}
+                                </div>
+                            ) : null}
                         </section>
 
                         <section className="stats-section" aria-label="Staging">

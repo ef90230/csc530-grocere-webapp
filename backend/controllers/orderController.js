@@ -19,9 +19,61 @@ const COMMODITY_DISPLAY_NAMES = {
 
 const WALK_LOOKAHEAD_HOURS = 3;
 
+const parseStructuredOrderNotes = (notesValue) => {
+  if (!notesValue) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(notesValue);
+    if (!parsed || typeof parsed !== 'object') {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
 const toAisleNumberValue = (aisleNumber) => {
   const numeric = Number(aisleNumber);
   return Number.isFinite(numeric) ? numeric : Number.MAX_SAFE_INTEGER;
+};
+
+const finalizeOrderIfResolved = async (orderId) => {
+  if (!orderId) {
+    return null;
+  }
+
+  const order = await Order.findByPk(orderId);
+  if (!order) {
+    return null;
+  }
+
+  const pendingItems = await OrderItem.count({
+    where: {
+      orderId,
+      status: 'pending'
+    }
+  });
+
+  if (pendingItems > 0) {
+    return order;
+  }
+
+  const updates = {};
+  if (order.status === 'picking') {
+    updates.status = 'picked';
+  }
+  if (!order.pickingEndTime) {
+    updates.pickingEndTime = new Date();
+  }
+
+  if (Object.keys(updates).length > 0) {
+    await order.update(updates);
+  }
+
+  return order;
 };
 
 const getPathIndexMap = async (storeId, commodity) => {
@@ -56,6 +108,12 @@ const buildPickQueue = (orders, pathIndexMap) => {
   const queue = [];
 
   orders.forEach((order) => {
+    const parsedOrderNotes = parseStructuredOrderNotes(order.notes);
+    const itemNotesByOrderItemId = parsedOrderNotes?.itemNotesByOrderItemId || {};
+    const orderLevelNotes = typeof parsedOrderNotes?.orderNote === 'string'
+      ? parsedOrderNotes.orderNote
+      : (order.notes || '');
+
     order.items.forEach((orderItem) => {
       const orderedQuantity = Number(orderItem.quantity || 0);
       const alreadyPickedQuantity = Number(orderItem.pickedQuantity || 0);
@@ -119,7 +177,7 @@ const buildPickQueue = (orders, pathIndexMap) => {
         quantityToPick: remainingQuantity,
         pickedQuantity: alreadyPickedQuantity,
         status: orderItem.status,
-        specialInstructions: order.notes || '',
+        specialInstructions: itemNotesByOrderItemId[String(orderItem.id)] || orderLevelNotes,
         item: {
           id: item?.id,
           name: item?.name || 'Unknown Item',
@@ -171,7 +229,7 @@ const walkOrdersInclude = (commodity) => ([
     where: {
       status: 'pending'
     },
-    attributes: ['id', 'itemId', 'quantity', 'pickedQuantity', 'status'],
+    attributes: ['id', 'itemId', 'quantity', 'pickedQuantity', 'status', 'substitutedItemId'],
     include: [
       {
         model: Item,
@@ -341,7 +399,14 @@ const getOrder = async (req, res) => {
 
 const createOrder = async (req, res) => {
   try {
-    const { customerId, storeId, scheduledPickupTime, items, timezoneOffsetMinutes } = req.body;
+    const {
+      customerId,
+      storeId,
+      scheduledPickupTime,
+      items,
+      timezoneOffsetMinutes,
+      notes: orderNotesInput
+    } = req.body;
 
     if (!scheduledPickupTime) {
       return res.status(400).json({ message: 'scheduledPickupTime is required' });
@@ -377,17 +442,46 @@ const createOrder = async (req, res) => {
       totalAmount: totalAmount.toFixed(2)
     });
 
+    const itemNotesByOrderItemId = {};
+
     const orderItems = await Promise.all(
       items.map(async (item) => {
         const itemData = await Item.findByPk(item.itemId);
-        return OrderItem.create({
+
+        const resolvedSubstitutedItemId = item.substitutedItemId
+          || item.substitutionItemId
+          || item.substitutionitemid
+          || null;
+
+        const resolvedItemNote = item.notes
+          || item.specialInstructions
+          || item.specialInstruction
+          || '';
+
+        const createdOrderItem = await OrderItem.create({
           orderId: order.id,
           itemId: item.itemId,
           quantity: item.quantity,
-          unitPrice: itemData.price
+          unitPrice: itemData.price,
+          substitutedItemId: resolvedSubstitutedItemId
         });
+
+        if (resolvedItemNote) {
+          itemNotesByOrderItemId[String(createdOrderItem.id)] = String(resolvedItemNote);
+        }
+
+        return createdOrderItem;
       })
     );
+
+    const structuredOrderNotes = {
+      orderNote: String(orderNotesInput || ''),
+      itemNotesByOrderItemId
+    };
+
+    if (structuredOrderNotes.orderNote || Object.keys(itemNotesByOrderItemId).length > 0) {
+      await order.update({ notes: JSON.stringify(structuredOrderNotes) });
+    }
 
 
     const completeOrder = await Order.findByPk(order.id, {
@@ -488,12 +582,10 @@ const updateOrderItem = async (req, res) => {
 
     await orderItem.update(updateData);
 
-    // If picker is assigned and an item was successfully picked, update their metrics.
-    if (['found', 'substituted'].includes(status)) {
-      const order = await Order.findByPk(id);
-      if (order && order.assignedPickerId) {
-        await updateEmployeeMetrics(order.assignedPickerId);
-      }
+    const order = await finalizeOrderIfResolved(id);
+
+    if (order && order.assignedPickerId) {
+      await updateEmployeeMetrics(order.assignedPickerId);
     }
 
     res.json({
@@ -908,11 +1000,10 @@ const recordPick = async (req, res) => {
       }
     }
 
-    if (isFullyPicked) {
-      const order = await Order.findByPk(orderId);
-      if (order && order.assignedPickerId) {
-        await updateEmployeeMetrics(order.assignedPickerId);
-      }
+    const order = await finalizeOrderIfResolved(orderId);
+
+    if (order && order.assignedPickerId) {
+      await updateEmployeeMetrics(order.assignedPickerId);
     }
 
     res.json({

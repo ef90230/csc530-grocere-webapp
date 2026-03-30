@@ -310,7 +310,10 @@ const SchedulingScreen = () => {
                         .filter((cartItem) => cartItem?.item?.id)
                         .map((cartItem) => ({
                             itemId: cartItem.item.id,
-                            quantity: Number(cartItem.quantity || 1)
+                            quantity: Number(cartItem.quantity || 1),
+                            notes: cartItem?.notes || null,
+                            substitutionItemId: cartItem?.substitutionItemId || null,
+                            substitutionQuantity: cartItem?.substitutionQuantity || null
                         }))
                 })
             });

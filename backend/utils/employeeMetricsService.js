@@ -1,9 +1,158 @@
-const { Employee, Order, OrderItem } = require('../models');
+const { Employee, Item, Order, OrderItem } = require('../models');
 const { Op } = require('sequelize');
+
+const COMMODITY_DISPLAY_NAMES = {
+  ambient: 'Ambient Regular',
+  chilled: 'Chilled Regular',
+  frozen: 'Frozen Regular',
+  hot: 'Hot Regular',
+  oversized: 'Oversized',
+  restricted: 'Team Lift'
+};
+
+const toNumber = (value) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : 0;
+};
 
 const clampPercent = (value) => {
   if (value == null || isNaN(value)) return 0;
   return Math.max(0, Math.min(100, Number(value)));
+};
+
+const getWalkDurationHours = (startedAt, endedAt) => {
+  const startTime = new Date(startedAt);
+  const endTime = new Date(endedAt);
+
+  if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
+    return 0;
+  }
+
+  const elapsedMs = Math.max(0, endTime.getTime() - startTime.getTime());
+  return elapsedMs / (1000 * 60 * 60);
+};
+
+const buildWalkHistory = (orders) => {
+  const walkMap = new Map();
+
+  orders.forEach((order) => {
+    const startedAt = order?.pickingStartTime;
+    const endedAt = order?.pickingEndTime;
+
+    if (!startedAt || !endedAt) {
+      return;
+    }
+
+    const commodityTotals = new Map();
+
+    (order.items || []).forEach((orderItem) => {
+      const commodity = orderItem?.item?.commodity;
+      if (!commodity) {
+        return;
+      }
+
+      const currentTotals = commodityTotals.get(commodity) || {
+        initialTotal: 0,
+        itemsPicked: 0
+      };
+
+      currentTotals.initialTotal += Math.max(0, toNumber(orderItem.quantity));
+      currentTotals.itemsPicked += Math.max(0, toNumber(orderItem.pickedQuantity));
+      commodityTotals.set(commodity, currentTotals);
+    });
+
+    commodityTotals.forEach((totals, commodity) => {
+      const walkKey = `${new Date(startedAt).toISOString()}::${commodity}`;
+      const existingWalk = walkMap.get(walkKey) || {
+        commodity,
+        commodityLabel: COMMODITY_DISPLAY_NAMES[commodity] || commodity,
+        startedAt,
+        endedAt,
+        initialTotal: 0,
+        itemsPicked: 0,
+        orderCount: 0
+      };
+
+      existingWalk.initialTotal += totals.initialTotal;
+      existingWalk.itemsPicked += totals.itemsPicked;
+      existingWalk.orderCount += 1;
+
+      if (new Date(endedAt) > new Date(existingWalk.endedAt)) {
+        existingWalk.endedAt = endedAt;
+      }
+
+      walkMap.set(walkKey, existingWalk);
+    });
+  });
+
+  return Array.from(walkMap.values())
+    .map((walk) => {
+      const durationHours = getWalkDurationHours(walk.startedAt, walk.endedAt);
+      const pickRate = durationHours > 0 ? walk.itemsPicked / durationHours : 0;
+
+      return {
+        commodity: walk.commodity,
+        commodityLabel: walk.commodityLabel,
+        startedAt: walk.startedAt,
+        endedAt: walk.endedAt,
+        initialTotal: walk.initialTotal,
+        itemsPicked: walk.itemsPicked,
+        orderCount: walk.orderCount,
+        pickRate: Number(pickRate.toFixed(2))
+      };
+    })
+    .sort((left, right) => new Date(right.startedAt) - new Date(left.startedAt));
+};
+
+const getCompletedPickWalkHistory = async (employeeIds) => {
+  const normalizedEmployeeIds = Array.isArray(employeeIds)
+    ? employeeIds.map((employeeId) => Number(employeeId)).filter(Number.isFinite)
+    : [Number(employeeIds)].filter(Number.isFinite);
+
+  if (normalizedEmployeeIds.length === 0) {
+    return [];
+  }
+
+  const where = {
+    assignedPickerId: normalizedEmployeeIds.length === 1
+      ? normalizedEmployeeIds[0]
+      : { [Op.in]: normalizedEmployeeIds },
+    pickingStartTime: { [Op.ne]: null },
+    pickingEndTime: { [Op.ne]: null }
+  };
+
+  const orders = await Order.findAll({
+    where,
+    attributes: ['id', 'assignedPickerId', 'pickingStartTime', 'pickingEndTime'],
+    include: [
+      {
+        model: OrderItem,
+        as: 'items',
+        required: true,
+        attributes: ['id', 'quantity', 'pickedQuantity'],
+        include: [
+          {
+            model: Item,
+            as: 'item',
+            required: true,
+            attributes: ['commodity']
+          }
+        ]
+      }
+    ],
+    order: [['pickingStartTime', 'DESC']]
+  });
+
+  return buildWalkHistory(orders);
+};
+
+const calculateAverageWalkPickRate = (walkHistory) => {
+  if (!Array.isArray(walkHistory) || walkHistory.length === 0) {
+    return 0;
+  }
+
+  const totalRate = walkHistory.reduce((sum, walk) => sum + toNumber(walk?.pickRate), 0);
+  return Number((totalRate / walkHistory.length).toFixed(2));
 };
 
 /**
@@ -62,8 +211,10 @@ const calculateEmployeeMetrics = async (employeeId) => {
       ? 0
       : (firstTimePickPercent + preSubstitutionPercent + (100 - percentNotFound)) / 3;
 
+  const walkHistory = await getCompletedPickWalkHistory(employeeId);
+
   return {
-    pickRate: Math.max(0, totalPicks),
+    pickRate: calculateAverageWalkPickRate(walkHistory),
     itemsPicked: Math.max(0, totalPicks),
     firstTimePickPercent: clampPercent(firstTimePickPercent),
     preSubstitutionPercent: clampPercent(preSubstitutionPercent),
@@ -81,6 +232,8 @@ const updateEmployeeMetrics = async (employeeId) => {
 };
 
 module.exports = {
+  calculateAverageWalkPickRate,
   calculateEmployeeMetrics,
+  getCompletedPickWalkHistory,
   updateEmployeeMetrics
 };

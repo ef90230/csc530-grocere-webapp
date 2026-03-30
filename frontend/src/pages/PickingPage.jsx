@@ -734,7 +734,12 @@ const PickingPage = () => {
                         {substituteMode ? (
                             <div className="picking-original-item-section">
                                 <span className="picking-field-label">Original Item</span>
-                                <p className="picking-original-item-name">{substituteMode.originalEntry.item.name}</p>
+                                <div className="picking-original-item-row">
+                                    <p className="picking-original-item-name">{substituteMode.originalEntry.item.name}</p>
+                                    <span className="picking-original-item-qty">
+                                        {Number(substituteMode.originalEntry.quantityToPick || 0)} QTY
+                                    </span>
+                                </div>
                                 <button
                                     type="button"
                                     className="picking-original-located-button"
@@ -743,12 +748,12 @@ const PickingPage = () => {
                                     Original Item Located
                                 </button>
                             </div>
-                        ) : null}
-
-                        <div className="picking-special-instructions">
-                            <span className="picking-field-label">Special Instructions</span>
-                            <p>{currentItem.specialInstructions || 'No special instructions.'}</p>
-                        </div>
+                        ) : (
+                            <div className="picking-special-instructions">
+                                <span className="picking-field-label">Special Instructions</span>
+                                <p>{currentItem.specialInstructions || 'No special instructions.'}</p>
+                            </div>
+                        )}
 
                         <div className="picking-info-grid">
                             <div className="picking-info-row">

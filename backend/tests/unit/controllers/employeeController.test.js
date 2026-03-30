@@ -10,7 +10,16 @@ jest.mock('../../../models', () => ({
   }
 }));
 
+jest.mock('../../../utils/employeeMetricsService', () => ({
+  calculateAverageWalkPickRate: jest.fn(),
+  getCompletedPickWalkHistory: jest.fn()
+}));
+
 const { Employee, Order } = require('../../../models');
+const {
+  calculateAverageWalkPickRate,
+  getCompletedPickWalkHistory
+} = require('../../../utils/employeeMetricsService');
 const { getEmployeeMetrics, getMyAndStoreStats } = require('../../../controllers/employeeController');
 
 const createMockRes = () => {
@@ -148,6 +157,7 @@ describe('employeeController.getMyAndStoreStats', () => {
 
     Employee.findAll.mockResolvedValue([
       {
+        id: 3,
         pickRate: '100.00',
         itemsPicked: 250,
         firstTimePickPercent: '92.00',
@@ -158,6 +168,7 @@ describe('employeeController.getMyAndStoreStats', () => {
         weightedEfficiency: '89.00'
       },
       {
+        id: 4,
         pickRate: '110.00',
         itemsPicked: 350,
         firstTimePickPercent: '96.00',
@@ -169,7 +180,42 @@ describe('employeeController.getMyAndStoreStats', () => {
       }
     ]);
 
+    const walkHistory = [
+      {
+        commodity: 'ambient',
+        commodityLabel: 'Ambient Regular',
+        startedAt: '2026-03-30T10:00:00.000Z',
+        endedAt: '2026-03-30T11:00:00.000Z',
+        initialTotal: 12,
+        itemsPicked: 10,
+        orderCount: 2,
+        pickRate: 10
+      }
+    ];
+
+    getCompletedPickWalkHistory
+      .mockResolvedValueOnce(walkHistory)
+      .mockResolvedValueOnce([
+        ...walkHistory,
+        {
+          commodity: 'frozen',
+          commodityLabel: 'Frozen Regular',
+          startedAt: '2026-03-29T09:00:00.000Z',
+          endedAt: '2026-03-29T10:00:00.000Z',
+          initialTotal: 6,
+          itemsPicked: 6,
+          orderCount: 1,
+          pickRate: 6
+        }
+      ]);
+    calculateAverageWalkPickRate
+      .mockReturnValueOnce(10)
+      .mockReturnValueOnce(8);
+
     await getMyAndStoreStats(req, res);
+
+    expect(getCompletedPickWalkHistory).toHaveBeenNthCalledWith(1, 3);
+    expect(getCompletedPickWalkHistory).toHaveBeenNthCalledWith(2, [3, 4]);
 
     expect(res.json).toHaveBeenCalledWith({
       success: true,
@@ -179,7 +225,7 @@ describe('employeeController.getMyAndStoreStats', () => {
         lastName: 'Doe',
         storeId: 77,
         stats: {
-          pickRate: 110.5,
+          pickRate: 10,
           itemsPicked: 300,
           firstTimePickPercent: 94,
           preSubstitutionPercent: 95,
@@ -187,12 +233,13 @@ describe('employeeController.getMyAndStoreStats', () => {
           percentNotFound: 6,
           onTimePercent: 100,
           weightedEfficiency: 91
-        }
+        },
+        walkHistory
       },
       store: {
         employeeCount: 2,
         stats: {
-          pickRate: 105,
+          pickRate: 8,
           itemsPicked: 600,
           firstTimePickPercent: 94,
           preSubstitutionPercent: 95,

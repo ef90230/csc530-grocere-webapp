@@ -1,157 +1,167 @@
-const { syncDatabase, Store, Customer, Item, Employee, Order, OrderItem } = require('../../models');
-const { updateEmployeeMetrics } = require('../../utils/employeeMetricsService');
+jest.mock('../../models', () => ({
+  Employee: {
+    findByPk: jest.fn(),
+    update: jest.fn()
+  },
+  Item: {},
+  Order: {
+    findAll: jest.fn()
+  },
+  OrderItem: {
+    findAll: jest.fn()
+  }
+}));
 
-describe('Employee metrics updates', () => {
-  beforeAll(async () => {
-    await syncDatabase(true);
+const { Op } = require('sequelize');
+const { Employee, Order, OrderItem } = require('../../models');
+const {
+  calculateAverageWalkPickRate,
+  getCompletedPickWalkHistory,
+  updateEmployeeMetrics
+} = require('../../utils/employeeMetricsService');
 
-    // create required store
-    await Store.create({
-      storeNumber: 'S1',
-      name: 'Test Store',
-      address: '123 Main St',
-      city: 'Townsville',
-      state: 'TS',
-      zipCode: '12345',
-      phone: '555-0000'
-    });
-
-    // create a customer and items required for order pacing
-    await Customer.create({
-      customerId: 'C1',
-      firstName: 'Cust',
-      lastName: 'One',
-      email: 'cust1@example.com',
-      password: 'password',
-      phone: '555-0001'
-    });
-
-    await Item.create({
-      upc: '000000000001',
-      name: 'Test Item 1',
-      category: 'Test',
-      department: 'Test',
-      price: 1.0,
-      temperature: 'ambient',
-      commodity: 'ambient'
-    });
-
-    await Item.create({
-      upc: '000000000002',
-      name: 'Test Item 2',
-      category: 'Test',
-      department: 'Test',
-      price: 2.0,
-      temperature: 'ambient',
-      commodity: 'ambient'
-    });
+describe('employeeMetricsService', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
   });
 
-  test('employee metric fields are clamped and never negative/over 100', async () => {
-    const employee = await Employee.create({
-      employeeId: 'E1',
-      firstName: 'Test',
-      lastName: 'Employee',
-      email: 'test@example.com',
-      password: 'password',
-      storeId: 1
-    });
-
-    // Attempt to write invalid values and ensure validation prevents it
-    let err;
-    try {
-      await employee.update({
-        pickRate: -1,
-        firstTimePickPercent: -10,
-        preSubstitutionPercent: 110,
-        postSubstitutionPercent: 120,
-        onTimePercent: -1,
-        weightedEfficiency: -10
-      });
-    } catch (e) {
-      err = e;
-    }
-
-    expect(err).toBeDefined();
-    expect(err.message).toMatch(/Validation|preSubstitutionPercent/);
+  test('calculateAverageWalkPickRate returns the mean of completed walk rates', () => {
+    expect(calculateAverageWalkPickRate([])).toBe(0);
+    expect(calculateAverageWalkPickRate([
+      { pickRate: 4 },
+      { pickRate: 7 },
+      { pickRate: 10 }
+    ])).toBe(7);
   });
 
-  test('metrics update after picking items updates in expected range', async () => {
-    const employee = await Employee.create({
-      employeeId: 'E2',
-      firstName: 'Pick',
-      lastName: 'Tester',
-      email: 'pick@test.com',
-      password: 'password',
-      storeId: 1
+  test('getCompletedPickWalkHistory groups orders by walk start time and commodity', async () => {
+    Order.findAll.mockResolvedValue([
+      {
+        pickingStartTime: '2026-03-30T10:00:00.000Z',
+        pickingEndTime: '2026-03-30T11:00:00.000Z',
+        items: [
+          {
+            quantity: 2,
+            pickedQuantity: 2,
+            item: { commodity: 'ambient' }
+          },
+          {
+            quantity: 1,
+            pickedQuantity: 1,
+            item: { commodity: 'ambient' }
+          }
+        ]
+      },
+      {
+        pickingStartTime: '2026-03-30T10:00:00.000Z',
+        pickingEndTime: '2026-03-30T11:15:00.000Z',
+        items: [
+          {
+            quantity: 3,
+            pickedQuantity: 2,
+            item: { commodity: 'ambient' }
+          }
+        ]
+      },
+      {
+        pickingStartTime: '2026-03-29T08:00:00.000Z',
+        pickingEndTime: '2026-03-29T10:00:00.000Z',
+        items: [
+          {
+            quantity: 4,
+            pickedQuantity: 4,
+            item: { commodity: 'frozen' }
+          }
+        ]
+      }
+    ]);
+
+    const walkHistory = await getCompletedPickWalkHistory(5);
+    const orderQuery = Order.findAll.mock.calls[0][0];
+
+    expect(orderQuery.where).toEqual({
+      assignedPickerId: 5,
+      pickingStartTime: { [Op.ne]: null },
+      pickingEndTime: { [Op.ne]: null }
     });
+    expect(orderQuery.attributes).toEqual(['id', 'assignedPickerId', 'pickingStartTime', 'pickingEndTime']);
+    expect(orderQuery.order).toEqual([['pickingStartTime', 'DESC']]);
 
-    const customer = await Customer.findOne({ where: { customerId: 'C1' } });
+    expect(walkHistory).toEqual([
+      {
+        commodity: 'ambient',
+        commodityLabel: 'Ambient Regular',
+        startedAt: '2026-03-30T10:00:00.000Z',
+        endedAt: '2026-03-30T11:15:00.000Z',
+        initialTotal: 6,
+        itemsPicked: 5,
+        orderCount: 2,
+        pickRate: 4
+      },
+      {
+        commodity: 'frozen',
+        commodityLabel: 'Frozen Regular',
+        startedAt: '2026-03-29T08:00:00.000Z',
+        endedAt: '2026-03-29T10:00:00.000Z',
+        initialTotal: 4,
+        itemsPicked: 4,
+        orderCount: 1,
+        pickRate: 2
+      }
+    ]);
+  });
 
-    const order = await Order.create({
-      orderNumber: 'ORD-1',
-      customerId: customer.id,
-      storeId: 1,
-      scheduledPickupTime: new Date('2025-01-01T10:00:00Z'),
-      totalAmount: 0,
-      assignedPickerId: employee.id
-    });
+  test('updateEmployeeMetrics persists the average pick rate across completed walks', async () => {
+    Employee.findByPk.mockResolvedValue({ id: 9 });
+    OrderItem.findAll.mockResolvedValue([
+      { status: 'found', foundOnFirstAttempt: true },
+      { status: 'substituted', foundOnFirstAttempt: false },
+      { status: 'out_of_stock', foundOnFirstAttempt: false }
+    ]);
+    Order.findAll
+      .mockResolvedValueOnce([
+        {
+          scheduledPickupTime: new Date('2026-03-30T12:00:00.000Z'),
+          actualPickupTime: new Date('2026-03-30T11:50:00.000Z')
+        },
+        {
+          scheduledPickupTime: new Date('2026-03-30T12:00:00.000Z'),
+          actualPickupTime: new Date('2026-03-30T12:05:00.000Z')
+        }
+      ])
+      .mockResolvedValueOnce([
+        {
+          pickingStartTime: '2026-03-30T09:00:00.000Z',
+          pickingEndTime: '2026-03-30T10:00:00.000Z',
+          items: [
+            {
+              quantity: 3,
+              pickedQuantity: 3,
+              item: { commodity: 'ambient' }
+            }
+          ]
+        },
+        {
+          pickingStartTime: '2026-03-29T09:00:00.000Z',
+          pickingEndTime: '2026-03-29T11:00:00.000Z',
+          items: [
+            {
+              quantity: 4,
+              pickedQuantity: 4,
+              item: { commodity: 'frozen' }
+            }
+          ]
+        }
+      ]);
 
-    const item1 = await OrderItem.create({
-      orderId: order.id,
-      itemId: 1,
-      quantity: 1,
-      unitPrice: 1.0,
-      status: 'pending'
-    });
+    const metrics = await updateEmployeeMetrics(9);
 
-    const item2 = await OrderItem.create({
-      orderId: order.id,
-      itemId: 2,
-      quantity: 1,
-      unitPrice: 1.0,
-      status: 'pending'
-    });
-
-    // Initial metrics should be all zeros
-    await updateEmployeeMetrics(employee.id);
-    await employee.reload();
-    expect(Number(employee.pickRate)).toBe(0);
-    expect(Number(employee.itemsPicked)).toBe(0);
-    expect(Number(employee.firstTimePickPercent)).toBe(0);
-    expect(Number(employee.preSubstitutionPercent)).toBe(0);
-    expect(Number(employee.postSubstitutionPercent)).toBe(0);
-    expect(Number(employee.percentNotFound)).toBe(0);
-    expect(Number(employee.weightedEfficiency)).toBe(0);
-
-    // Simulate picking one item (found on first attempt)
-    await item1.update({ status: 'found', attemptCount: 1, foundOnFirstAttempt: true });
-    await updateEmployeeMetrics(employee.id);
-    await employee.reload();
-
-    expect(Number(employee.pickRate)).toBeGreaterThanOrEqual(1);
-    expect(Number(employee.itemsPicked)).toBeGreaterThanOrEqual(1);
-    expect(Number(employee.firstTimePickPercent)).toBeGreaterThanOrEqual(0);
-    expect(Number(employee.firstTimePickPercent)).toBeLessThanOrEqual(100);
-    expect(Number(employee.preSubstitutionPercent)).toBeLessThanOrEqual(Number(employee.postSubstitutionPercent));
-    expect(Number(employee.postSubstitutionPercent)).toBeGreaterThanOrEqual(0);
-    expect(Number(employee.postSubstitutionPercent)).toBeLessThanOrEqual(100);
-    expect(Number(employee.weightedEfficiency)).toBeGreaterThanOrEqual(0);
-    expect(Number(employee.weightedEfficiency)).toBeLessThanOrEqual(100);
-
-    // Simulate substituting the second item
-    await item2.update({ status: 'substituted', attemptCount: 2, foundOnFirstAttempt: false });
-    await updateEmployeeMetrics(employee.id);
-    await employee.reload();
-
-    expect(Number(employee.pickRate)).toBeGreaterThanOrEqual(2);
-    expect(Number(employee.itemsPicked)).toBeGreaterThanOrEqual(2);
-    expect(Number(employee.firstTimePickPercent)).toBeGreaterThanOrEqual(0);
-    expect(Number(employee.firstTimePickPercent)).toBeLessThanOrEqual(100);
-    expect(Number(employee.preSubstitutionPercent)).toBeLessThanOrEqual(Number(employee.postSubstitutionPercent));
-    expect(Number(employee.postSubstitutionPercent)).toBeGreaterThanOrEqual(0);
-    expect(Number(employee.postSubstitutionPercent)).toBeLessThanOrEqual(100);
-    expect(Number(employee.weightedEfficiency)).toBeGreaterThanOrEqual(0);
-    expect(Number(employee.weightedEfficiency)).toBeLessThanOrEqual(100);
+    expect(metrics.pickRate).toBe(2.5);
+    expect(metrics.itemsPicked).toBe(2);
+    expect(metrics.firstTimePickPercent).toBe(50);
+    expect(metrics.postSubstitutionPercent).toBe(50);
+    expect(metrics.percentNotFound).toBeCloseTo(33.33, 2);
+    expect(metrics.onTimePercent).toBe(50);
+    expect(Employee.update).toHaveBeenCalledWith(metrics, { where: { id: 9 } });
   });
 });

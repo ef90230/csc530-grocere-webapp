@@ -167,6 +167,109 @@
   color: #a40000;
 }
 
+.walk-history-section {
+  margin-top: 0.85rem;
+  padding: 0.85rem;
+  border: 1px solid #222;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #e4e4e4 0%, #d0d0d0 100%);
+}
+
+.walk-history-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.walk-history-header-row h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+}
+
+.walk-history-header-row span {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #4b4b4b;
+}
+
+.walk-history-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.walk-history-card {
+  border: 1px solid #222;
+  border-radius: 10px;
+  background-color: #f7f7f7;
+  padding: 0.75rem;
+}
+
+.walk-history-card-top-row,
+.walk-history-metrics-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.walk-history-card-top-row {
+  margin-bottom: 0.65rem;
+}
+
+.walk-history-commodity,
+.walk-history-date,
+.walk-history-metric-label,
+.walk-history-empty {
+  margin: 0;
+}
+
+.walk-history-commodity {
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.walk-history-date {
+  margin-top: 0.18rem;
+  font-size: 0.82rem;
+  color: #5e5e5e;
+}
+
+.walk-history-rate-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+}
+
+.walk-history-rate-block strong {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.walk-history-rate-block span,
+.walk-history-metric-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #5e5e5e;
+}
+
+.walk-history-metrics-row strong {
+  display: block;
+  margin-top: 0.08rem;
+  font-size: 0.95rem;
+}
+
+.walk-history-empty {
+  font-size: 0.9rem;
+  color: #4b4b4b;
+}
+
 @media (max-width: 430px) {
   .statistics-header-row h1 {
     font-size: 1.75rem;
@@ -179,5 +282,15 @@
   .metric-card--small .metric-card-value,
   .metric-card--single .metric-card-value {
     font-size: 1.5rem;
+  }
+
+  .walk-history-card-top-row,
+  .walk-history-metrics-row {
+    flex-direction: column;
+  }
+
+  .walk-history-rate-block {
+    align-items: flex-start;
+    text-align: left;
   }
 }

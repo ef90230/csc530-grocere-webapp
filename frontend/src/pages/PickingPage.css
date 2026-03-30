@@ -204,6 +204,33 @@
   font-size: 0.95rem;
 }
 
+.picking-original-item-row {
+  margin: 0.22rem 0 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.picking-original-item-row .picking-original-item-name {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #333;
+}
+
+.picking-original-item-qty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0.12rem 0.6rem;
+  border-radius: 6px;
+  background: #c59d00;
+  color: #131313;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
 .picking-original-located-button {
   width: 100%;
   border: none;

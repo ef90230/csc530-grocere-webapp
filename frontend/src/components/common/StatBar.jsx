@@ -183,7 +183,7 @@ const StatBar = ({
         aria-label="Employee daily stats"
       >
         <span className="statbar-name">{resolvedUserName}</span>
-        <span className="statbar-rate">Today's Pick Rate: {formatPickRate(resolvedPickRate)}</span>
+        <span className="statbar-rate">Average Pick Rate: {formatPickRate(resolvedPickRate)}</span>
       </section>
       <div className="statbar-spacer" />
     </>
