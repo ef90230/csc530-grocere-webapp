@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import TopBar from '../components/common/TopBar';
 import './PickingPage.css';
@@ -54,6 +54,15 @@ const PickingPage = () => {
     const [pickDialogError, setPickDialogError] = useState('');
     const [isSubmittingPick, setIsSubmittingPick] = useState(false);
     const [isPickUpcMismatch, setIsPickUpcMismatch] = useState(false);
+    const [isSubmittingNotFound, setIsSubmittingNotFound] = useState(false);
+    const [isCameraOpen, setIsCameraOpen] = useState(false);
+    const [cameraMessage, setCameraMessage] = useState('');
+
+    const videoRef = useRef(null);
+    const streamRef = useRef(null);
+    const detectorRef = useRef(null);
+    const scanFrameRef = useRef(null);
+    const isHandlingScanRef = useRef(false);
 
     const selectedCommodity = location?.state?.commodity;
     const selectedCommodityLabel = location?.state?.commodityLabel;
@@ -159,10 +168,39 @@ const PickingPage = () => {
 
     const currentItem = queue[0] || null;
     const currentQuantity = Number(currentItem?.quantityToPick || 0);
+    const expectedUpc = substituteMode
+        ? (substituteMode.originalEntry.substitute?.upc || '')
+        : (currentItem?.item?.upc || '');
     const commodityTitle = useMemo(() => {
         const fallback = deriveCommodityTitle(selectedCommodity || 'Commodity');
         return deriveCommodityTitle(selectedCommodityLabel || fallback);
     }, [selectedCommodity, selectedCommodityLabel]);
+
+    const normalizeUpc = (value = '') => String(value || '').replace(/\D/g, '');
+
+    const stopCameraSession = () => {
+        if (scanFrameRef.current) {
+            window.cancelAnimationFrame(scanFrameRef.current);
+            scanFrameRef.current = null;
+        }
+
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach((track) => track.stop());
+            streamRef.current = null;
+        }
+
+        detectorRef.current = null;
+        isHandlingScanRef.current = false;
+
+        if (videoRef.current) {
+            videoRef.current.srcObject = null;
+        }
+    };
+
+    const closeCameraModal = () => {
+        stopCameraSession();
+        setIsCameraOpen(false);
+    };
 
     const skipCurrentItem = () => {
         if (substituteMode) {
@@ -190,9 +228,326 @@ const PickingPage = () => {
         setSubstituteMode(null);
     };
 
-    const handleNotFound = () => {
+    const submitPick = async ({ upcValue, quantityValue, showDialogErrors = true }) => {
+        const trimmedUpc = String(upcValue || '').trim();
+        const parsedQty = Number(String(quantityValue || '').trim());
+
+        if (!trimmedUpc) {
+            if (showDialogErrors) {
+                setPickDialogError('UPC is required.');
+            } else {
+                setErrorMessage('UPC is required.');
+            }
+            return false;
+        }
+        if (String(quantityValue || '').trim() === '') {
+            if (showDialogErrors) {
+                setPickDialogError('Quantity is required.');
+            } else {
+                setErrorMessage('Quantity is required.');
+            }
+            return false;
+        }
+        if (!Number.isInteger(parsedQty) || parsedQty < 1) {
+            if (showDialogErrors) {
+                setPickDialogError('Quantity must be a whole number of at least 1.');
+            } else {
+                setErrorMessage('Quantity must be a whole number of at least 1.');
+            }
+            return false;
+        }
+        if (parsedQty > currentQuantity) {
+            if (showDialogErrors) {
+                setPickDialogError(`Quantity cannot exceed ${currentQuantity}.`);
+            } else {
+                setErrorMessage(`Quantity cannot exceed ${currentQuantity}.`);
+            }
+            return false;
+        }
+
+        if (showDialogErrors) {
+            setPickDialogError('');
+        }
+
+        if (normalizeUpc(trimmedUpc) !== normalizeUpc(expectedUpc)) {
+            if (showDialogErrors) {
+                setIsPickDialogOpen(false);
+            }
+            setIsPickUpcMismatch(true);
+            return false;
+        }
+
+        const token = window.localStorage.getItem('authToken');
+        setIsSubmittingPick(true);
+
+        try {
+            let response;
+            if (substituteMode) {
+                // Record substitute pick via updateOrderItem with status 'substituted'
+                response = await fetch(
+                    `${API_BASE}/api/orders/${currentItem.orderId}/items/${currentItem.orderItemId}`,
+                    {
+                        method: 'PUT',
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            status: 'substituted',
+                            pickedQuantity: parsedQty
+                        })
+                    }
+                );
+            } else {
+                response = await fetch(`${API_BASE}/api/orders/picking/walk/record-pick`, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        orderId: currentItem.orderId,
+                        orderItemId: currentItem.orderItemId,
+                        pickedQuantity: parsedQty,
+                        locationId: currentItem.location?.locationId || null
+                    })
+                });
+            }
+
+            if (!response.ok) {
+                const payload = await response.json().catch(() => ({}));
+                const message = payload.message || 'Server error recording pick.';
+                if (showDialogErrors) {
+                    setPickDialogError(message);
+                } else {
+                    setErrorMessage(message);
+                }
+                return false;
+            }
+
+            setCompletedUnits((prev) => prev + parsedQty);
+            setIsPickDialogOpen(false);
+            setPickUpcValue('');
+            setPickQtyValue('');
+
+            const newQty = currentQuantity - parsedQty;
+            if (substituteMode || newQty <= 0) {
+                // Substitute pick (any qty = done) or original fully picked: advance
+                setSubstituteMode(null);
+                if (queue.length === 1) {
+                    await endWalk();
+                    return true;
+                }
+                setQueue((prev) => prev.slice(1));
+                return true;
+            }
+
+            setQueue((prev) => {
+                if (!prev.length) {
+                    return prev;
+                }
+                const [head, ...rest] = prev;
+                const updatedOnHandByAisle = { ...head.onHandByAisle };
+                const primaryAisle = head.location?.aisleNumber;
+                if (primaryAisle) {
+                    const aisleKey = `Aisle ${primaryAisle}`;
+                    updatedOnHandByAisle[aisleKey] = Math.max(0, (updatedOnHandByAisle[aisleKey] || 0) - parsedQty);
+                }
+                return [
+                    {
+                        ...head,
+                        quantityToPick: newQty,
+                        pickedQuantity: Number(head.pickedQuantity || 0) + parsedQty,
+                        onHandTotal: Math.max(0, Number(head.onHandTotal || 0) - parsedQty),
+                        onHandByAisle: updatedOnHandByAisle
+                    },
+                    ...rest
+                ];
+            });
+
+            return true;
+        } catch (err) {
+            console.error('Record pick failed', err);
+            if (showDialogErrors) {
+                setPickDialogError('Network error. Please try again.');
+            } else {
+                setErrorMessage('Network error. Please try again.');
+            }
+            return false;
+        } finally {
+            setIsSubmittingPick(false);
+        }
+    };
+
+    const handleOpenCamera = async () => {
+        setCameraMessage('');
+
+        const BarcodeDetectorApi = window.BarcodeDetector;
+        const mediaDevices = navigator?.mediaDevices;
+
+        if (!BarcodeDetectorApi || !mediaDevices?.getUserMedia) {
+            setCameraMessage('Camera unavailable');
+            return;
+        }
+
+        try {
+            if (typeof BarcodeDetectorApi.getSupportedFormats === 'function') {
+                const supportedFormats = await BarcodeDetectorApi.getSupportedFormats();
+                const hasUpcSupport = supportedFormats.includes('upc_a') || supportedFormats.includes('upc_e');
+                if (!hasUpcSupport) {
+                    setCameraMessage('Camera unavailable');
+                    return;
+                }
+            }
+
+            const stream = await mediaDevices.getUserMedia({
+                video: {
+                    facingMode: { ideal: 'environment' }
+                },
+                audio: false
+            });
+
+            streamRef.current = stream;
+            detectorRef.current = new BarcodeDetectorApi({ formats: ['upc_a', 'upc_e'] });
+            setIsCameraOpen(true);
+        } catch (error) {
+            console.error('Unable to open camera', error);
+            stopCameraSession();
+            setIsCameraOpen(false);
+            setCameraMessage('Camera unavailable');
+        }
+    };
+
+    const handleCameraMatch = async () => {
+        closeCameraModal();
+
+        if (currentQuantity === 1) {
+            await submitPick({ upcValue: expectedUpc, quantityValue: '1', showDialogErrors: false });
+            return;
+        }
+
+        setPickDialogError('');
+        setPickUpcValue(expectedUpc);
+        setPickQtyValue('');
+        setIsPickDialogOpen(true);
+    };
+
+    useEffect(() => {
+        if (!isCameraOpen || !videoRef.current || !streamRef.current || !detectorRef.current) {
+            return undefined;
+        }
+
+        const video = videoRef.current;
+        video.srcObject = streamRef.current;
+
+        const startScanning = async () => {
+            try {
+                await video.play();
+            } catch (error) {
+                console.error('Unable to start camera preview', error);
+                closeCameraModal();
+                setCameraMessage('Camera unavailable');
+                return;
+            }
+
+            const scan = async () => {
+                if (!detectorRef.current || !videoRef.current || isHandlingScanRef.current) {
+                    scanFrameRef.current = window.requestAnimationFrame(scan);
+                    return;
+                }
+
+                try {
+                    const barcodes = await detectorRef.current.detect(videoRef.current);
+                    if (Array.isArray(barcodes) && barcodes.length > 0) {
+                        const scannedRaw = String(barcodes[0]?.rawValue || '').trim();
+                        const normalizedScanned = normalizeUpc(scannedRaw);
+                        const normalizedExpected = normalizeUpc(expectedUpc);
+
+                        if (normalizedScanned && normalizedExpected) {
+                            isHandlingScanRef.current = true;
+
+                            if (normalizedScanned === normalizedExpected) {
+                                await handleCameraMatch();
+                            } else {
+                                closeCameraModal();
+                                setIsPickUpcMismatch(true);
+                            }
+
+                            isHandlingScanRef.current = false;
+                            return;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Barcode detection failed', error);
+                }
+
+                scanFrameRef.current = window.requestAnimationFrame(scan);
+            };
+
+            scanFrameRef.current = window.requestAnimationFrame(scan);
+        };
+
+        startScanning();
+
+        return () => {
+            stopCameraSession();
+        };
+    // Effect intentionally depends on scan context, while helpers use refs/state setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isCameraOpen, expectedUpc, currentQuantity]);
+
+    useEffect(() => () => {
+        stopCameraSession();
+    }, []);
+
+    const markItemOutOfStock = async (entry) => {
+        const token = window.localStorage.getItem('authToken');
+
+        if (!token || !entry?.orderId || !entry?.orderItemId) {
+            return false;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE}/api/orders/${entry.orderId}/items/${entry.orderItemId}`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    status: 'out_of_stock',
+                    pickedQuantity: Number(entry?.pickedQuantity || 0)
+                })
+            });
+
+            if (!response.ok) {
+                const payload = await response.json().catch(() => ({}));
+                throw new Error(payload?.message || 'Unable to mark item as not found.');
+            }
+
+            return true;
+        } catch (error) {
+            console.error('Unable to mark item out of stock', error);
+            setErrorMessage(error.message || 'Unable to mark item as not found.');
+            return false;
+        }
+    };
+
+    const handleNotFound = async () => {
+        if (isSubmittingNotFound) {
+            return;
+        }
+
+        setIsSubmittingNotFound(true);
+
         if (substituteMode) {
             // Sub item not found: remove the original item entirely and exit substitute mode
+            const wasMarked = await markItemOutOfStock(substituteMode.originalEntry);
+            if (!wasMarked) {
+                setIsSubmittingNotFound(false);
+                return;
+            }
+
             setSubstituteMode(null);
             setQueue((previousQueue) => {
                 const remaining = previousQueue.slice(1);
@@ -201,17 +556,26 @@ const PickingPage = () => {
                 }
                 return remaining;
             });
+            setIsSubmittingNotFound(false);
             return;
         }
 
         const item = queue[0];
         if (!item) {
+            setIsSubmittingNotFound(false);
             return;
         }
 
-        if (item.substitute) {
-            // Has a substitute: enter substitute mode
+        if (item.substitute && Number(item.pickedQuantity || 0) === 0) {
+            // Only enter substitute mode if nothing has been picked for this item yet
             setSubstituteMode({ originalEntry: item });
+            setIsSubmittingNotFound(false);
+            return;
+        }
+
+        const wasMarked = await markItemOutOfStock(item);
+        if (!wasMarked) {
+            setIsSubmittingNotFound(false);
             return;
         }
 
@@ -223,107 +587,15 @@ const PickingPage = () => {
             }
             return remaining;
         });
+        setIsSubmittingNotFound(false);
     };
 
     const handlePickSubmit = async () => {
-        const trimmedUpc = pickUpcValue.trim();
-        const parsedQty = Number(pickQtyValue.trim());
-        const expectedUpc = substituteMode
-            ? (substituteMode.originalEntry.substitute?.upc || '')
-            : (currentItem?.item?.upc || '');
-
-        if (!trimmedUpc) {
-            setPickDialogError('UPC is required.');
-            return;
-        }
-        if (!pickQtyValue.trim()) {
-            setPickDialogError('Quantity is required.');
-            return;
-        }
-        if (!Number.isInteger(parsedQty) || parsedQty < 1) {
-            setPickDialogError('Quantity must be a whole number of at least 1.');
-            return;
-        }
-        if (parsedQty > currentQuantity) {
-            setPickDialogError(`Quantity cannot exceed ${currentQuantity}.`);
-            return;
-        }
-
-        setPickDialogError('');
-
-        if (trimmedUpc !== expectedUpc) {
-            setIsPickDialogOpen(false);
-            setIsPickUpcMismatch(true);
-            return;
-        }
-
-        const token = window.localStorage.getItem('authToken');
-        setIsSubmittingPick(true);
-
-        try {
-            const locationId = substituteMode ? null : (currentItem.location?.locationId || null);
-            const response = await fetch(`${API_BASE}/api/orders/picking/walk/record-pick`, {
-                method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    orderId: currentItem.orderId,
-                    orderItemId: currentItem.orderItemId,
-                    pickedQuantity: parsedQty,
-                    locationId
-                })
-            });
-
-            if (!response.ok) {
-                const payload = await response.json().catch(() => ({}));
-                setPickDialogError(payload.message || 'Server error recording pick.');
-                return;
-            }
-
-            setCompletedUnits((prev) => prev + parsedQty);
-            setIsPickDialogOpen(false);
-            setPickUpcValue('');
-            setPickQtyValue('');
-
-            const newQty = currentQuantity - parsedQty;
-            if (newQty <= 0) {
-                setSubstituteMode(null);
-                if (queue.length === 1) {
-                    await endWalk();
-                    return;
-                }
-                setQueue((prev) => prev.slice(1));
-            } else {
-                setQueue((prev) => {
-                    if (!prev.length) {
-                        return prev;
-                    }
-                    const [head, ...rest] = prev;
-                    const updatedOnHandByAisle = { ...head.onHandByAisle };
-                    const primaryAisle = head.location?.aisleNumber;
-                    if (primaryAisle) {
-                        const aisleKey = `Aisle ${primaryAisle}`;
-                        updatedOnHandByAisle[aisleKey] = Math.max(0, (updatedOnHandByAisle[aisleKey] || 0) - parsedQty);
-                    }
-                    return [
-                        {
-                            ...head,
-                            quantityToPick: newQty,
-                            onHandTotal: Math.max(0, Number(head.onHandTotal || 0) - parsedQty),
-                            onHandByAisle: updatedOnHandByAisle
-                        },
-                        ...rest
-                    ];
-                });
-            }
-        } catch (err) {
-            console.error('Record pick failed', err);
-            setPickDialogError('Network error. Please try again.');
-        } finally {
-            setIsSubmittingPick(false);
-        }
+        await submitPick({
+            upcValue: pickUpcValue,
+            quantityValue: pickQtyValue,
+            showDialogErrors: true
+        });
     };
 
     const endWalk = async () => {
@@ -334,9 +606,10 @@ const PickingPage = () => {
         }
 
         setIsEndingWalk(true);
+        let walkEndedCleanly = false;
 
         try {
-            await fetch(`${API_BASE}/api/orders/picking/walk/end`, {
+            const response = await fetch(`${API_BASE}/api/orders/picking/walk/end`, {
                 method: 'POST',
                 headers: {
                     Authorization: `Bearer ${token}`,
@@ -347,10 +620,27 @@ const PickingPage = () => {
                     commodity: selectedCommodity
                 })
             });
+
+            if (!response.ok) {
+                const payload = await response.json().catch(() => ({}));
+                throw new Error(payload?.message || 'Unable to end walk cleanly.');
+            }
+
+            walkEndedCleanly = true;
         } catch (error) {
             console.error('Unable to end walk cleanly', error);
         } finally {
-            navigate('/commodityselect');
+            if (walkEndedCleanly) {
+                navigate('/commodityselect', {
+                    state: {
+                        completedWalk: true,
+                        completedCommodity: selectedCommodity,
+                        completedAt: Date.now()
+                    }
+                });
+            } else {
+                navigate('/commodityselect');
+            }
         }
     };
 
@@ -453,12 +743,12 @@ const PickingPage = () => {
                                     Original Item Located
                                 </button>
                             </div>
-                        ) : (
-                            <div className="picking-special-instructions">
-                                <span className="picking-field-label">Special Instructions</span>
-                                <p>{currentItem.specialInstructions || 'No special instructions.'}</p>
-                            </div>
-                        )}
+                        ) : null}
+
+                        <div className="picking-special-instructions">
+                            <span className="picking-field-label">Special Instructions</span>
+                            <p>{currentItem.specialInstructions || 'No special instructions.'}</p>
+                        </div>
 
                         <div className="picking-info-grid">
                             <div className="picking-info-row">
@@ -485,14 +775,29 @@ const PickingPage = () => {
                             ) : null}
                         </div>
 
+                        {cameraMessage ? (
+                            <p className="picking-camera-message">{cameraMessage}</p>
+                        ) : null}
+
                         <div className="picking-actions-row">
-                            <button type="button" className="picking-enter-quantity-button" onClick={() => setIsPickDialogOpen(true)}>
-                                Enter Quantity
-                            </button>
+                            <div className="picking-primary-actions">
+                                <button type="button" className="picking-enter-quantity-button" onClick={() => setIsPickDialogOpen(true)}>
+                                    Enter Quantity
+                                </button>
+                                <button type="button" className="picking-open-camera-button" onClick={handleOpenCamera}>
+                                    Open Camera
+                                </button>
+                            </div>
                             <button type="button" className="picking-skip-button" onClick={skipCurrentItem} aria-label="Skip item">
                                 &gt;
                             </button>
-                            <button type="button" className="picking-not-found-button" onClick={handleNotFound} aria-label="Item not found">
+                            <button
+                                type="button"
+                                className="picking-not-found-button"
+                                onClick={handleNotFound}
+                                aria-label="Item not found"
+                                disabled={isSubmittingNotFound}
+                            >
                                 0
                             </button>
                         </div>
@@ -630,6 +935,25 @@ const PickingPage = () => {
                                 OK
                             </button>
                         </div>
+                    </section>
+                </div>
+            ) : null}
+
+            {isCameraOpen ? (
+                <div className="picking-modal-overlay" onClick={closeCameraModal}>
+                    <section className="picking-camera-modal" onClick={(event) => event.stopPropagation()}>
+                        <h3>Scan UPC Barcode</h3>
+                        <p>Point the camera at the UPC-A or UPC-E barcode.</p>
+                        <video
+                            ref={videoRef}
+                            className="picking-camera-preview"
+                            autoPlay
+                            muted
+                            playsInline
+                        />
+                        <button type="button" className="picking-modal-close" onClick={closeCameraModal}>
+                            Close
+                        </button>
                     </section>
                 </div>
             ) : null}

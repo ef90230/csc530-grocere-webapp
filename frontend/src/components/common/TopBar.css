@@ -24,6 +24,11 @@
   border-bottom-color: #6f9454;
 }
 
+.topbar--red {
+  background-color: #dc6666;
+  border-bottom-color: #b64e4e;
+}
+
 .topbar-title {
   font-size: 1rem;
   font-weight: 600;

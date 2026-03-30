@@ -118,6 +118,47 @@ dist
 
 # Windows
 Thumbs.db
+
+# ──────────────────────────────────────────────────────────────
+# Android / Mobile
+# ──────────────────────────────────────────────────────────────
+frontend/mobile/android/.gradle/
+frontend/mobile/android/build/
+frontend/mobile/android/**/build/
+frontend/mobile/android/*.apk
+frontend/mobile/android/*.ap_
+frontend/mobile/android/*.dex
+frontend/mobile/android/local.properties
+frontend/mobile/android/*.jks
+frontend/mobile/android/*.keystore
+frontend/mobile/android/.idea/
+frontend/mobile/android/**/*.iml
+frontend/mobile/android/**/.gradle/
+frontend/mobile/android/**/.settings/
+frontend/mobile/android/**/.project
+frontend/mobile/android/**/.classpath
+frontend/mobile/android/**/.vscode-android
+frontend/mobile/android/captures/
+frontend/mobile/android/.externalNativeBuild/
+frontend/mobile/android/.cxx/
+
+# ──────────────────────────────────────────────────────────────
+# iOS / CocoaPods
+# ──────────────────────────────────────────────────────────────
+frontend/mobile/ios/Pods/
+frontend/mobile/ios/Podfile.lock
+frontend/mobile/ios/build/
+frontend/mobile/ios/DerivedData/
+frontend/mobile/ios/.xcworkspace/
+frontend/mobile/ios/**/*.xcworkspace/
+frontend/mobile/ios/**/*.xcodeproj/xcuserdata/
+frontend/mobile/ios/**/*.xcodeproj/project.xcworkspace/xcuserdata/
+frontend/mobile/ios/**/*.xcodeproj/project.xcworkspace/xcshareddata/
+frontend/mobile/ios/.DS_Store
+frontend/mobile/ios/**/.DS_Store
+frontend/mobile/ios/.swiftpm/
+frontend/mobile/ios/**/*.swiftpm/
+frontend/mobile/ios/.vscode-ios
 ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/

@@ -133,6 +133,11 @@
   margin-bottom: 1.25rem;
 }
 
+.storefront-order-card--alert {
+  background: linear-gradient(135deg, #c93b3b 0%, #a11f2a 100%);
+  box-shadow: 0 14px 28px rgba(123, 18, 31, 0.28);
+}
+
 .storefront-order-card__header {
   display: flex;
   align-items: flex-start;
@@ -190,6 +195,15 @@
 
 .storefront-order-card__cta:hover {
   background: rgba(255, 255, 255, 0.25);
+}
+
+.storefront-order-card__cta--alert {
+  background: rgba(98, 6, 20, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+.storefront-order-card__cta--alert:hover {
+  background: rgba(98, 6, 20, 0.55);
 }
 
 .storefront-item-grid {

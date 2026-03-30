@@ -1,7 +1,13 @@
 import React from 'react';
 import './CustomerPopupMenu.css';
 
-const CustomerPopupMenu = ({ isClosing, onClose, onLogout }) => {
+const CustomerPopupMenu = ({ isClosing, onClose, onLogout, onNavigate }) => {
+  const handleMyOrders = () => {
+    if (onNavigate) {
+      onNavigate('/order-summary');
+    }
+  };
+
   return (
     <div className="customer-popup-overlay" onClick={onClose}>
       <aside
@@ -16,13 +22,22 @@ const CustomerPopupMenu = ({ isClosing, onClose, onLogout }) => {
         >
           ×
         </button>
-        <button
-          type="button"
-          className="customer-popup-logout"
-          onClick={onLogout}
-        >
-          Log Out
-        </button>
+        <div className="customer-popup-content">
+          <button
+            type="button"
+            className="customer-popup-menu-item"
+            onClick={handleMyOrders}
+          >
+            My Orders
+          </button>
+          <button
+            type="button"
+            className="customer-popup-logout"
+            onClick={onLogout}
+          >
+            Log Out
+          </button>
+        </div>
       </aside>
     </div>
   );

@@ -41,6 +41,30 @@ const formatPickupTime = (value) => {
   });
 };
 
+const getLineItemFulfillmentStatus = (orderItem) => {
+  const orderedQuantity = Number(orderItem?.quantity || 0);
+  const pickedQuantity = Math.max(0, Number(orderItem?.pickedQuantity || 0));
+  const normalizedStatus = String(orderItem?.status || '').toLowerCase();
+
+  if (normalizedStatus === 'found' || pickedQuantity >= orderedQuantity) {
+    return 'picked';
+  }
+
+  if (normalizedStatus === 'substituted') {
+    return 'not-found';
+  }
+
+  if (pickedQuantity > 0 && pickedQuantity < orderedQuantity) {
+    return 'partial';
+  }
+
+  if (normalizedStatus === 'out_of_stock' || normalizedStatus === 'skipped') {
+    return 'not-found';
+  }
+
+  return 'not-yet-picked';
+};
+
 const StorefrontPage = () => {
   const navigate = useNavigate();
   const [firstName, setFirstName] = useState('Customer');
@@ -349,6 +373,10 @@ const StorefrontPage = () => {
   const activeOrderStoreLabel = activeOrder?.store?.storeNumber
     ? `Store ${activeOrder.store.storeNumber}`
     : activeOrder?.store?.name || 'your store';
+  const hasOrderShortage = (activeOrder?.items || []).some((orderItem) => {
+    const lineItemStatus = getLineItemFulfillmentStatus(orderItem);
+    return lineItemStatus === 'partial' || lineItemStatus === 'not-found';
+  });
 
   const hasAppliedSearch = appliedSearchTerm.trim().length > 0;
   const selectedItemQuantity = selectedItem ? (quantityByItemId[selectedItem.id] || 1) : 1;
@@ -417,10 +445,12 @@ const StorefrontPage = () => {
       <div className="storefront-topbar-spacer" />
       <main className="storefront-content">
         {activeOrder && (
-          <section className="storefront-order-card">
+          <section className={`storefront-order-card ${hasOrderShortage ? 'storefront-order-card--alert' : ''}`}>
             <div className="storefront-order-card__header">
               <p className="storefront-order-card__eyebrow">
-                You have one order at {activeOrderStoreLabel}.
+                {hasOrderShortage
+                  ? `Some items in your order at ${activeOrderStoreLabel} were not found.`
+                  : `You have one order at ${activeOrderStoreLabel}.`}
               </p>
               <span className="storefront-order-status-pill">
                 {ORDER_STATUS_LABELS[activeOrder.status] || activeOrder.status}
@@ -433,8 +463,8 @@ const StorefrontPage = () => {
               </div>
               <button
                 type="button"
-                className="storefront-order-card__cta"
-                onClick={() => navigate('/cart')}
+                className={`storefront-order-card__cta ${hasOrderShortage ? 'storefront-order-card__cta--alert' : ''}`}
+                onClick={() => navigate('/order-summary')}
               >
                 Track order
               </button>
@@ -541,6 +571,12 @@ const StorefrontPage = () => {
           isClosing={isMenuClosing}
           onClose={closeMenu}
           onLogout={handleLogout}
+          onNavigate={(path) => {
+            closeMenu();
+            setTimeout(() => {
+              navigate(path);
+            }, CLOSE_ANIMATION_MS);
+          }}
         />
       )}
       {selectedItem && (

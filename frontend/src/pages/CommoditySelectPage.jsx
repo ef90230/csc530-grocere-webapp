@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '../components/common/Navbar';
 import TopBar from '../components/common/TopBar';
 import './CommoditySelectPage.css';
@@ -21,9 +21,19 @@ const formatDueTime = (dueTime) => {
 
 const CommoditySelectPage = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const [commodities, setCommodities] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [errorMessage, setErrorMessage] = useState('');
+    const [suppressAutoResume, setSuppressAutoResume] = useState(Boolean(location?.state?.completedWalk));
+
+    useEffect(() => {
+        if (!location?.state?.completedWalk) {
+            return;
+        }
+
+        navigate('/commodityselect', { replace: true, state: null });
+    }, [location?.state, navigate]);
 
     useEffect(() => {
         const token = window.localStorage.getItem('authToken');
@@ -58,26 +68,28 @@ const CommoditySelectPage = () => {
                     throw new Error('No store is assigned to this employee.');
                 }
 
-                const activeWalkResponse = await fetch(`${API_BASE}/api/orders/picking/walk/current/${storeId}`, {
-                    headers: {
-                        Authorization: `Bearer ${token}`
-                    },
-                    signal: controller.signal
-                });
-
-                if (!activeWalkResponse.ok) {
-                    throw new Error('Unable to verify current pick walk state.');
-                }
-
-                const activeWalkPayload = await activeWalkResponse.json();
-                if (activeWalkPayload?.hasActiveWalk && activeWalkPayload?.commodity) {
-                    navigate('/picking', {
-                        state: {
-                            commodity: activeWalkPayload.commodity,
-                            commodityLabel: activeWalkPayload.displayName
-                        }
+                if (!suppressAutoResume) {
+                    const activeWalkResponse = await fetch(`${API_BASE}/api/orders/picking/walk/current/${storeId}`, {
+                        headers: {
+                            Authorization: `Bearer ${token}`
+                        },
+                        signal: controller.signal
                     });
-                    return;
+
+                    if (!activeWalkResponse.ok) {
+                        throw new Error('Unable to verify current pick walk state.');
+                    }
+
+                    const activeWalkPayload = await activeWalkResponse.json();
+                    if (activeWalkPayload?.hasActiveWalk && activeWalkPayload?.commodity) {
+                        navigate('/picking', {
+                            state: {
+                                commodity: activeWalkPayload.commodity,
+                                commodityLabel: activeWalkPayload.displayName
+                            }
+                        });
+                        return;
+                    }
                 }
 
                 const queueResponse = await fetch(`${API_BASE}/api/orders/commodities/${storeId}`, {
@@ -93,6 +105,10 @@ const CommoditySelectPage = () => {
 
                 const queuePayload = await queueResponse.json();
                 setCommodities(Array.isArray(queuePayload?.commodities) ? queuePayload.commodities : []);
+
+                if (suppressAutoResume) {
+                    setSuppressAutoResume(false);
+                }
             } catch (error) {
                 if (error.name !== 'AbortError') {
                     console.error('Unable to load commodity queue', error);
@@ -113,9 +129,10 @@ const CommoditySelectPage = () => {
             controller.abort();
             window.clearInterval(intervalId);
         };
-    }, [navigate]);
+    }, [navigate, suppressAutoResume]);
 
     const handleCommoditySelect = (commodity) => {
+        setSuppressAutoResume(false);
         navigate('/picking', {
             state: {
                 commodity: commodity.commodity,

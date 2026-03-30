@@ -1,4 +1,4 @@
-const { Cart, CartItem, Item } = require('../models');
+const { Cart, CartItem, Item, ItemLocation } = require('../models');
 
 const cartItemInclude = [
   {
@@ -12,6 +12,66 @@ const cartItemInclude = [
     attributes: ['id', 'name', 'upc', 'price', 'imageUrl']
   }
 ];
+
+const getItemOnHandTotal = async (itemId, storeId = null) => {
+  const where = { itemId };
+  if (storeId) {
+    where.storeId = storeId;
+  }
+
+  const itemLocations = await ItemLocation.findAll({
+    where,
+    attributes: ['quantityOnHand']
+  });
+
+  return itemLocations.reduce((sum, locationRow) => sum + Number(locationRow.quantityOnHand || 0), 0);
+};
+
+const formatCartResponse = (cart) => {
+  let subtotal = 0;
+  (cart.items || []).forEach((cartItem) => {
+    subtotal += Number(cartItem?.item?.price || 0) * Number(cartItem?.quantity || 0);
+  });
+
+  return {
+    ...cart.toJSON(),
+    subtotal: parseFloat(subtotal.toFixed(2)),
+    itemCount: (cart.items || []).length,
+    totalQuantity: (cart.items || []).reduce((sum, ci) => sum + Number(ci.quantity || 0), 0)
+  };
+};
+
+const refreshCartWithItems = async (cartId) => Cart.findByPk(cartId, {
+  include: [
+    {
+      model: CartItem,
+      as: 'items',
+      include: cartItemInclude
+    }
+  ]
+});
+
+const removeUnavailableCartItems = async (cart) => {
+  if (!cart?.id || !Array.isArray(cart.items) || cart.items.length === 0) {
+    return cart;
+  }
+
+  let removedAnyItems = false;
+
+  for (const cartItem of cart.items) {
+    const onHandTotal = await getItemOnHandTotal(cartItem.itemId, cart.storeId || null);
+    if (onHandTotal <= 0) {
+      await cartItem.destroy();
+      removedAnyItems = true;
+    }
+  }
+
+  if (!removedAnyItems) {
+    return cart;
+  }
+
+  return refreshCartWithItems(cart.id);
+};
 
 // Get customer's cart with all items
 const getCart = async (req, res) => {
@@ -32,31 +92,14 @@ const getCart = async (req, res) => {
     if (!cart) {
       // Create a new cart if one doesn't exist
       cart = await Cart.create({ customerId });
-      cart = await Cart.findByPk(cart.id, {
-        include: [
-          {
-            model: CartItem,
-            as: 'items',
-            include: cartItemInclude
-          }
-        ]
-      });
+      cart = await refreshCartWithItems(cart.id);
     }
 
-    // Calculate totals
-    let subtotal = 0;
-    cart.items.forEach(cartItem => {
-      subtotal += cartItem.item.price * cartItem.quantity;
-    });
+    cart = await removeUnavailableCartItems(cart);
 
     res.json({
       success: true,
-      cart: {
-        ...cart.toJSON(),
-        subtotal: parseFloat(subtotal.toFixed(2)),
-        itemCount: cart.items.length,
-        totalQuantity: cart.items.reduce((sum, ci) => sum + ci.quantity, 0)
-      }
+      cart: formatCartResponse(cart)
     });
   } catch (error) {
     console.error('Get cart error:', error);
@@ -86,6 +129,11 @@ const addToCart = async (req, res) => {
       cart = await Cart.create({ customerId });
     }
 
+    const onHandTotal = await getItemOnHandTotal(itemId, cart.storeId || null);
+    if (onHandTotal <= 0) {
+      return res.status(400).json({ message: 'Item is out of stock' });
+    }
+
     // Check if item already in cart
     let cartItem = await CartItem.findOne({
       where: {
@@ -93,6 +141,11 @@ const addToCart = async (req, res) => {
         itemId
       }
     });
+
+    const existingQuantity = Number(cartItem?.quantity || 0);
+    if ((existingQuantity + Number(quantity || 0)) > onHandTotal) {
+      return res.status(400).json({ message: 'Requested quantity exceeds current stock' });
+    }
 
     if (cartItem) {
       // Increment quantity
@@ -110,30 +163,12 @@ const addToCart = async (req, res) => {
     }
 
     // Return updated cart
-    const updatedCart = await Cart.findByPk(cart.id, {
-      include: [
-        {
-          model: CartItem,
-          as: 'items',
-          include: cartItemInclude
-        }
-      ]
-    });
-
-    let subtotal = 0;
-    updatedCart.items.forEach(ci => {
-      subtotal += ci.item.price * ci.quantity;
-    });
+    const updatedCart = await refreshCartWithItems(cart.id);
 
     res.status(201).json({
       success: true,
       message: 'Item added to cart',
-      cart: {
-        ...updatedCart.toJSON(),
-        subtotal: parseFloat(subtotal.toFixed(2)),
-        itemCount: updatedCart.items.length,
-        totalQuantity: updatedCart.items.reduce((sum, ci) => sum + ci.quantity, 0)
-      }
+      cart: formatCartResponse(updatedCart)
     });
   } catch (error) {
     console.error('Add to cart error:', error);
@@ -170,6 +205,12 @@ const updateCartItem = async (req, res) => {
       if (quantity < 1) {
         return res.status(400).json({ message: 'Quantity must be at least 1' });
       }
+
+      const onHandTotal = await getItemOnHandTotal(cartItem.itemId, cart.storeId || null);
+      if (quantity > onHandTotal) {
+        return res.status(400).json({ message: 'Requested quantity exceeds current stock' });
+      }
+
       cartItem.quantity = quantity;
     }
 
@@ -200,30 +241,12 @@ const updateCartItem = async (req, res) => {
     await cartItem.save();
 
     // Return updated cart
-    const updatedCart = await Cart.findByPk(cart.id, {
-      include: [
-        {
-          model: CartItem,
-          as: 'items',
-          include: cartItemInclude
-        }
-      ]
-    });
-
-    let subtotal = 0;
-    updatedCart.items.forEach(ci => {
-      subtotal += ci.item.price * ci.quantity;
-    });
+    const updatedCart = await refreshCartWithItems(cart.id);
 
     res.json({
       success: true,
       message: 'Cart item updated',
-      cart: {
-        ...updatedCart.toJSON(),
-        subtotal: parseFloat(subtotal.toFixed(2)),
-        itemCount: updatedCart.items.length,
-        totalQuantity: updatedCart.items.reduce((sum, ci) => sum + ci.quantity, 0)
-      }
+      cart: formatCartResponse(updatedCart)
     });
   } catch (error) {
     console.error('Update cart item error:', error);
@@ -257,30 +280,12 @@ const removeFromCart = async (req, res) => {
     await cartItem.destroy();
 
     // Return updated cart
-    const updatedCart = await Cart.findByPk(cart.id, {
-      include: [
-        {
-          model: CartItem,
-          as: 'items',
-          include: cartItemInclude
-        }
-      ]
-    });
-
-    let subtotal = 0;
-    updatedCart.items.forEach(ci => {
-      subtotal += ci.item.price * ci.quantity;
-    });
+    const updatedCart = await refreshCartWithItems(cart.id);
 
     res.json({
       success: true,
       message: 'Item removed from cart',
-      cart: {
-        ...updatedCart.toJSON(),
-        subtotal: parseFloat(subtotal.toFixed(2)),
-        itemCount: updatedCart.items.length,
-        totalQuantity: updatedCart.items.reduce((sum, ci) => sum + ci.quantity, 0)
-      }
+      cart: formatCartResponse(updatedCart)
     });
   } catch (error) {
     console.error('Remove from cart error:', error);
@@ -302,25 +307,12 @@ const clearCart = async (req, res) => {
     await CartItem.destroy({ where: { cartId: cart.id } });
 
     // Return empty cart
-    const emptyCart = await Cart.findByPk(cart.id, {
-      include: [
-        {
-          model: CartItem,
-          as: 'items',
-          include: cartItemInclude
-        }
-      ]
-    });
+    const emptyCart = await refreshCartWithItems(cart.id);
 
     res.json({
       success: true,
       message: 'Cart cleared',
-      cart: {
-        ...emptyCart.toJSON(),
-        subtotal: 0,
-        itemCount: 0,
-        totalQuantity: 0
-      }
+      cart: formatCartResponse(emptyCart)
     });
   } catch (error) {
     console.error('Clear cart error:', error);

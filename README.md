@@ -40,6 +40,12 @@ To power Grocer-E's powerful algorithmic paths, stores are set up with a databas
 - On-Time % - The percent of items shopped without going overdue.
 - Weighted Efficiency - A special score assigned as an aggregate of the employee/store's pick rate and FTP. A perfect score results from a pick rate >= 100.00 items/hour and FTP of 100%.
 
+## Note to Clients
+Grocer-E only provides the digital infrastructure for your shopping management experience. It cannot account for every edge case within your store alone. It is up to you to address certain issues and shortcomings that may arise from use of the software, including, but not limited to, the following:
+- Items found in a location other than the listed intended location while picking: Notify a member of management to move the items or adjust locations in the Grocer-E app accordingly.
+- Items with On Hand in Grocer-E listed as 0: These items will still be able to be picked by staff, but cannot be ordered further by customers. This behavior is intentionally selected to account for delays in store inventory processing, such as items sold to in-store shoppers, damaged items, and supply chain issues. You are responsible for maintaining as close to an accurate On Hand figure as possible to minimize shopper issues.
+- As is the case when shopping, items can be dropped or damaged. Pickers encountering damaged items should not pick them and notify management to reduce the On Hand of that item to account for damage. If the damage occurs after the item was picked, handle this at dispense time. You will be given a chance to look through the pick list and the shopper may refund any item they no longer want before the order is completed.
+
 ## Development
 
 ### Backend Scripts

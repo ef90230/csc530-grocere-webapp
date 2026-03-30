@@ -49,6 +49,33 @@
   background-color: #f1f1f1;
 }
 
+.customer-popup-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+.customer-popup-menu-item {
+  width: 100%;
+  border: none;
+  border-radius: 6px;
+  background-color: #e8e8e8;
+  color: #111;
+  padding: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  font-size: 1rem;
+  transition: filter 0.15s;
+}
+
+.customer-popup-menu-item:hover {
+  filter: brightness(0.95);
+}
+
 .customer-popup-logout {
   width: 100%;
   border: none;
@@ -59,6 +86,9 @@
   font-weight: 600;
   cursor: pointer;
   text-align: left;
+  font-family: inherit;
+  font-size: 1rem;
+  transition: filter 0.15s;
 }
 
 .customer-popup-logout:hover {

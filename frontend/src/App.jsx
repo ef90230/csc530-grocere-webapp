@@ -12,6 +12,7 @@ import TitlePage from './pages/TitlePage';
 import StorefrontPage from './pages/StorefrontPage';
 import MapScreen from './pages/MapScreen';
 import OrderListPage from './pages/OrderListPage';
+import OrderSummary from './pages/OrderSummary';
 import PickingPage from './pages/PickingPage';
 import SignupPage from './pages/SignupPage';
 import StagingPage from './pages/StagingPage';
@@ -141,6 +142,14 @@ function App() {
                             element={
                                 <ProtectedRoute allowedRole="customer">
                                     <CartScreen />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="/order-summary"
+                            element={
+                                <ProtectedRoute allowedRole="customer">
+                                    <OrderSummary />
                                 </ProtectedRoute>
                             }
                         />

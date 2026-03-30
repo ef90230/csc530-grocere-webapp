@@ -448,6 +448,12 @@ const SchedulingScreen = () => {
                     isClosing={isMenuClosing}
                     onClose={closeMenu}
                     onLogout={handleLogout}
+                    onNavigate={(path) => {
+                        closeMenu();
+                        setTimeout(() => {
+                            navigate(path);
+                        }, CLOSE_ANIMATION_MS);
+                    }}
                 />
             )}
 

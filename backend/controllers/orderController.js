@@ -57,6 +57,14 @@ const buildPickQueue = (orders, pathIndexMap) => {
 
   orders.forEach((order) => {
     order.items.forEach((orderItem) => {
+      const orderedQuantity = Number(orderItem.quantity || 0);
+      const alreadyPickedQuantity = Number(orderItem.pickedQuantity || 0);
+      const remainingQuantity = Math.max(0, orderedQuantity - alreadyPickedQuantity);
+
+      if (remainingQuantity <= 0) {
+        return;
+      }
+
       const item = orderItem.item;
       const itemLocations = Array.isArray(item?.locations) ? item.locations : [];
 
@@ -107,7 +115,9 @@ const buildPickQueue = (orders, pathIndexMap) => {
         orderNumber: order.orderNumber,
         orderItemId: orderItem.id,
         scheduledPickupTime: order.scheduledPickupTime,
-        quantityToPick: Number(orderItem.quantity || 0),
+        quantity: orderedQuantity,
+        quantityToPick: remainingQuantity,
+        pickedQuantity: alreadyPickedQuantity,
         status: orderItem.status,
         specialInstructions: order.notes || '',
         item: {
@@ -161,7 +171,7 @@ const walkOrdersInclude = (commodity) => ([
     where: {
       status: 'pending'
     },
-    attributes: ['id', 'itemId', 'quantity', 'status'],
+    attributes: ['id', 'itemId', 'quantity', 'pickedQuantity', 'status'],
     include: [
       {
         model: Item,
@@ -245,6 +255,12 @@ const getOrders = async (req, res) => {
               model: Item,
               as: 'item',
               attributes: ['id', 'upc', 'name', 'price', 'temperature', 'commodity']
+            },
+            {
+              model: Item,
+              as: 'substitutedItem',
+              attributes: ['id', 'upc', 'name', 'price'],
+              required: false
             }
           ]
         }
@@ -539,6 +555,7 @@ const getOrdersForPicking = async (req, res) => {
 
 const getCommodityQueueForPicking = async (req, res) => {
   try {
+    const employeeId = req.user?.id;
     const storeId = req.params.storeId;
     const now = new Date();
     const threeHoursFromNow = new Date(now.getTime() + 3 * 60 * 60 * 1000);
@@ -546,12 +563,18 @@ const getCommodityQueueForPicking = async (req, res) => {
     const orders = await Order.findAll({
       where: {
         storeId,
-        status: 'pending',
+        [Op.or]: [
+          { status: 'pending' },
+          {
+            status: 'picking',
+            assignedPickerId: employeeId
+          }
+        ],
         scheduledPickupTime: {
           [Op.lte]: threeHoursFromNow
         }
       },
-      attributes: ['id', 'orderNumber', 'scheduledPickupTime'],
+      attributes: ['id', 'orderNumber', 'scheduledPickupTime', 'status'],
       include: [
         {
           model: OrderItem,
@@ -560,7 +583,7 @@ const getCommodityQueueForPicking = async (req, res) => {
           where: {
             status: 'pending'
           },
-          attributes: ['id', 'quantity', 'status'],
+          attributes: ['id', 'quantity', 'pickedQuantity', 'status'],
           include: [
             {
               model: Item,
@@ -573,12 +596,30 @@ const getCommodityQueueForPicking = async (req, res) => {
       order: [['scheduledPickupTime', 'ASC']]
     });
 
+    const activeCommodity = orders
+      .filter((order) => order.status === 'picking')
+      .flatMap((order) => order.items || [])
+      .map((orderItem) => orderItem?.item?.commodity)
+      .find(Boolean);
+
     const commodityMap = new Map();
 
     orders.forEach((order) => {
       order.items.forEach((orderItem) => {
         const commodityKey = orderItem?.item?.commodity;
         if (!commodityKey) {
+          return;
+        }
+
+        if (activeCommodity && commodityKey === activeCommodity) {
+          return;
+        }
+
+        const orderedQuantity = Number(orderItem.quantity || 0);
+        const alreadyPickedQuantity = Number(orderItem.pickedQuantity || 0);
+        const remainingQuantity = Math.max(0, orderedQuantity - alreadyPickedQuantity);
+
+        if (remainingQuantity <= 0) {
           return;
         }
 
@@ -591,7 +632,7 @@ const getCommodityQueueForPicking = async (req, res) => {
           orderNumbers: []
         };
 
-        currentEntry.itemCount += Number(orderItem.quantity || 0);
+        currentEntry.itemCount += remainingQuantity;
 
         if (new Date(order.scheduledPickupTime) < new Date(currentEntry.dueTime)) {
           currentEntry.dueTime = order.scheduledPickupTime;
@@ -651,7 +692,7 @@ const getCurrentPickWalk = async (req, res) => {
           where: {
             status: 'pending'
           },
-          attributes: ['id', 'quantity'],
+          attributes: ['id', 'quantity', 'pickedQuantity'],
           include: [
             {
               model: Item,
@@ -684,7 +725,10 @@ const getCurrentPickWalk = async (req, res) => {
     }
 
     const totalItems = activeOrders.reduce((sum, order) => (
-      sum + order.items.reduce((itemSum, orderItem) => itemSum + Number(orderItem.quantity || 0), 0)
+      sum + order.items.reduce((itemSum, orderItem) => {
+        const remainingQuantity = Math.max(0, Number(orderItem.quantity || 0) - Number(orderItem.pickedQuantity || 0));
+        return itemSum + remainingQuantity;
+      }, 0)
     ), 0);
 
     res.json({
@@ -886,14 +930,14 @@ const recordPick = async (req, res) => {
 const endPickWalk = async (req, res) => {
   try {
     const employeeId = req.user?.id;
-    const { storeId, commodity } = req.body;
+    const { storeId } = req.body;
 
     if (!employeeId) {
       return res.status(401).json({ message: 'Employee authentication is required' });
     }
 
-    if (!storeId || !commodity) {
-      return res.status(400).json({ message: 'storeId and commodity are required' });
+    if (!storeId) {
+      return res.status(400).json({ message: 'storeId is required' });
     }
 
     const claimedOrders = await Order.findAll({
@@ -911,15 +955,12 @@ const endPickWalk = async (req, res) => {
           where: {
             status: 'pending'
           },
-          attributes: ['id', 'quantity'],
+          attributes: ['id', 'quantity', 'pickedQuantity'],
           include: [
             {
               model: Item,
               as: 'item',
               required: true,
-              where: {
-                commodity
-              },
               attributes: ['id', 'commodity']
             }
           ]
@@ -953,7 +994,10 @@ const endPickWalk = async (req, res) => {
     );
 
     const releasedItems = claimedOrders.reduce((sum, order) => (
-      sum + order.items.reduce((itemSum, orderItem) => itemSum + Number(orderItem.quantity || 0), 0)
+      sum + order.items.reduce((itemSum, orderItem) => {
+        const remainingQuantity = Math.max(0, Number(orderItem.quantity || 0) - Number(orderItem.pickedQuantity || 0));
+        return itemSum + remainingQuantity;
+      }, 0)
     ), 0);
 
     res.json({
