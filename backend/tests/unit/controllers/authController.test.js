@@ -13,8 +13,17 @@ jest.mock('../../../middleware/auth', () => ({
   generateToken: jest.fn(() => 'mock-token')
 }));
 
+jest.mock('../../../utils/employeeMetricsService', () => ({
+  calculateAverageWalkPickRate: jest.fn(() => 72.5),
+  getCompletedPickWalkHistory: jest.fn(() => Promise.resolve([]))
+}));
+
 const { Employee, Customer } = require('../../../models');
 const { generateToken } = require('../../../middleware/auth');
+const {
+  calculateAverageWalkPickRate,
+  getCompletedPickWalkHistory
+} = require('../../../utils/employeeMetricsService');
 const {
   login,
   registerEmployee,
@@ -129,6 +138,27 @@ describe('authController', () => {
     const req = {
       userType: 'employee',
       user: {
+        id: 1,
+        toJSON: () => ({ id: 1, email: 'alex@example.com', pickRate: 999 })
+      }
+    };
+    const res = createMockRes();
+
+    await getMe(req, res);
+
+    expect(getCompletedPickWalkHistory).toHaveBeenCalledWith(1);
+    expect(calculateAverageWalkPickRate).toHaveBeenCalledWith([]);
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      userType: 'employee',
+      user: { id: 1, email: 'alex@example.com', pickRate: 72.5 }
+    });
+  });
+
+  test('getMe returns current customer payload without walk stats lookup', async () => {
+    const req = {
+      userType: 'customer',
+      user: {
         toJSON: () => ({ id: 1, email: 'alex@example.com' })
       }
     };
@@ -138,7 +168,7 @@ describe('authController', () => {
 
     expect(res.json).toHaveBeenCalledWith({
       success: true,
-      userType: 'employee',
+      userType: 'customer',
       user: { id: 1, email: 'alex@example.com' }
     });
   });

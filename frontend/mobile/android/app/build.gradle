@@ -1,0 +1,22 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'com.grocere.mobile'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.grocere.mobile"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+}
+
+dependencies {
+    // ML Kit barcode scanner (UPC-A / UPC-E support)
+    implementation 'com.google.mlkit:barcode-scanning:17.3.0'
+}

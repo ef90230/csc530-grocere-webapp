@@ -45,11 +45,16 @@ const Employee = sequelize.define('Employee', {
     type: DataTypes.BOOLEAN,
     defaultValue: true
   },
-  // Performance metrics - commented out for database compatibility
-  /*
   pickRate: {
     type: DataTypes.DECIMAL(10, 2),
     defaultValue: 0.00,
+    validate: {
+      min: 0
+    }
+  },
+  itemsPicked: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
     validate: {
       min: 0
     }
@@ -100,7 +105,7 @@ const Employee = sequelize.define('Employee', {
     validate: {
       min: 0
     }
-  */
+  }
 }, {
   tableName: 'employees',
   timestamps: true,

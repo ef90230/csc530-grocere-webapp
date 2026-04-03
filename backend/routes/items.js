@@ -36,7 +36,7 @@ router.post(
 
 router.put(
   '/:id',
-  restrictTo('manager'),
+  restrictTo('manager', 'picker', 'stager', 'dispenser'),
   updateItem
 );
 

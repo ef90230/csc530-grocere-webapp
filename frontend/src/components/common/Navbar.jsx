@@ -14,6 +14,12 @@ const Navbar = () => {
         className={`nav-item ${isActive('/home') ? 'active' : ''}`}
         onClick={() => navigate('/home')}
       >
+        Home
+      </button>
+      <button
+        className={`nav-item ${isActive('/commodityselect') ? 'active' : ''}`}
+        onClick={() => navigate('/commodityselect')}
+      >
         Picking
       </button>
       <button

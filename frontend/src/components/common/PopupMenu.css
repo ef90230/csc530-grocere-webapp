@@ -1,0 +1,93 @@
+.popup-menu-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.15);
+  z-index: 250;
+  overflow: hidden;
+}
+
+.popup-menu-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: min(82vw, 280px);
+  height: 100%;
+  background: #fff;
+  box-shadow: -6px 0 18px rgba(0, 0, 0, 0.25);
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+  animation-duration: 280ms;
+  animation-fill-mode: forwards;
+  animation-timing-function: ease;
+}
+
+.popup-menu-panel.open {
+  animation-name: slideInFromRight;
+}
+
+.popup-menu-panel.closing {
+  animation-name: slideOutToRight;
+}
+
+.popup-close-button {
+  align-self: flex-end;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #111;
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.popup-close-button:hover {
+  background-color: #f1f1f1;
+}
+
+.popup-action-button {
+  width: 100%;
+  border: none;
+  border-radius: 6px;
+  background-color: #f1f1f1;
+  color: #111;
+  padding: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.popup-action-button:hover {
+  background-color: #e5e5e5;
+}
+
+.popup-logout-button {
+  background-color: #f2cf4a;
+  color: #000;
+}
+
+.popup-logout-button:hover {
+  filter: brightness(0.95);
+}
+
+@keyframes slideInFromRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOutToRight {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}

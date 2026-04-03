@@ -7,6 +7,11 @@ const {
   updateOrderStatus,
   updateOrderItem,
   getOrdersForPicking,
+  getCommodityQueueForPicking,
+  getCurrentPickWalk,
+  startPickWalk,
+  recordPick,
+  endPickWalk,
   cancelOrder,
   getAvailableScheduleSlots,
   getNextAvailableSlotForStore,
@@ -25,6 +30,13 @@ router.post('/scheduling/validate/:storeId', validateOrderScheduleTime);
 router.post('/scheduling/purge', restrictTo('manager'), triggerSchedulePurge);
 
 router.get('/', getOrders);
+
+router.get('/commodities/:storeId', restrictTo('manager', 'picker'), getCommodityQueueForPicking);
+router.get('/picking/walk/current/:storeId', restrictTo('manager', 'picker'), getCurrentPickWalk);
+
+router.post('/picking/walk/start', restrictTo('manager', 'picker'), startPickWalk);
+router.post('/picking/walk/record-pick', restrictTo('manager', 'picker'), recordPick);
+router.post('/picking/walk/end', restrictTo('manager', 'picker'), endPickWalk);
 
 router.get('/picking/:storeId', getOrdersForPicking);
 

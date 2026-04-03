@@ -3,6 +3,31 @@
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
+const persistAuth = (payload, fallbackUserType) => {
+  const token = payload?.token;
+  if (!token) {
+    return;
+  }
+
+  const userRecord = payload?.user || payload?.employee || payload?.customer;
+  const displayName = [userRecord?.firstName, userRecord?.lastName]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+
+  const resolvedUserType =
+    fallbackUserType ||
+    (payload?.user ? 'customer' : null);
+
+  localStorage.setItem('authToken', token);
+  if (resolvedUserType) {
+    localStorage.setItem('userType', resolvedUserType);
+  }
+  if (displayName) {
+    localStorage.setItem('userDisplayName', displayName);
+  }
+};
+
 export const useAuth = () => {
   const login = async ({ email, password, userType }) => {
     const res = await fetch(`${API_BASE}/api/auth/login`, {
@@ -16,7 +41,9 @@ export const useAuth = () => {
       throw new Error(err.message || 'Login failed');
     }
 
-    return res.json();
+    const payload = await res.json();
+    persistAuth(payload, userType);
+    return payload;
   };
 
   const register = async (formData) => {
@@ -39,7 +66,9 @@ export const useAuth = () => {
       throw error;
     }
 
-    return res.json();
+    const payload = await res.json();
+    persistAuth(payload, formData.userType);
+    return payload;
   };
 
   return { login, register };

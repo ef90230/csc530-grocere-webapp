@@ -1,5 +1,9 @@
 const { Employee, Customer } = require('../models');
 const { generateToken } = require('../middleware/auth');
+const {
+  calculateAverageWalkPickRate,
+  getCompletedPickWalkHistory
+} = require('../utils/employeeMetricsService');
 
 const login = async (req, res) => {
   try {
@@ -134,6 +138,12 @@ const registerCustomer = async (req, res) => {
 const getMe = async (req, res) => {
   try {
     const userResponse = req.user.toJSON();
+
+    if (req.userType === 'employee' && req.user?.id) {
+      const walkHistory = await getCompletedPickWalkHistory(req.user.id);
+      userResponse.pickRate = calculateAverageWalkPickRate(walkHistory);
+    }
+
     res.json({
       success: true,
       userType: req.userType,

@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/common/Navbar';
+import TopBar from '../components/common/TopBar';
+import ItemCard from '../components/inventory/ItemCard';
 import './InventoryScreen.css';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
@@ -18,11 +20,13 @@ const InventoryScreen = () => {
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState('aisle');
+  const [sortBy, setSortBy] = useState('name_asc');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [storeAisles, setStoreAisles] = useState([]);
 
-  const fetchItems = async () => {
+  const fetchItems = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -44,11 +48,40 @@ const InventoryScreen = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [searchTerm]);
 
   useEffect(() => {
     fetchItems();
-  }, [searchTerm]);
+  }, [fetchItems]);
+
+  useEffect(() => {
+    const loadAislesForSelectedItem = async () => {
+      if (!selectedItem) {
+        setStoreAisles([]);
+        return;
+      }
+
+      const storeId = selectedItem?.locations?.[0]?.storeId;
+      if (!storeId) {
+        setStoreAisles([]);
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE}/api/aisles/store/${storeId}`);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.success) {
+          setStoreAisles([]);
+          return;
+        }
+        setStoreAisles(payload.aisles || []);
+      } catch {
+        setStoreAisles([]);
+      }
+    };
+
+    loadAislesForSelectedItem();
+  }, [selectedItem]);
 
   const processedItems = useMemo(() => {
     let arr = [...items];
@@ -106,8 +139,14 @@ const InventoryScreen = () => {
   const totalStock = item =>
     (item.locations || []).reduce((s, loc) => s + (loc.quantityOnHand || 0), 0);
 
+  const handleItemUpdated = (updatedItem) => {
+    setItems((prev) => prev.map((item) => (item.id === updatedItem.id ? updatedItem : item)));
+    setSelectedItem(updatedItem);
+  };
+
   return (
     <div className="inventory-screen">
+      <TopBar />
       <div className="page-content">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
           <h1>Inventory</h1>
@@ -168,7 +207,7 @@ const InventoryScreen = () => {
                       ? item.locations[0].location.aisle.aisleNumber
                       : '';
                   return (
-                    <tr key={item.id}>
+                    <tr key={item.id} className="inventory-row" onClick={() => setSelectedItem(item)}>
                       <td>{item.name}</td>
                       <td>{item.upc}</td>
                       <td>{item.category}</td>
@@ -183,6 +222,14 @@ const InventoryScreen = () => {
           </div>
         )}
       </div>
+      {selectedItem && (
+        <ItemCard
+          item={selectedItem}
+          aisles={storeAisles}
+          onClose={() => setSelectedItem(null)}
+          onItemUpdated={handleItemUpdated}
+        />
+      )}
       <Navbar />
     </div>
   );

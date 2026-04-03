@@ -17,7 +17,7 @@ EXPOSE 5000
 
 # Health check
 HEALTHCHECK --interval=10s --timeout=5s --retries=5 \
-  CMD node -e "require('http').get('http://localhost:5000/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
+  CMD wget -q -O /dev/null http://localhost:5000/health || exit 1
 
 # Start the backend server
 CMD ["npm", "start"]

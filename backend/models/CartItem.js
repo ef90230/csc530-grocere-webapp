@@ -23,6 +23,23 @@ const CartItem = sequelize.define('CartItem', {
       key: 'id'
     }
   },
+  substitutionItemId: {
+    type: DataTypes.INTEGER,
+    field: 'substitutionitemid',
+    allowNull: true,
+    references: {
+      model: 'items',
+      key: 'id'
+    }
+  },
+  substitutionQuantity: {
+    type: DataTypes.INTEGER,
+    field: 'substitutionquantity',
+    allowNull: true,
+    validate: {
+      min: 1
+    }
+  },
   quantity: {
     type: DataTypes.INTEGER,
     allowNull: false,

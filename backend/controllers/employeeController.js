@@ -1,4 +1,58 @@
 const { Employee, Store, Order } = require('../models');
+const {
+  calculateAverageWalkPickRate,
+  getCompletedPickWalkHistory
+} = require('../utils/employeeMetricsService');
+
+const METRIC_FIELDS = [
+  'pickRate',
+  'itemsPicked',
+  'firstTimePickPercent',
+  'preSubstitutionPercent',
+  'postSubstitutionPercent',
+  'percentNotFound',
+  'onTimePercent',
+  'weightedEfficiency'
+];
+
+const toNumber = (value) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : 0;
+};
+
+const mapEmployeeStats = (employee) => {
+  if (!employee) {
+    return METRIC_FIELDS.reduce((accumulator, field) => {
+      accumulator[field] = 0;
+      return accumulator;
+    }, {});
+  }
+
+  return METRIC_FIELDS.reduce((accumulator, field) => {
+    accumulator[field] = toNumber(employee[field]);
+    return accumulator;
+  }, {});
+};
+
+const getStoreAggregatedStats = (employees) => {
+  if (!employees.length) {
+    return mapEmployeeStats(null);
+  }
+
+  return METRIC_FIELDS.reduce((accumulator, field) => {
+    const total = employees.reduce((sum, employee) => {
+      return sum + toNumber(employee[field]);
+    }, 0);
+
+    if (field === 'itemsPicked') {
+      accumulator[field] = total;
+      return accumulator;
+    }
+
+    accumulator[field] = total / employees.length;
+    return accumulator;
+  }, {});
+};
 
 const getEmployees = async (req, res) => {
   try {
@@ -134,6 +188,7 @@ const getEmployeeMetrics = async (req, res) => {
         'firstName',
         'lastName',
         'pickRate',
+        'itemsPicked',
         'firstTimePickPercent',
         'preSubstitutionPercent',
         'postSubstitutionPercent',
@@ -167,11 +222,63 @@ const getEmployeeMetrics = async (req, res) => {
   }
 };
 
+const getMyAndStoreStats = async (req, res) => {
+  try {
+    if (req.userType !== 'employee') {
+      return res.status(403).json({ message: 'Only employees can access employee statistics' });
+    }
+
+    const currentEmployee = await Employee.findByPk(req.user.id, {
+      attributes: ['id', 'firstName', 'lastName', 'storeId', ...METRIC_FIELDS]
+    });
+
+    if (!currentEmployee) {
+      return res.status(404).json({ message: 'Employee not found' });
+    }
+
+    const storeEmployees = await Employee.findAll({
+      where: {
+        storeId: currentEmployee.storeId,
+        isActive: true
+      },
+      attributes: ['id', ...METRIC_FIELDS]
+    });
+
+    const myStats = mapEmployeeStats(currentEmployee);
+    const storeStats = getStoreAggregatedStats(storeEmployees);
+    const walkHistory = await getCompletedPickWalkHistory(currentEmployee.id);
+    const storeWalkHistory = await getCompletedPickWalkHistory(storeEmployees.map((employee) => employee.id));
+
+    myStats.pickRate = calculateAverageWalkPickRate(walkHistory);
+    storeStats.pickRate = calculateAverageWalkPickRate(storeWalkHistory);
+
+    res.json({
+      success: true,
+      user: {
+        id: currentEmployee.id,
+        firstName: currentEmployee.firstName,
+        lastName: currentEmployee.lastName,
+        storeId: currentEmployee.storeId,
+        stats: myStats,
+        walkHistory
+      },
+      store: {
+        employeeCount: storeEmployees.length,
+        stats: storeStats
+      }
+    });
+  } catch (error) {
+    console.error('Get my/store stats error:', error);
+    res.status(500).json({ message: 'Server error retrieving statistics' });
+  }
+};
+
 module.exports = {
   getEmployees,
   getEmployee,
   createEmployee,
   updateEmployee,
   deleteEmployee,
-  getEmployeeMetrics
+  getEmployeeMetrics,
+  getMyAndStoreStats
 };

@@ -1,3 +1,4 @@
+const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/db');
 const Employee = require('./Employee');
 const Customer = require('./Customer');
@@ -30,6 +31,7 @@ Cart.belongsTo(Store, { foreignKey: 'storeId', as: 'store' });
 Cart.hasMany(CartItem, { foreignKey: 'cartId', as: 'items' });
 CartItem.belongsTo(Cart, { foreignKey: 'cartId', as: 'cart' });
 CartItem.belongsTo(Item, { foreignKey: 'itemId', as: 'item' });
+CartItem.belongsTo(Item, { foreignKey: 'substitutionItemId', as: 'substitutionItem' });
 Aisle.belongsTo(Store, { foreignKey: 'storeId', as: 'store' });
 Aisle.hasMany(Location, { foreignKey: 'aisleId', as: 'locations' });
 Location.belongsTo(Store, { foreignKey: 'storeId', as: 'store' });
@@ -53,12 +55,216 @@ PickPath.belongsTo(Store, { foreignKey: 'storeId', as: 'store' });
 PickPath.belongsTo(Employee, { foreignKey: 'createdBy', as: 'creator' });
 Timeslot.belongsTo(Order, { foreignKey: 'orderNumber', targetKey: 'orderNumber', as: 'order' });
 Timeslot.belongsTo(OrderItem, { foreignKey: 'items', as: 'itemList' });
+
+const EMPLOYEE_METRIC_COLUMNS = {
+  pickRate: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: false,
+    defaultValue: 0.00
+  },
+  itemsPicked: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0
+  },
+  firstTimePickPercent: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: false,
+    defaultValue: 0.00
+  },
+  preSubstitutionPercent: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: false,
+    defaultValue: 0.00
+  },
+  postSubstitutionPercent: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: false,
+    defaultValue: 0.00
+  },
+  percentNotFound: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: false,
+    defaultValue: 0.00
+  },
+  onTimePercent: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: false,
+    defaultValue: 0.00
+  },
+  weightedEfficiency: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: false,
+    defaultValue: 0.00
+  }
+};
+
+const CART_ITEM_OPTION_COLUMNS = {
+  substitutionitemid: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'items',
+      key: 'id'
+    }
+  },
+  substitutionquantity: {
+    type: DataTypes.INTEGER,
+    allowNull: true
+  }
+};
+
+const ORDER_ITEM_OPTION_COLUMNS = {
+  notes: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  }
+};
+
+const ensureEmployeeMetricColumns = async () => {
+  const queryInterface = sequelize.getQueryInterface();
+  let employeeTable;
+
+  try {
+    employeeTable = await queryInterface.describeTable('employees');
+  } catch (error) {
+    if (error?.original?.code === '42501') {
+      console.warn(
+        'Skipping employee schema backfill due to insufficient DB permissions while inspecting employees table (code 42501).'
+      );
+      return;
+    }
+    throw error;
+  }
+
+  const missingColumns = Object.entries(EMPLOYEE_METRIC_COLUMNS).filter(
+    ([columnName]) => !employeeTable[columnName]
+  );
+
+  if (missingColumns.length === 0) {
+    return;
+  }
+
+  for (const [columnName, columnDefinition] of missingColumns) {
+    try {
+      await queryInterface.addColumn('employees', columnName, columnDefinition);
+    } catch (error) {
+      if (error?.original?.code === '42501') {
+        console.warn(
+          `Skipping employee schema backfill for column "${columnName}" due to insufficient DB permissions (code 42501).`
+        );
+        return;
+      }
+      throw error;
+    }
+  }
+
+  console.log(
+    `Added employee metric columns: ${missingColumns.map(([columnName]) => columnName).join(', ')}`
+  );
+};
+
+const ensureCartItemOptionColumns = async () => {
+  try {
+    const [existingColumnsRows] = await sequelize.query(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'cart_items'
+        AND column_name IN ('substitutionitemid', 'substitutionquantity');
+    `);
+
+    const existingColumns = new Set(existingColumnsRows.map((row) => row.column_name));
+    const needsSubstitutionItemId = !existingColumns.has('substitutionitemid');
+    const needsSubstitutionQuantity = !existingColumns.has('substitutionquantity');
+
+    if (!needsSubstitutionItemId && !needsSubstitutionQuantity) {
+      return;
+    }
+
+    if (needsSubstitutionItemId) {
+      await sequelize.query(
+        'ALTER TABLE "cart_items" ADD COLUMN IF NOT EXISTS substitutionitemid INTEGER;'
+      );
+    }
+
+    if (needsSubstitutionQuantity) {
+      await sequelize.query(
+        'ALTER TABLE "cart_items" ADD COLUMN IF NOT EXISTS substitutionquantity INTEGER;'
+      );
+    }
+    await sequelize.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conname = 'cart_items_substitutionitemid_fkey'
+        ) THEN
+          ALTER TABLE "cart_items"
+          ADD CONSTRAINT "cart_items_substitutionitemid_fkey"
+          FOREIGN KEY (substitutionitemid) REFERENCES "items"("id")
+          ON UPDATE CASCADE ON DELETE SET NULL;
+        END IF;
+      END
+      $$;
+    `);
+
+    console.log('Ensured cart_items option columns: substitutionItemId, substitutionQuantity');
+  } catch (error) {
+    if (error?.original?.code === '42501') {
+      console.warn(
+        'Skipping cart_items schema backfill due to insufficient DB permissions (code 42501).'
+      );
+      return;
+    }
+    throw error;
+  }
+};
+
+const ensureOrderItemOptionColumns = async () => {
+  try {
+    const [existingColumnsRows] = await sequelize.query(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'order_items'
+        AND column_name IN ('notes');
+    `);
+
+    const existingColumns = new Set(existingColumnsRows.map((row) => row.column_name));
+    const needsNotes = !existingColumns.has('notes');
+
+    if (!needsNotes) {
+      return;
+    }
+
+    await sequelize.query(
+      'ALTER TABLE "order_items" ADD COLUMN IF NOT EXISTS notes TEXT;'
+    );
+
+    console.log('Ensured order_items option columns: notes');
+  } catch (error) {
+    if (error?.original?.code === '42501') {
+      console.warn(
+        'Skipping order_items schema backfill due to insufficient DB permissions (code 42501).'
+      );
+      return;
+    }
+    throw error;
+  }
+};
+
 const syncDatabase = async (force = false) => {
   try {
     await sequelize.sync({ force });
+    await ensureEmployeeMetricColumns();
+    await ensureCartItemOptionColumns();
+    await ensureOrderItemOptionColumns();
     console.log('Database synchronized successfully');
   } catch (error) {
     console.error('Error synchronizing database:', error);
+    throw error;
   }
 };
 
@@ -77,5 +283,6 @@ module.exports = {
   Cart,
   CartItem,
   Timeslot,
+  ensureEmployeeMetricColumns,
   syncDatabase
 };

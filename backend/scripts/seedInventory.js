@@ -1,6 +1,48 @@
 const { Item, ItemLocation, Location, Aisle, Store } = require('../models');
 const { sequelize } = require('../config/db');
 
+const ITEM_IMAGE_TAGS_BY_UPC = {
+  '123456789012': 'banana,fruit',
+  '123456789013': 'red-apple,fruit',
+  '123456789014': 'broccoli,vegetable',
+  '123456789015': 'carrot,vegetable',
+  '123456789016': 'red-grapes,fruit',
+  '223456789012': 'bread,loaf',
+  '223456789013': 'chocolate-chip-cookies,dessert',
+  '223456789014': 'blueberry-muffin,bakery',
+  '323456789012': 'milk,carton',
+  '323456789013': 'cheddar-cheese,dairy',
+  '323456789014': 'greek-yogurt,dairy',
+  '323456789015': 'butter,dairy',
+  '423456789012': 'chicken-breast,meat',
+  '423456789013': 'ground-beef,meat',
+  '423456789014': 'salmon-fillet,fish',
+  '523456789012': 'frozen-peas,vegetable',
+  '523456789013': 'ice-cream,dessert',
+  '523456789014': 'frozen-pizza,pizza',
+  '623456789012': 'canned-tomatoes,tomato',
+  '623456789013': 'pasta-sauce,sauce',
+  '623456789014': 'canned-tuna,fish',
+  '723456789012': 'potato-chips,snack',
+  '723456789013': 'chocolate-bar,candy',
+  '723456789014': 'trail-mix,nuts',
+  '823456789012': 'orange-juice,juice',
+  '823456789013': 'soda,drink',
+  '823456789014': 'coffee,beans'
+};
+
+const buildItemImageUrl = ({ upc, name, id }) => {
+  const fallbackTags = (name || 'grocery item')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .trim()
+    .replace(/\s+/g, '-');
+
+  const tags = ITEM_IMAGE_TAGS_BY_UPC[upc] || `${fallbackTags},grocery-item`;
+  const lockSeed = String(upc || id || fallbackTags || 'item');
+  return `https://loremflickr.com/400/400/${tags}?lock=${encodeURIComponent(lockSeed)}`;
+};
+
 const seedInventory = async () => {
   try {
     console.log('Starting inventory seed...');
@@ -68,6 +110,7 @@ const seedInventory = async () => {
       { upc: '123456789013', name: 'Red Apples', category: 'Fruits', department: 'Produce', price: 1.29, temperature: 'ambient', commodity: 'ambient' },
       { upc: '123456789014', name: 'Broccoli Crowns', category: 'Vegetables', department: 'Produce', price: 2.49, temperature: 'ambient', commodity: 'ambient' },
       { upc: '123456789015', name: 'Carrots', category: 'Vegetables', department: 'Produce', price: 1.99, temperature: 'ambient', commodity: 'ambient' },
+      { upc: '123456789016', name: 'Red Grapes (per lb)', description: 'Sold by weight. Listed price is per pound.', category: 'Fruits', department: 'Produce', price: 2.99, weight: 1.00, temperature: 'ambient', commodity: 'ambient' },
 
       // Bakery
       { upc: '223456789012', name: 'Whole Wheat Bread', category: 'Bread', department: 'Bakery', price: 3.49, temperature: 'ambient', commodity: 'ambient' },
@@ -106,14 +149,37 @@ const seedInventory = async () => {
       { upc: '823456789014', name: 'Coffee', category: 'Coffee', department: 'Beverages', price: 8.99, temperature: 'ambient', commodity: 'ambient' }
     ];
 
+    const itemsDataWithImages = itemsData.map((itemData) => ({
+      ...itemData,
+      imageUrl: itemData.imageUrl || buildItemImageUrl(itemData)
+    }));
+
     const items = [];
-    for (const itemData of itemsData) {
+    for (const itemData of itemsDataWithImages) {
       let item = await Item.findOne({ where: { upc: itemData.upc } });
       if (!item) {
         item = await Item.create(itemData);
         console.log(`Created item: ${item.name}`);
+      } else {
+        const updatePayload = {};
+        if (item.imageUrl !== itemData.imageUrl) updatePayload.imageUrl = itemData.imageUrl;
+        if (!item.description && itemData.description) updatePayload.description = itemData.description;
+        if ((!item.weight || Number(item.weight) === 0) && itemData.weight) updatePayload.weight = itemData.weight;
+
+        if (Object.keys(updatePayload).length > 0) {
+          await item.update(updatePayload);
+        }
       }
       items.push(item);
+    }
+
+    // Ensure all inventory rows are mapped to an item-relevant image.
+    const allItems = await Item.findAll();
+    for (const item of allItems) {
+      const desiredImageUrl = buildItemImageUrl({ upc: item.upc, name: item.name, id: item.id });
+      if (item.imageUrl !== desiredImageUrl) {
+        await item.update({ imageUrl: desiredImageUrl });
+      }
     }
 
     // Create item locations (stock items in random locations)
