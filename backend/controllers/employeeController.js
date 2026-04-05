@@ -12,7 +12,8 @@ const METRIC_FIELDS = [
   'postSubstitutionPercent',
   'percentNotFound',
   'onTimePercent',
-  'weightedEfficiency'
+  'weightedEfficiency',
+  'totesStaged'
 ];
 
 const toNumber = (value) => {
@@ -44,7 +45,7 @@ const getStoreAggregatedStats = (employees) => {
       return sum + toNumber(employee[field]);
     }, 0);
 
-    if (field === 'itemsPicked') {
+    if (field === 'itemsPicked' || field === 'totesStaged') {
       accumulator[field] = total;
       return accumulator;
     }
@@ -194,7 +195,8 @@ const getEmployeeMetrics = async (req, res) => {
         'postSubstitutionPercent',
         'percentNotFound',
         'onTimePercent',
-        'weightedEfficiency'
+        'weightedEfficiency',
+        'totesStaged'
       ]
     });
 

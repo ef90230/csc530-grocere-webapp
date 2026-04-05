@@ -105,6 +105,13 @@ const Employee = sequelize.define('Employee', {
     validate: {
       min: 0
     }
+  },
+  totesStaged: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    validate: {
+      min: 0
+    }
   }
 }, {
   tableName: 'employees',

@@ -1,5 +1,5 @@
-const { Order, OrderItem, Customer, Store, Employee, Item, ItemLocation, PickPath, Location, Aisle } = require('../models');
-const { Op } = require('sequelize');
+const { Order, OrderItem, Customer, Store, Employee, Item, ItemLocation, PickPath, Location, Aisle, StagingAssignment } = require('../models');
+const { Op, fn, col } = require('sequelize');
 const {
   validateScheduleTime,
   getAvailableTimeSlots,
@@ -33,6 +33,18 @@ const parseStructuredOrderNotes = (notesValue) => {
   } catch {
     return null;
   }
+};
+
+const extractOrderCheckIn = (notesValue) => {
+  const parsedOrderNotes = parseStructuredOrderNotes(notesValue);
+  const checkIn = parsedOrderNotes?.checkIn;
+
+  return {
+    isCheckedIn: Boolean(checkIn?.isCheckedIn),
+    checkInTime: checkIn?.checkInTime || null,
+    parkingSpot: checkIn?.parkingSpot || null,
+    vehicleInfo: checkIn?.vehicleInfo || null
+  };
 };
 
 const toAisleNumberValue = (aisleNumber) => {
@@ -292,7 +304,7 @@ const getOrders = async (req, res) => {
         {
           model: Customer,
           as: 'customer',
-          attributes: ['id', 'customerId', 'firstName', 'lastName', 'phone', 'isCheckedIn']
+          attributes: ['id', 'customerId', 'firstName', 'lastName', 'phone', 'isCheckedIn', 'checkInTime', 'parkingSpot', 'vehicleInfo']
         },
         {
           model: Store,
@@ -326,10 +338,50 @@ const getOrders = async (req, res) => {
       order: [['scheduledPickupTime', 'ASC']]
     });
 
+    const orderIds = orders.map((order) => Number(order.id)).filter((id) => Number.isInteger(id));
+    let stagedCountByOrderId = new Map();
+
+    if (orderIds.length > 0) {
+      const stagedCounts = await StagingAssignment.findAll({
+        attributes: ['orderId', [fn('COUNT', col('id')), 'count']],
+        where: {
+          orderId: {
+            [Op.in]: orderIds
+          }
+        },
+        group: ['orderId'],
+        raw: true
+      });
+
+      stagedCountByOrderId = stagedCounts.reduce((map, row) => {
+        const key = Number(row.orderId);
+        if (!Number.isInteger(key)) {
+          return map;
+        }
+
+        const countValue = Number(row.count || 0);
+        map.set(key, Number.isFinite(countValue) ? countValue : 0);
+        return map;
+      }, new Map());
+    }
+
+    const ordersWithStagingCounts = orders.map((order) => {
+      const orderJson = order.toJSON();
+      const checkIn = extractOrderCheckIn(orderJson.notes);
+      return {
+        ...orderJson,
+        isCheckedIn: checkIn.isCheckedIn,
+        checkInTime: checkIn.checkInTime,
+        parkingSpot: checkIn.parkingSpot,
+        vehicleInfo: checkIn.vehicleInfo,
+        stagedToteCount: Number(stagedCountByOrderId.get(Number(order.id)) || 0)
+      };
+    });
+
     res.json({
       success: true,
-      count: orders.length,
-      orders
+      count: ordersWithStagingCounts.length,
+      orders: ordersWithStagingCounts
     });
   } catch (error) {
     console.error('Get orders error:', error);
@@ -387,9 +439,18 @@ const getOrder = async (req, res) => {
       return res.status(404).json({ message: 'Order not found' });
     }
 
+    const orderJson = order.toJSON();
+    const checkIn = extractOrderCheckIn(orderJson.notes);
+
     res.json({
       success: true,
-      order
+      order: {
+        ...orderJson,
+        isCheckedIn: checkIn.isCheckedIn,
+        checkInTime: checkIn.checkInTime,
+        parkingSpot: checkIn.parkingSpot,
+        vehicleInfo: checkIn.vehicleInfo
+      }
     });
   } catch (error) {
     console.error('Get order error:', error);

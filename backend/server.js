@@ -33,6 +33,7 @@ app.use('/api/aisles', require('./routes/aisles'));
 app.use('/api/cart', require('./routes/cart'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/pickpaths', require('./routes/pickPaths'));
+app.use('/api/staging-locations', require('./routes/stagingLocations'));
 
 app.get('/', (req, res) => {
   res.json({
@@ -47,7 +48,8 @@ app.get('/', (req, res) => {
       aisles: '/api/aisles',
       cart: '/api/cart',
       orders: '/api/orders',
-      pickPaths: '/api/pickpaths'
+      pickPaths: '/api/pickpaths',
+      stagingLocations: '/api/staging-locations'
     }
   });
 });

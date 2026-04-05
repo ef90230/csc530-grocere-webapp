@@ -335,7 +335,7 @@ const StatisticsPage = () => {
                         <section className="stats-section" aria-label="Staging">
                             <h2>Staging</h2>
                             <article className="metric-card metric-card--neutral metric-card--single">
-                                <div className="metric-card-value">0</div>
+                                <div className="metric-card-value">{Math.round(toNumber(activeStats.totesStaged))}</div>
                                 <p className="metric-card-label">Totes staged</p>
                             </article>
                         </section>

@@ -1,0 +1,25 @@
+.dispense-page {
+  min-height: 100vh;
+  background: #dadada;
+}
+
+.dispense-content {
+  padding: 0.75rem 0.7rem 5.6rem;
+}
+
+.dispense-placeholder-card {
+  border: 1px dashed #7f7f7f;
+  border-radius: 10px;
+  background: #efefef;
+  text-align: center;
+  padding: 1.25rem 0.8rem;
+}
+
+.dispense-placeholder-card h1 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.dispense-placeholder-card p {
+  margin: 0.45rem 0 0;
+}

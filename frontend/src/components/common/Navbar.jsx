@@ -6,7 +6,13 @@ const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const isActive = (path) => location.pathname === path;
+  const isActive = (path) => {
+    if (path === '/staging') {
+      return location.pathname.startsWith('/staging');
+    }
+
+    return location.pathname === path;
+  };
 
   return (
     <nav className="navbar">

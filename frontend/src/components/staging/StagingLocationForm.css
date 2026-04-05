@@ -1,0 +1,85 @@
+.staging-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 450;
+}
+
+.staging-modal-card {
+  width: min(460px, 100%);
+  border-radius: 12px;
+  border: 1px solid #333;
+  background: #f4f4f4;
+  padding: 0.9rem;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+}
+
+.staging-modal-card h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.staging-modal-form {
+  margin-top: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.staging-modal-form label {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.staging-modal-form input,
+.staging-modal-form select {
+  min-height: 40px;
+  border-radius: 8px;
+  border: 1px solid #858585;
+  background: #fff;
+  padding: 0 0.65rem;
+  font-size: 0.95rem;
+}
+
+.staging-modal-error {
+  margin: 0;
+  color: #7f1e1e;
+  font-weight: 700;
+}
+
+.staging-modal-actions {
+  margin-top: 0.3rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+
+.staging-modal-btn {
+  min-height: 38px;
+  border-radius: 8px;
+  border: 1px solid #444;
+  font-size: 0.9rem;
+  font-weight: 700;
+  padding: 0 0.9rem;
+  cursor: pointer;
+}
+
+.staging-modal-btn--ghost {
+  background: #ededed;
+  color: #111;
+}
+
+.staging-modal-btn--primary {
+  background: #1f58ba;
+  color: #fff;
+  border-color: #1d4b98;
+}
+
+.staging-modal-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}

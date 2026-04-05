@@ -1,0 +1,279 @@
+.parking-lot-page {
+  min-height: 100vh;
+  background: #d7d7d7;
+}
+
+.parking-lot-content {
+  padding: 0.6rem 0.6rem 5.5rem;
+}
+
+.parking-controls {
+  border: 1px solid #303030;
+  border-radius: 8px;
+  background: #dadada;
+  padding: 0.5rem;
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 0.35rem;
+  margin-bottom: 0.55rem;
+}
+
+.parking-control-btn {
+  min-height: 34px;
+  border-radius: 6px;
+  border: 1px solid #1f4f98;
+  background: #215cc0;
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.parking-control-btn:hover {
+  background: #1a4a9a;
+}
+
+.parking-sort-select {
+  border-radius: 6px;
+  border: 1px solid #606060;
+  background: #f4f4f4;
+  padding: 0 0.45rem;
+  font-weight: 700;
+}
+
+.parking-sort-select:hover {
+  background: #e8e8e8;
+}
+
+.parking-page-message {
+  margin: 0 0 0.55rem;
+  border: 1px dashed #8b8b8b;
+  border-radius: 8px;
+  background: #ececec;
+  text-align: center;
+  padding: 0.6rem;
+}
+
+.parking-page-message--error {
+  border-color: #b86969;
+  background: #ffe2e2;
+  color: #7a2323;
+}
+
+.parking-space-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.42rem;
+}
+
+.parking-space-card {
+  border: 1px solid #292929;
+  border-radius: 9px;
+  overflow: hidden;
+  background: #a6a6a6;
+}
+
+.parking-space-card--late {
+  border-color: #ca2f2f;
+}
+
+.parking-space-main {
+  width: 100%;
+  border: none;
+  text-align: left;
+  min-height: 82px;
+  background: transparent;
+  padding: 0.42rem 0.55rem;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.parking-space-main:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.parking-space-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+}
+
+.parking-space-customer {
+  font-size: 1.18rem;
+  font-weight: 900;
+  line-height: 1.05;
+}
+
+.parking-space-status-pill {
+  border-radius: 4px;
+  background: #5941a7;
+  color: #f9f6ff;
+  font-size: 0.63rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  padding: 0.1rem 0.42rem;
+  white-space: nowrap;
+}
+
+.parking-space-order-id {
+  margin: 0.12rem 0 0;
+  font-size: 1rem;
+}
+
+.parking-space-bottom-row {
+  margin-top: 0.3rem;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.parking-space-bottom-row span {
+  border-radius: 4px;
+  background: #f2f2f2;
+  font-size: 0.77rem;
+  font-weight: 800;
+  padding: 0.08rem 0.35rem;
+}
+
+.parking-space-wait {
+  background: #7ebf63 !important;
+  color: #173f11;
+}
+
+.parking-space-wait--late {
+  background: #de5252 !important;
+  color: #450f0f;
+}
+
+.parking-space-empty-label {
+  font-size: 1.25rem;
+  font-weight: 900;
+}
+
+.parking-space-number {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.28rem;
+  justify-self: end;
+}
+
+.parking-space-number-label {
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.parking-space-number-value {
+  font-size: 2.25rem;
+  line-height: 1;
+  font-weight: 900;
+}
+
+.parking-empty-state {
+  border: 1px dashed #888;
+  border-radius: 10px;
+  background: #ececec;
+  text-align: center;
+  padding: 1rem 0.75rem;
+}
+
+.parking-empty-state h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.parking-empty-state p {
+  margin: 0.35rem 0 0;
+}
+
+.parking-page-hint {
+  margin-top: 0.55rem;
+  border: 1px dashed #8f8f8f;
+  border-radius: 8px;
+  background: #ececec;
+  text-align: center;
+  padding: 0.7rem;
+}
+
+.parking-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.8rem;
+  z-index: 320;
+}
+
+.parking-modal-card {
+  width: min(420px, 100%);
+  border: 1px solid #434343;
+  border-radius: 9px;
+  background: #e5e5e5;
+  padding: 0.75rem;
+}
+
+.parking-modal-card h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.parking-modal-copy {
+  margin: 0.45rem 0 0;
+  line-height: 1.35;
+}
+
+.parking-modal-actions {
+  margin-top: 0.55rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
+.parking-modal-btn {
+  min-height: 34px;
+  border-radius: 6px;
+  border: 1px solid #474747;
+  padding: 0 0.7rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.parking-modal-btn--ghost {
+  background: #efefef;
+}
+
+.parking-modal-btn--ghost:hover {
+  background: #dfdfdf;
+}
+
+.parking-modal-btn--danger {
+  background: #ca2a2a;
+  border-color: #982020;
+  color: #fff;
+}
+
+.parking-modal-btn--danger:hover {
+  background: #ab2323;
+}
+
+@media (max-width: 640px) {
+  .parking-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .parking-space-main {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .parking-space-number {
+    justify-self: start;
+  }
+}

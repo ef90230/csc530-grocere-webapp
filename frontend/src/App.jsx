@@ -13,9 +13,12 @@ import StorefrontPage from './pages/StorefrontPage';
 import MapScreen from './pages/MapScreen';
 import OrderListPage from './pages/OrderListPage';
 import OrderSummary from './pages/OrderSummary';
+import ParkingLotPage from './pages/ParkingLotPage';
 import PickingPage from './pages/PickingPage';
+import DispensePage from './pages/DispensePage';
 import SignupPage from './pages/SignupPage';
 import StagingPage from './pages/StagingPage';
+import StagingLocationsPage from './pages/StagingLocationsPage';
 import StatisticsPage from './pages/StatisticsPage';
 
 const getAuthState = () => {
@@ -104,10 +107,34 @@ function App() {
                             }
                         />
                         <Route
+                            path="/dispense"
+                            element={
+                                <ProtectedRoute allowedRole="employee">
+                                    <DispensePage />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="/parking-lot"
+                            element={
+                                <ProtectedRoute allowedRole="employee">
+                                    <ParkingLotPage />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
                             path="/staging"
                             element={
                                 <ProtectedRoute allowedRole="employee">
                                     <StagingPage />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="/staging/locations"
+                            element={
+                                <ProtectedRoute allowedRole="employee">
+                                    <StagingLocationsPage />
                                 </ProtectedRoute>
                             }
                         />
