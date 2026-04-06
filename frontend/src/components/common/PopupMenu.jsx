@@ -9,9 +9,11 @@ const PopupMenu = ({
   onStoreMap,
   onParkingLot,
   onMyStats,
+  onStoreSettings,
   onLogout,
   showBackroomLocations = false,
-  showParkingLot = false
+  showParkingLot = false,
+  showStoreSettings = false
 }) => {
   return (
     <div className="popup-menu-overlay" onClick={onClose}>
@@ -66,6 +68,15 @@ const PopupMenu = ({
         >
           My Stats
         </button>
+        {showStoreSettings ? (
+          <button
+            type="button"
+            className="popup-action-button"
+            onClick={onStoreSettings}
+          >
+            Store Settings
+          </button>
+        ) : null}
         <button
           type="button"
           className="popup-action-button popup-logout-button"

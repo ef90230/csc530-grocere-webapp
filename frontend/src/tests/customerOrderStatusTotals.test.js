@@ -85,7 +85,25 @@ describe('customer order total calculations', () => {
     expect(calculateCurrentEstimatedOrderTotal(order)).toBe(10);
   });
 
-  test('maps backend ready_for_pickup alias to READY FOR PICKUP customer phase', () => {
+  test('maps backend ready_for_pickup alias to STAGING COMPLETE before timeslot', () => {
+    const order = {
+      status: 'ready_for_pickup',
+      items: [
+        {
+          quantity: 1,
+          pickedQuantity: 1,
+          status: 'found',
+          item: { price: 5, commodity: 'ambient' }
+        }
+      ],
+      scheduledPickupTime: '2026-04-05T10:30:00.000Z'
+    };
+
+    const phase = deriveCustomerOrderStatus(order, { now: '2026-04-05T10:00:00.000Z' });
+    expect(phase).toBe(CUSTOMER_ORDER_PHASE.STAGING_COMPLETE);
+  });
+
+  test('maps backend ready_for_pickup alias to READY FOR PICKUP at or after timeslot', () => {
     const order = {
       status: 'ready_for_pickup',
       items: [
@@ -99,7 +117,7 @@ describe('customer order total calculations', () => {
       scheduledPickupTime: '2026-04-05T10:00:00.000Z'
     };
 
-    const phase = deriveCustomerOrderStatus(order, { now: '2026-04-05T10:00:00.000Z' });
+    const phase = deriveCustomerOrderStatus(order, { now: '2026-04-05T10:15:00.000Z' });
     expect(phase).toBe(CUSTOMER_ORDER_PHASE.READY_FOR_PICKUP);
   });
 

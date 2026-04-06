@@ -136,7 +136,7 @@ const PickingPage = () => {
                 const walkPayload = await walkResponse.json();
                 const resolvedQueue = Array.isArray(walkPayload?.queue) ? walkPayload.queue : [];
                 setQueue(resolvedQueue);
-                setWalkStartedAt(new Date().toISOString());
+                setWalkStartedAt(walkPayload?.walkStartedAt || new Date().toISOString());
 
                 if (aislesResponse.ok) {
                     const aislesPayload = await aislesResponse.json().catch(() => ({}));
@@ -202,7 +202,39 @@ const PickingPage = () => {
         setIsCameraOpen(false);
     };
 
+    const reportWalkMistake = async (entry, quantity, reason = 'error') => {
+        const token = window.localStorage.getItem('authToken');
+        const mistakeQty = Number(quantity);
+
+        if (!token || !entry?.orderId || !entry?.orderItemId || !Number.isInteger(mistakeQty) || mistakeQty < 1) {
+            return;
+        }
+
+        try {
+            await fetch(`${API_BASE}/api/orders/picking/walk/mistake`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    orderId: entry.orderId,
+                    orderItemId: entry.orderItemId,
+                    quantity: mistakeQty,
+                    reason
+                })
+            });
+        } catch {
+            // Ignore reporting failures so picking flow is not blocked.
+        }
+    };
+
     const skipCurrentItem = () => {
+        const activeEntry = substituteMode?.originalEntry || queue[0];
+        if (activeEntry) {
+            reportWalkMistake(activeEntry, 1, 'skip');
+        }
+
         if (substituteMode) {
             // In substitute mode: exit substitute view, move original item to back of queue
             setSubstituteMode(null);
@@ -270,6 +302,7 @@ const PickingPage = () => {
         }
 
         if (normalizeUpc(trimmedUpc) !== normalizeUpc(expectedUpc)) {
+            await reportWalkMistake(currentItem, Math.max(1, parsedQty), 'error');
             if (showDialogErrors) {
                 setIsPickDialogOpen(false);
             }
@@ -317,6 +350,7 @@ const PickingPage = () => {
             if (!response.ok) {
                 const payload = await response.json().catch(() => ({}));
                 const message = payload.message || 'Server error recording pick.';
+                await reportWalkMistake(currentItem, Math.max(1, parsedQty), 'error');
                 if (showDialogErrors) {
                     setPickDialogError(message);
                 } else {
@@ -368,6 +402,7 @@ const PickingPage = () => {
             return true;
         } catch (err) {
             console.error('Record pick failed', err);
+            await reportWalkMistake(currentItem, Math.max(1, parsedQty), 'error');
             if (showDialogErrors) {
                 setPickDialogError('Network error. Please try again.');
             } else {
@@ -469,6 +504,7 @@ const PickingPage = () => {
                             if (normalizedScanned === normalizedExpected) {
                                 await handleCameraMatch();
                             } else {
+                                await reportWalkMistake(currentItem, 1, 'error');
                                 closeCameraModal();
                                 setIsPickUpcMismatch(true);
                             }

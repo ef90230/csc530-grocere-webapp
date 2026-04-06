@@ -10,6 +10,7 @@ const {
   Customer,
   Employee
 } = require('../models');
+const { applyTotesDelta } = require('../utils/employeeTotesHistoryStore');
 
 const ALLOWED_ITEM_TYPES = ['ambient', 'chilled', 'frozen', 'hot', 'oversized'];
 const INACTIVE_ORDER_STATUSES = ['dispensing', 'completed', 'cancelled'];
@@ -67,6 +68,7 @@ const updateEmployeeTotesStaged = async (employeeId, storeId, delta, transaction
 
   const nextValue = Math.max(0, Number(employee.totesStaged || 0) + delta);
   await employee.update({ totesStaged: nextValue }, { transaction });
+  applyTotesDelta(resolvedEmployeeId, delta);
 };
 
 const getActiveAssignmentRows = async (storeId, extraWhere = {}) => {

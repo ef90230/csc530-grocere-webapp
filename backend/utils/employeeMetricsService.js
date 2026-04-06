@@ -1,5 +1,10 @@
 const { Employee, Item, Order, OrderItem } = require('../models');
 const { Op } = require('sequelize');
+const {
+  getWalkSummariesForEmployee,
+  makeWalkKey,
+  getWalkFtprByKey
+} = require('./walkPerformanceStore');
 
 const COMMODITY_DISPLAY_NAMES = {
   ambient: 'Ambient Regular',
@@ -30,6 +35,93 @@ const getWalkDurationHours = (startedAt, endedAt) => {
 
   const elapsedMs = Math.max(0, endTime.getTime() - startTime.getTime());
   return elapsedMs / (1000 * 60 * 60);
+};
+
+const getWalkCountLookupKey = ({ employeeId, startedAt, commodity }) => {
+  const normalizedEmployeeId = Number(employeeId);
+  const startedDate = new Date(startedAt);
+  const normalizedCommodity = String(commodity || '').trim().toLowerCase();
+
+  if (!Number.isInteger(normalizedEmployeeId) || Number.isNaN(startedDate.getTime()) || !normalizedCommodity) {
+    return '';
+  }
+
+  return `${normalizedEmployeeId}::${startedDate.toISOString()}::${normalizedCommodity}`;
+};
+
+const buildOrderCountLookup = async (walkSummaries) => {
+  const unresolvedSummaries = (Array.isArray(walkSummaries) ? walkSummaries : [])
+    .filter((summary) => Math.round(toNumber(summary?.orderCount)) <= 0)
+    .filter((summary) => summary?.employeeId && summary?.startedAt && summary?.commodity);
+
+  if (unresolvedSummaries.length === 0) {
+    return new Map();
+  }
+
+  const targetEmployeeIds = Array.from(new Set(
+    unresolvedSummaries
+      .map((summary) => Number(summary.employeeId))
+      .filter((employeeId) => Number.isInteger(employeeId))
+  ));
+
+  if (targetEmployeeIds.length === 0) {
+    return new Map();
+  }
+
+  const orders = await Order.findAll({
+    where: {
+      assignedPickerId: targetEmployeeIds.length === 1
+        ? targetEmployeeIds[0]
+        : { [Op.in]: targetEmployeeIds },
+      pickingStartTime: { [Op.ne]: null }
+    },
+    attributes: ['id', 'assignedPickerId', 'pickingStartTime'],
+    include: [
+      {
+        model: OrderItem,
+        as: 'items',
+        required: true,
+        attributes: ['id'],
+        include: [
+          {
+            model: Item,
+            as: 'item',
+            required: true,
+            attributes: ['commodity']
+          }
+        ]
+      }
+    ]
+  });
+
+  const lookup = new Map();
+
+  orders.forEach((order) => {
+    const startedAt = order?.pickingStartTime;
+    const employeeId = Number(order?.assignedPickerId);
+    if (!startedAt || !Number.isInteger(employeeId)) {
+      return;
+    }
+
+    const commoditySet = new Set(
+      (order.items || [])
+        .map((row) => String(row?.item?.commodity || '').trim().toLowerCase())
+        .filter(Boolean)
+    );
+
+    commoditySet.forEach((commodity) => {
+      const key = getWalkCountLookupKey({ employeeId, startedAt, commodity });
+      if (!key) {
+        return;
+      }
+
+      const orderIds = lookup.get(key) || new Set();
+      orderIds.add(Number(order.id));
+      lookup.set(key, orderIds);
+    });
+  });
+
+  return new Map(Array.from(lookup.entries()).map(([key, valueSet]) => [key, valueSet.size]));
 };
 
 const buildWalkHistory = (orders) => {
@@ -64,6 +156,7 @@ const buildWalkHistory = (orders) => {
     commodityTotals.forEach((totals, commodity) => {
       const walkKey = `${new Date(startedAt).toISOString()}::${commodity}`;
       const existingWalk = walkMap.get(walkKey) || {
+        employeeId: order?.assignedPickerId,
         commodity,
         commodityLabel: COMMODITY_DISPLAY_NAMES[commodity] || commodity,
         startedAt,
@@ -89,6 +182,12 @@ const buildWalkHistory = (orders) => {
     .map((walk) => {
       const durationHours = getWalkDurationHours(walk.startedAt, walk.endedAt);
       const pickRate = durationHours > 0 ? walk.itemsPicked / durationHours : 0;
+      const walkKey = makeWalkKey({
+        employeeId: walk.employeeId,
+        startedAt: walk.startedAt,
+        commodity: walk.commodity
+      });
+      const firstTimePickRate = walkKey ? getWalkFtprByKey(walkKey) : 0;
 
       return {
         commodity: walk.commodity,
@@ -98,10 +197,43 @@ const buildWalkHistory = (orders) => {
         initialTotal: walk.initialTotal,
         itemsPicked: walk.itemsPicked,
         orderCount: walk.orderCount,
-        pickRate: Number(pickRate.toFixed(2))
+        pickRate: Number(pickRate.toFixed(2)),
+        firstTimePickRate: Number(firstTimePickRate.toFixed(2))
       };
     })
     .sort((left, right) => new Date(right.startedAt) - new Date(left.startedAt));
+};
+
+const mapSummaryToWalkHistory = (walkSummary, orderCountLookup = new Map()) => {
+  const startedAt = walkSummary?.startedAt;
+  const endedAt = walkSummary?.endedAt;
+  const totalQuantity = Math.max(0, toNumber(walkSummary?.totalQuantity));
+  const pickedQuantity = Math.max(0, toNumber(walkSummary?.pickedQuantity));
+  const durationHours = getWalkDurationHours(startedAt, endedAt || startedAt);
+  const pickRate = durationHours > 0 ? pickedQuantity / durationHours : 0;
+  const commodity = String(walkSummary?.commodity || '').trim().toLowerCase();
+  const summaryOrderCount = Math.max(0, Math.round(toNumber(walkSummary?.orderCount)));
+  const lookupKey = getWalkCountLookupKey({
+    employeeId: walkSummary?.employeeId,
+    startedAt,
+    commodity
+  });
+  const lookupOrderCount = lookupKey ? Math.max(0, Math.round(toNumber(orderCountLookup.get(lookupKey)))) : 0;
+  const orderCount = summaryOrderCount > 0
+    ? summaryOrderCount
+    : (lookupOrderCount > 0 ? lookupOrderCount : (totalQuantity > 0 ? 1 : 0));
+
+  return {
+    commodity,
+    commodityLabel: COMMODITY_DISPLAY_NAMES[commodity] || commodity || 'Commodity',
+    startedAt,
+    endedAt,
+    initialTotal: totalQuantity,
+    itemsPicked: pickedQuantity,
+    orderCount,
+    pickRate: Number(pickRate.toFixed(2)),
+    firstTimePickRate: Number(toNumber(walkSummary?.firstTimePickRate).toFixed(2))
+  };
 };
 
 const getCompletedPickWalkHistory = async (employeeIds) => {
@@ -111,6 +243,22 @@ const getCompletedPickWalkHistory = async (employeeIds) => {
 
   if (normalizedEmployeeIds.length === 0) {
     return [];
+  }
+
+  const summaries = normalizedEmployeeIds
+    .flatMap((employeeId) => getWalkSummariesForEmployee(employeeId, { closedOnly: true })
+      .map((summary) => ({
+        ...summary,
+        employeeId
+      })))
+    .filter((summary) => summary?.startedAt);
+
+  if (summaries.length > 0) {
+    const orderCountLookup = await buildOrderCountLookup(summaries);
+
+    return summaries
+      .map((summary) => mapSummaryToWalkHistory(summary, orderCountLookup))
+      .sort((left, right) => new Date(right.startedAt) - new Date(left.startedAt));
   }
 
   const where = {

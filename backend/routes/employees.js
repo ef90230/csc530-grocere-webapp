@@ -7,7 +7,9 @@ const {
   updateEmployee,
   deleteEmployee,
   getEmployeeMetrics,
-  getMyAndStoreStats
+  getMyAndStoreStats,
+  getStoreSettings,
+  updateStoreSettings
 } = require('../controllers/employeeController');
 const { protect, restrictTo } = require('../middleware/auth');
 const { employeeRegistrationValidation, handleValidationErrors } = require('../middleware/validation');
@@ -25,6 +27,8 @@ router.post(
 );
 
 router.get('/stats/summary', getMyAndStoreStats);
+router.get('/store-settings', getStoreSettings);
+router.put('/store-settings', updateStoreSettings);
 
 router.get('/:id', getEmployee);
 

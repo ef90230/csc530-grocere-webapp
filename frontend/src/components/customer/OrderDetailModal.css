@@ -279,6 +279,11 @@
   color: #8d1111;
 }
 
+.order-detail-item__status--canceled {
+  background: #efefef;
+  color: #545454;
+}
+
 .order-detail-item__pricing {
   display: flex;
   justify-content: space-between;

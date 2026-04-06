@@ -1,5 +1,10 @@
-const { Order } = require('../models');
+const { Order, Store } = require('../models');
 const { Op } = require('sequelize');
+const {
+  normalizeStoreSettings,
+  getStoreSettingsFromStore,
+  getTimeslotCapacityForDate
+} = require('./storeSettings');
 
 /**
  * Scheduling constraints:
@@ -10,7 +15,7 @@ const { Op } = require('sequelize');
  * 5. Schedules purged 48 hours after midnight of that day
  */
 
-const MAX_ORDERS_PER_HOUR = 20;
+const DEFAULT_MAX_ORDERS_PER_HOUR = 20;
 
 const normalizeTimezoneOffset = (timezoneOffsetMinutes = 0) => {
   const parsedOffset = Number(timezoneOffsetMinutes);
@@ -30,6 +35,18 @@ const fromClientTimezoneParts = (year, monthIndex, day, hour, minute, second, mi
 const parseClientDateString = (dateString) => {
   const [year, month, day] = String(dateString).split('-').map(Number);
   return { year, monthIndex: month - 1, day };
+};
+
+const getStoreSchedulingSettings = async (storeId) => {
+  const store = await Store.findByPk(storeId, {
+    attributes: ['id', 'backroomDoorLocation']
+  });
+
+  if (!store) {
+    return normalizeStoreSettings(null);
+  }
+
+  return getStoreSettingsFromStore(store);
 };
 
 /**
@@ -84,6 +101,7 @@ const getOrderCountForHour = async (storeId, hourStart, hourEnd) => {
  */
 const validateScheduleTime = async (scheduledTime, storeId, nowTime = new Date(), timezoneOffsetMinutes = 0) => {
   const errors = [];
+  const storeSettings = await getStoreSchedulingSettings(storeId);
   const clientScheduledTime = toClientTimezoneDate(scheduledTime, timezoneOffsetMinutes);
   const clientNowTime = toClientTimezoneDate(nowTime, timezoneOffsetMinutes);
 
@@ -119,7 +137,8 @@ const validateScheduleTime = async (scheduledTime, storeId, nowTime = new Date()
   const hourEnd = new Date(hourStart.getTime() + 60 * 60 * 1000);
 
   const orderCountForHour = await getOrderCountForHour(storeId, hourStart, hourEnd);
-  if (orderCountForHour >= MAX_ORDERS_PER_HOUR) {
+  const hourCapacity = getTimeslotCapacityForDate(storeSettings, hourStart) || DEFAULT_MAX_ORDERS_PER_HOUR;
+  if (orderCountForHour >= hourCapacity) {
     errors.push('Scheduling capacity exceeded for that hour');
   }
 
@@ -135,6 +154,7 @@ const validateScheduleTime = async (scheduledTime, storeId, nowTime = new Date()
  */
 const getAvailableTimeSlots = async (storeId, startDate, endDate, nowTime = new Date(), timezoneOffsetMinutes = 0) => {
   const slots = [];
+  const storeSettings = await getStoreSchedulingSettings(storeId);
 
   const startParts = typeof startDate === 'string'
     ? parseClientDateString(startDate)
@@ -191,14 +211,15 @@ const getAvailableTimeSlots = async (storeId, startDate, endDate, nowTime = new 
       const hourEnd = new Date(hourStart.getTime() + 60 * 60 * 1000);
 
       const orderCount = await getOrderCountForHour(storeId, hourStart, hourEnd);
-      const isAvailable = clientHourStart >= threeHoursFromNow && orderCount < MAX_ORDERS_PER_HOUR;
+      const slotCapacity = getTimeslotCapacityForDate(storeSettings, hourStart) || DEFAULT_MAX_ORDERS_PER_HOUR;
+      const isAvailable = clientHourStart >= threeHoursFromNow && orderCount < slotCapacity;
 
       slots.push({
         time: new Date(hourStart),
         hour,
         date: `${current.getUTCFullYear()}-${String(current.getUTCMonth() + 1).padStart(2, '0')}-${String(current.getUTCDate()).padStart(2, '0')}`,
         ordersScheduled: orderCount,
-        capacity: MAX_ORDERS_PER_HOUR,
+        capacity: slotCapacity,
         isAvailable
       });
     }
@@ -260,6 +281,7 @@ const purgeOldSchedules = async () => {
  * Get next available slot for a given store
  */
 const getNextAvailableSlot = async (storeId, nowTime = new Date(), timezoneOffsetMinutes = 0) => {
+  const storeSettings = await getStoreSchedulingSettings(storeId);
   const clientNowTime = toClientTimezoneDate(nowTime, timezoneOffsetMinutes);
   const threeHoursFromNow = new Date(clientNowTime.getTime() + 3 * 60 * 60 * 1000);
 
@@ -319,12 +341,13 @@ const getNextAvailableSlot = async (storeId, nowTime = new Date(), timezoneOffse
     const hourEnd = new Date(hourStart.getTime() + 60 * 60 * 1000);
 
     const orderCount = await getOrderCountForHour(storeId, hourStart, hourEnd);
-    if (orderCount < 20) {
+    const slotCapacity = getTimeslotCapacityForDate(storeSettings, hourStart) || DEFAULT_MAX_ORDERS_PER_HOUR;
+    if (orderCount < slotCapacity) {
       return {
         time: new Date(hourStart),
         hour: clientHourStart.getUTCHours(),
         ordersScheduled: orderCount,
-        capacity: 20
+        capacity: slotCapacity
       };
     }
 

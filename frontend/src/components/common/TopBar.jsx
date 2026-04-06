@@ -110,9 +110,11 @@ const TopBar = ({
           onStoreMap={() => handleNavigate('/map')}
           onParkingLot={() => handleNavigate('/parking-lot')}
           onMyStats={() => handleNavigate('/stats')}
+          onStoreSettings={() => handleNavigate('/store-settings')}
           onLogout={handleLogout}
           showBackroomLocations={isEmployee}
           showParkingLot={isEmployee}
+          showStoreSettings={isEmployee}
         />
       )}
     </>

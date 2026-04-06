@@ -20,6 +20,7 @@ import SignupPage from './pages/SignupPage';
 import StagingPage from './pages/StagingPage';
 import StagingLocationsPage from './pages/StagingLocationsPage';
 import StatisticsPage from './pages/StatisticsPage';
+import StoreSettingsPage from './pages/StoreSettingsPage';
 
 const getAuthState = () => {
     const token = localStorage.getItem('authToken');
@@ -143,6 +144,14 @@ function App() {
                             element={
                                 <ProtectedRoute allowedRole="employee">
                                     <StatisticsPage />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="/store-settings"
+                            element={
+                                <ProtectedRoute allowedRole="employee">
+                                    <StoreSettingsPage />
                                 </ProtectedRoute>
                             }
                         />

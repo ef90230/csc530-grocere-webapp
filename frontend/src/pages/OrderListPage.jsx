@@ -21,6 +21,7 @@ const ORDER_PHASE = {
     CANCELLED: 'cancelled',
     DISPENSING_IN_PROGRESS: 'dispensing_in_progress',
     READY_FOR_PICKUP: 'ready_for_pickup',
+    STAGING_COMPLETE: 'staging_complete',
     STAGING_IN_PROGRESS: 'staging_in_progress',
     PICKING_COMPLETE: 'picking_complete',
     PICKING_IN_PROGRESS: 'picking_in_progress',
@@ -33,6 +34,7 @@ const STATUS_LABELS = {
     [ORDER_PHASE.PICKING_NOT_STARTED]: 'PICKING NOT STARTED',
     [ORDER_PHASE.PICKING_IN_PROGRESS]: 'PICKING IN PROGRESS',
     [ORDER_PHASE.STAGING_IN_PROGRESS]: 'STAGING IN PROGRESS',
+    [ORDER_PHASE.STAGING_COMPLETE]: 'STAGING COMPLETE',
     [ORDER_PHASE.READY_FOR_PICKUP]: 'READY FOR PICKUP',
     [ORDER_PHASE.DISPENSING_IN_PROGRESS]: 'DISPENSING IN PROGRESS',
     [ORDER_PHASE.PICKING_COMPLETE]: 'PICKING COMPLETE',
@@ -43,11 +45,12 @@ const STATUS_SORT_WEIGHT = {
     [ORDER_PHASE.CANCELLED]: 0,
     [ORDER_PHASE.DISPENSING_IN_PROGRESS]: 1,
     [ORDER_PHASE.READY_FOR_PICKUP]: 2,
-    [ORDER_PHASE.STAGING_IN_PROGRESS]: 3,
-    [ORDER_PHASE.PICKING_COMPLETE]: 4,
-    [ORDER_PHASE.PICKING_IN_PROGRESS]: 5,
-    [ORDER_PHASE.PICKING_NOT_STARTED]: 6,
-    [ORDER_PHASE.COMPLETED]: 7
+    [ORDER_PHASE.STAGING_COMPLETE]: 3,
+    [ORDER_PHASE.STAGING_IN_PROGRESS]: 4,
+    [ORDER_PHASE.PICKING_COMPLETE]: 5,
+    [ORDER_PHASE.PICKING_IN_PROGRESS]: 6,
+    [ORDER_PHASE.PICKING_NOT_STARTED]: 7,
+    [ORDER_PHASE.COMPLETED]: 8
 };
 
 const toNumber = (value) => {
@@ -111,6 +114,12 @@ const getOrderIdSortValue = (order) => {
 
 const deriveOrderPhase = (order, stagedToteCountByOrderId) => {
     const status = String(order.status || '').toLowerCase();
+    const scheduledPickupTime = order?.scheduledPickupTime ? new Date(order.scheduledPickupTime) : null;
+    const hasReachedTimeslot = Boolean(
+        scheduledPickupTime
+        && !Number.isNaN(scheduledPickupTime.getTime())
+        && new Date() >= scheduledPickupTime
+    );
 
     if (status === 'cancelled') {
         return ORDER_PHASE.CANCELLED;
@@ -146,9 +155,11 @@ const deriveOrderPhase = (order, stagedToteCountByOrderId) => {
     const totalTotes = commoditySet.size;
     const stagedTotes = toNumber(stagedToteCountByOrderId.get(order.id));
     const allTotesStaged = totalTotes > 0 && stagedTotes >= totalTotes;
+    const isExplicitStagedStatus = status === 'staged' || status === 'staging_complete' || status === 'ready' || status === 'ready_for_pickup';
+    const isFullyStaged = allTotesStaged || isExplicitStagedStatus;
 
-    if (status === 'ready' || allTotesStaged) {
-        return ORDER_PHASE.READY_FOR_PICKUP;
+    if (isFullyStaged) {
+        return hasReachedTimeslot ? ORDER_PHASE.READY_FOR_PICKUP : ORDER_PHASE.STAGING_COMPLETE;
     }
 
     if (status === 'staging' || status === 'staged') {
@@ -169,6 +180,8 @@ const deriveOrderPhase = (order, stagedToteCountByOrderId) => {
 
     return ORDER_PHASE.PICKING_NOT_STARTED;
 };
+
+const isCardInteractive = (order) => order?.phase !== ORDER_PHASE.COMPLETED;
 
 const OrderListPage = () => {
     const navigate = useNavigate();
@@ -640,8 +653,12 @@ const OrderListPage = () => {
             return 'STAGING INFO';
         }
 
-        if (order.phase === ORDER_PHASE.READY_FOR_PICKUP || order.phase === ORDER_PHASE.DISPENSING_IN_PROGRESS) {
-            return 'SPACE';
+        if (order.phase === ORDER_PHASE.READY_FOR_PICKUP) {
+            return 'CHECK IN';
+        }
+
+        if (order.phase === ORDER_PHASE.DISPENSING_IN_PROGRESS) {
+            return 'PREPARE THE ORDER';
         }
 
         return 'OPTIONS';
@@ -684,10 +701,18 @@ const OrderListPage = () => {
                                 key={order.id}
                                 id={`order-card-${order.id}`}
                                 className={`order-card order-card--${order.phase}${order.isPastThreshold ? ' order-card--threshold' : ''}${highlightedOrderId === order.id ? ' order-card--focus' : ''}`}
-                                onClick={() => openOrderOptions(order)}
+                                onClick={() => {
+                                    if (!isCardInteractive(order)) {
+                                        return;
+                                    }
+                                    openOrderOptions(order);
+                                }}
                                 role="button"
-                                tabIndex={0}
+                                tabIndex={isCardInteractive(order) ? 0 : -1}
                                 onKeyDown={(event) => {
+                                    if (!isCardInteractive(order)) {
+                                        return;
+                                    }
                                     if (event.key === 'Enter' || event.key === ' ') {
                                         event.preventDefault();
                                         openOrderOptions(order);
@@ -719,18 +744,16 @@ const OrderListPage = () => {
                                         ) : null}
                                     </div>
 
-                                    <button
-                                        type="button"
-                                        className={`order-shortcut-btn${order.phase === ORDER_PHASE.READY_FOR_PICKUP || order.phase === ORDER_PHASE.DISPENSING_IN_PROGRESS ? ' order-shortcut-btn--space' : ''}`}
-                                        onClick={(event) => handleShortcutClick(event, order)}
-                                    >
-                                        <span>{getShortcutLabel(order)}</span>
-                                        {(order.phase === ORDER_PHASE.READY_FOR_PICKUP || order.phase === ORDER_PHASE.DISPENSING_IN_PROGRESS) ? (
-                                            <span className="order-space-circle">{order.parkingSpot || '?'}</span>
-                                        ) : (
+                                    {order.phase !== ORDER_PHASE.COMPLETED ? (
+                                        <button
+                                            type="button"
+                                            className="order-shortcut-btn"
+                                            onClick={(event) => handleShortcutClick(event, order)}
+                                        >
+                                            <span>{getShortcutLabel(order)}</span>
                                             <span className="order-shortcut-arrow">›</span>
-                                        )}
-                                    </button>
+                                        </button>
+                                    ) : null}
                                 </div>
                             </article>
                         ))}

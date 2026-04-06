@@ -116,6 +116,11 @@
   color: #fff;
 }
 
+.order-card-status-pill--staging_complete {
+  background: #5a87cf;
+  color: #eef5ff;
+}
+
 .order-card-status-pill--picking_complete {
   background: #7cbf6b;
   color: #183f11;

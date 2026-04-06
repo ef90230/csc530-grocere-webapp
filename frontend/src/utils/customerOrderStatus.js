@@ -147,6 +147,8 @@ export const deriveCustomerOrderStatus = (order, options = {}) => {
   const isPickingCompleteStatus = ['picked', 'picking_complete'].includes(backendStatus);
   const isPickingInProgressStatus = ['picking', 'picking_in_progress'].includes(backendStatus);
   const now = options.now ? new Date(options.now) : new Date();
+  const scheduledPickupTime = order?.scheduledPickupTime ? new Date(order.scheduledPickupTime) : null;
+  const hasReachedTimeslot = Boolean(scheduledPickupTime && !Number.isNaN(scheduledPickupTime.getTime()) && now >= scheduledPickupTime);
   const stagedToteCountByOrderId = options.stagedToteCountByOrderId;
   const totalTotes = getOrderToteCount(order);
   const stagedTotesFromOrder = toNumber(order?.stagedToteCount);
@@ -177,11 +179,8 @@ export const deriveCustomerOrderStatus = (order, options = {}) => {
   }
 
   if (isReadyStatus) {
-    return CUSTOMER_ORDER_PHASE.READY_FOR_PICKUP;
+    return hasReachedTimeslot ? CUSTOMER_ORDER_PHASE.READY_FOR_PICKUP : CUSTOMER_ORDER_PHASE.STAGING_COMPLETE;
   }
-
-  const scheduledPickupTime = order?.scheduledPickupTime ? new Date(order.scheduledPickupTime) : null;
-  const hasReachedTimeslot = Boolean(scheduledPickupTime && !Number.isNaN(scheduledPickupTime.getTime()) && now >= scheduledPickupTime);
 
   const orderItems = Array.isArray(order?.items) ? order.items : [];
   const lineItemStates = orderItems.map(getLineItemState);

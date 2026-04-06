@@ -19,10 +19,35 @@ const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 const formatCurrency = (value) => `$${Number(value || 0).toFixed(2)}`;
 
-const getItemStatus = (orderItem) => {
+const getCanceledLabel = (canceledQuantity, orderedQuantity) => {
+  const canceled = Math.max(0, Number(canceledQuantity || 0));
+  const ordered = Math.max(0, Number(orderedQuantity || 0));
+
+  if (canceled <= 0) {
+    return '';
+  }
+
+  if (ordered > 0 && canceled >= ordered) {
+    return 'Canceled';
+  }
+
+  return `${canceled} of ${ordered} Canceled`;
+};
+
+const getItemStatus = (orderItem, options = {}) => {
   const orderedQuantity = Number(orderItem?.quantity || 0);
   const pickedQuantity = Math.max(0, Number(orderItem?.pickedQuantity || 0));
   const normalizedStatus = String(orderItem?.status || '').toLowerCase();
+  const isOrderComplete = Boolean(options?.isOrderComplete);
+  const canceledQuantity = Math.max(0, orderedQuantity - pickedQuantity);
+
+  if (normalizedStatus === 'out_of_stock') {
+    return { label: 'Not Found', kind: 'not-found' };
+  }
+
+  if (isOrderComplete && canceledQuantity > 0 && normalizedStatus !== 'out_of_stock') {
+    return { label: getCanceledLabel(canceledQuantity, orderedQuantity), kind: 'canceled' };
+  }
 
   if (normalizedStatus === 'found' || pickedQuantity >= orderedQuantity) {
     return { label: 'Picked', kind: 'picked' };
@@ -43,8 +68,16 @@ const getItemStatus = (orderItem) => {
   return { label: 'Not Yet Picked', kind: 'pending' };
 };
 
-const getSubstituteStatus = (orderItem) => {
+const getSubstituteStatus = (orderItem, options = {}) => {
+  const orderedQuantity = Number(orderItem?.quantity || 0);
+  const pickedQuantity = Math.max(0, Number(orderItem?.pickedQuantity || 0));
   const normalizedStatus = String(orderItem?.status || '').toLowerCase();
+  const isOrderComplete = Boolean(options?.isOrderComplete);
+  const canceledQuantity = Math.max(0, orderedQuantity - pickedQuantity);
+
+  if (isOrderComplete && canceledQuantity > 0) {
+    return { label: getCanceledLabel(canceledQuantity, orderedQuantity), kind: 'canceled' };
+  }
 
   if (normalizedStatus === 'substituted') {
     return { label: 'Picked', kind: 'picked' };
@@ -73,14 +106,15 @@ const OrderDetailModal = ({ order, onClose, onOrderUpdated }) => {
   }, [order]);
 
   const customerOrderPhase = deriveCustomerOrderStatus(order);
+  const isOrderComplete = customerOrderPhase === CUSTOMER_ORDER_PHASE.ORDER_COMPLETE;
   const statusLabel = CUSTOMER_ORDER_STATUS_LABELS[customerOrderPhase] || 'ORDER PLACED';
   const statusVariant = CUSTOMER_ORDER_STATUS_TO_PILL_VARIANT[customerOrderPhase] || 'picking_not_started';
   const canCheckIn = customerOrderPhase === CUSTOMER_ORDER_PHASE.READY_FOR_PICKUP;
   const shouldShowCurrentEstimatedTotal = ![
-    CUSTOMER_ORDER_PHASE.ORDER_COMPLETE,
     CUSTOMER_ORDER_PHASE.ORDER_CANCELED,
     CUSTOMER_ORDER_PHASE.ORDER_PLACED
   ].includes(customerOrderPhase);
+  const adjustedTotalLabel = isOrderComplete ? 'Final Total' : 'Current Estimated Total';
 
   const availableParkingSpaces = useMemo(() => {
     const currentParkingSpace = toParkingSpaceNumber(selectedParkingSpace);
@@ -239,9 +273,9 @@ const OrderDetailModal = ({ order, onClose, onOrderUpdated }) => {
                 const quantity = Number(orderItem?.quantity || 0);
                 const unitPrice = Number(item?.price || 0);
                 const subtotal = quantity * unitPrice;
-                const itemStatus = getItemStatus(orderItem);
+                const itemStatus = getItemStatus(orderItem, { isOrderComplete });
                 const shouldShowSubstituteStatus = Boolean(substitutedItem) && String(orderItem?.status || '').toLowerCase() !== 'found';
-                const substituteStatus = shouldShowSubstituteStatus ? getSubstituteStatus(orderItem) : null;
+                const substituteStatus = shouldShowSubstituteStatus ? getSubstituteStatus(orderItem, { isOrderComplete }) : null;
 
                 return (
                   <article key={index} className="order-detail-item">
@@ -298,7 +332,7 @@ const OrderDetailModal = ({ order, onClose, onOrderUpdated }) => {
             </div>
             {shouldShowCurrentEstimatedTotal ? (
               <div className="order-detail-total-row">
-                <p className="order-detail-total-label">Current Estimated Total</p>
+                <p className="order-detail-total-label">{adjustedTotalLabel}</p>
                 <p className="order-detail-total-value">{formatCurrency(currentEstimatedTotal)}</p>
               </div>
             ) : null}

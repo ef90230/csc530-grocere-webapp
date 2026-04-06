@@ -1,19 +1,28 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import {
+  readStoreSettingsFromCache,
+  normalizeStoreSettings,
+  saveStoreSettingsToCache
+} from '../../utils/storeSettings';
 import './StatBar.css';
 
 const TARGET_PICK_RATE = 100;
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
-const getRateState = (pickRate) => {
+const getRateState = (pickRate, goalValue = TARGET_PICK_RATE, goalEnabled = true) => {
+  if (!goalEnabled) {
+    return 'on-target';
+  }
+
   if (!Number.isFinite(pickRate)) {
     return 'on-target';
   }
 
-  if (pickRate > TARGET_PICK_RATE) {
+  if (pickRate > goalValue) {
     return 'above-target';
   }
 
-  if (pickRate < TARGET_PICK_RATE) {
+  if (pickRate < goalValue) {
     return 'below-target';
   }
 
@@ -50,6 +59,7 @@ const StatBar = ({
 }) => {
   const [profileName, setProfileName] = useState('');
   const [profilePickRate, setProfilePickRate] = useState(null);
+  const [storeSettings, setStoreSettings] = useState(() => readStoreSettingsFromCache());
   const [tick, setTick] = useState(() => Date.now());
 
   useEffect(() => {
@@ -100,6 +110,23 @@ const StatBar = ({
 
         if (Number.isFinite(numericPickRate)) {
           setProfilePickRate(numericPickRate);
+        }
+
+        const employeeStoreId = Number(payload?.user?.storeId);
+        if (Number.isInteger(employeeStoreId) && employeeStoreId > 0) {
+          const settingsResponse = await fetch(`${API_BASE}/api/employees/store-settings`, {
+            headers: {
+              Authorization: `Bearer ${token}`
+            },
+            signal: controller.signal
+          });
+
+          if (settingsResponse.ok) {
+            const settingsPayload = await settingsResponse.json();
+            const normalizedSettings = normalizeStoreSettings(settingsPayload?.settings);
+            setStoreSettings(normalizedSettings);
+            saveStoreSettingsToCache(normalizedSettings);
+          }
         }
       } catch (error) {
         if (error.name !== 'AbortError') {
@@ -157,7 +184,12 @@ const StatBar = ({
     return walkCompleted / walkElapsedHours;
   }, [walkCompleted, walkElapsedHours]);
 
-  const rateState = getRateState(mode === 'walk' ? walkPickRate : resolvedPickRate);
+  const pickRateGoal = storeSettings?.goals?.pickRateGoal || { enabled: true, value: TARGET_PICK_RATE };
+  const rateState = getRateState(
+    mode === 'walk' ? walkPickRate : resolvedPickRate,
+    Number(pickRateGoal.value) || TARGET_PICK_RATE,
+    Boolean(pickRateGoal.enabled)
+  );
 
   if (mode === 'walk') {
     return (
@@ -183,7 +215,7 @@ const StatBar = ({
         aria-label="Employee daily stats"
       >
         <span className="statbar-name">{resolvedUserName}</span>
-        <span className="statbar-rate">Average Pick Rate: {formatPickRate(resolvedPickRate)}</span>
+        <span className="statbar-rate">Today's Pick Rate: {formatPickRate(resolvedPickRate)}</span>
       </section>
       <div className="statbar-spacer" />
     </>
