@@ -220,6 +220,16 @@
   margin-bottom: 0.65rem;
 }
 
+.walk-history-metrics-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+
+.walk-history-metrics-row > div {
+  min-width: 0;
+}
+
 .walk-history-commodity,
 .walk-history-date,
 .walk-history-metric-label,
@@ -283,10 +293,22 @@
   .metric-card--single .metric-card-value {
     font-size: 1.5rem;
   }
+}
 
-  .walk-history-card-top-row,
+@media (max-width: 320px) {
   .walk-history-metrics-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem 0.75rem;
+  }
+}
+
+@media (max-width: 280px) {
+  .walk-history-card-top-row {
     flex-direction: column;
+  }
+
+  .walk-history-metrics-row {
+    grid-template-columns: 1fr;
   }
 
   .walk-history-rate-block {

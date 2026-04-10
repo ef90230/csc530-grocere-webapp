@@ -2,6 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import CustomerPopupMenu from '../components/customer/CustomerPopupMenu';
 import OrderDetailModal from '../components/customer/OrderDetailModal';
+import {
+  deriveCustomerOrderStatus,
+  CUSTOMER_ORDER_STATUS_LABELS,
+  CUSTOMER_ORDER_STATUS_TO_PILL_VARIANT
+} from '../utils/customerOrderStatus';
 import './OrderSummary.css';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
@@ -102,9 +107,13 @@ const OrderSummary = () => {
 
         const payload = await response.json();
         const allOrders = payload?.orders || [];
+        const ordersWithPhase = allOrders.map((order) => ({
+          ...order,
+          customerPhase: deriveCustomerOrderStatus(order)
+        }));
         
         // Sort by createdAt in descending order (newest first)
-        const sortedOrders = allOrders.sort(
+        const sortedOrders = ordersWithPhase.sort(
           (a, b) => new Date(b?.createdAt) - new Date(a?.createdAt)
         );
         
@@ -152,6 +161,34 @@ const OrderSummary = () => {
     setTimeout(() => {
       navigate('/');
     }, CLOSE_ANIMATION_MS);
+  };
+
+  const handleOrderUpdated = (updatedOrder) => {
+    if (!updatedOrder?.id) {
+      return;
+    }
+
+    const resolvedPhase = deriveCustomerOrderStatus(updatedOrder);
+    const normalizedOrder = {
+      ...updatedOrder,
+      customerPhase: resolvedPhase
+    };
+
+    setOrders((currentOrders) => currentOrders.map((order) => {
+      if (order.id !== updatedOrder.id) {
+        return order;
+      }
+
+      return normalizedOrder;
+    }));
+
+    setSelectedOrder((currentOrder) => {
+      if (!currentOrder || currentOrder.id !== updatedOrder.id) {
+        return currentOrder;
+      }
+
+      return normalizedOrder;
+    });
   };
 
   return (
@@ -214,6 +251,13 @@ const OrderSummary = () => {
                     {formatOrderDate(order.createdAt)}
                   </span>
                 </div>
+                <div className="order-summary-item__status-row">
+                  <span
+                    className={`order-summary-status-pill order-summary-status-pill--${CUSTOMER_ORDER_STATUS_TO_PILL_VARIANT[order.customerPhase]}`}
+                  >
+                    {CUSTOMER_ORDER_STATUS_LABELS[order.customerPhase] || 'ORDER PLACED'}
+                  </span>
+                </div>
               </button>
             ))}
           </section>
@@ -238,6 +282,7 @@ const OrderSummary = () => {
         <OrderDetailModal
           order={selectedOrder}
           onClose={() => setSelectedOrder(null)}
+          onOrderUpdated={handleOrderUpdated}
         />
       )}
     </div>

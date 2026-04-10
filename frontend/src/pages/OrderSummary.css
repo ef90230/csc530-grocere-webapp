@@ -200,6 +200,69 @@
   text-align: right;
 }
 
+.order-summary-item__status-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.order-summary-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 20px;
+  border-radius: 4px;
+  padding: 0 0.5rem;
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.order-summary-status-pill--picking_not_started {
+  background: #d9d9d9;
+  color: #2d2d2d;
+}
+
+.order-summary-status-pill--picking_in_progress {
+  background: #e8c34b;
+  color: #493300;
+}
+
+.order-summary-status-pill--staging_in_progress {
+  background: #2f66c1;
+  color: #fff;
+}
+
+.order-summary-status-pill--picking_complete {
+  background: #7cbf6b;
+  color: #183f11;
+}
+
+.order-summary-status-pill--staging_complete {
+  background: #5aa9d6;
+  color: #072842;
+}
+
+.order-summary-status-pill--ready_for_pickup {
+  background: #3b942a;
+  color: #eefbe9;
+}
+
+.order-summary-status-pill--dispensing_in_progress {
+  background: #5941a7;
+  color: #fff;
+}
+
+.order-summary-status-pill--cancelled {
+  background: #7a2020;
+  color: #fff;
+}
+
+.order-summary-status-pill--completed {
+  background: #2f8a6f;
+  color: #ecfffa;
+}
+
 @media (max-width: 640px) {
   .order-summary-content {
     width: min(100%, calc(100% - 1rem));

@@ -1,0 +1,109 @@
+.parking-space-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.8rem;
+  z-index: 1100;
+}
+
+.parking-space-dialog {
+  width: min(560px, 100%);
+  border-radius: 10px;
+  border: 1px solid #4a4a4a;
+  background: #d8d8d8;
+  padding: 0.85rem;
+}
+
+.parking-space-dialog-title {
+  margin: 0;
+  font-size: 1.7rem;
+  font-weight: 800;
+  color: #1a1a1a;
+}
+
+.parking-space-dialog-subtitle {
+  margin: 0.15rem 0 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #2f2f2f;
+}
+
+.parking-space-dialog-prompt {
+  margin: 0.25rem 0 0;
+  font-size: 0.95rem;
+  color: #333;
+  font-weight: 600;
+}
+
+.parking-space-grid {
+  margin-top: 0.6rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.parking-space-grid-button {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid #545454;
+  background: #fff;
+  color: #000;
+  font-size: 1.1rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.parking-space-grid-button--occupied {
+  background: #000;
+  color: #fff;
+  border-color: #000;
+}
+
+.parking-space-grid-button--selected {
+  background: #1f5fcb;
+  color: #fff;
+  border-color: #1f5fcb;
+}
+
+.parking-space-dialog-actions {
+  margin-top: 0.75rem;
+  display: flex;
+  justify-content: flex-start;
+  gap: 0.4rem;
+}
+
+.parking-space-dialog-btn {
+  min-width: 88px;
+  min-height: 28px;
+  border: 1px solid #666;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.parking-space-dialog-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.parking-space-dialog-btn--ghost {
+  background: #f3f3f3;
+  color: #1a1a1a;
+}
+
+.parking-space-dialog-btn--primary {
+  background: #1f5fcb;
+  border-color: #1a4da5;
+  color: #fff;
+}
+
+@media (max-width: 640px) {
+  .parking-space-dialog-title {
+    font-size: 1.45rem;
+  }
+}

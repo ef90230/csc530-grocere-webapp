@@ -1,7 +1,20 @@
 import React from 'react';
 import './PopupMenu.css';
 
-const PopupMenu = ({ isClosing, onClose, onInventory, onStoreMap, onMyStats, onLogout }) => {
+const PopupMenu = ({
+  isClosing,
+  onClose,
+  onBackroomLocations,
+  onInventory,
+  onStoreMap,
+  onParkingLot,
+  onMyStats,
+  onStoreSettings,
+  onLogout,
+  showBackroomLocations = false,
+  showParkingLot = false,
+  showStoreSettings = false
+}) => {
   return (
     <div className="popup-menu-overlay" onClick={onClose}>
       <aside
@@ -16,6 +29,15 @@ const PopupMenu = ({ isClosing, onClose, onInventory, onStoreMap, onMyStats, onL
         >
           ×
         </button>
+        {showBackroomLocations ? (
+          <button
+            type="button"
+            className="popup-action-button"
+            onClick={onBackroomLocations}
+          >
+            Backroom Locations
+          </button>
+        ) : null}
         <button
           type="button"
           className="popup-action-button"
@@ -30,6 +52,15 @@ const PopupMenu = ({ isClosing, onClose, onInventory, onStoreMap, onMyStats, onL
         >
           Store Map
         </button>
+        {showParkingLot ? (
+          <button
+            type="button"
+            className="popup-action-button"
+            onClick={onParkingLot}
+          >
+            Parking Lot
+          </button>
+        ) : null}
         <button
           type="button"
           className="popup-action-button"
@@ -37,6 +68,15 @@ const PopupMenu = ({ isClosing, onClose, onInventory, onStoreMap, onMyStats, onL
         >
           My Stats
         </button>
+        {showStoreSettings ? (
+          <button
+            type="button"
+            className="popup-action-button"
+            onClick={onStoreSettings}
+          >
+            Store Settings
+          </button>
+        ) : null}
         <button
           type="button"
           className="popup-action-button popup-logout-button"

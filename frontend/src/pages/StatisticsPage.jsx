@@ -1,6 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Navbar from '../components/common/Navbar';
 import TopBar from '../components/common/TopBar';
+import {
+    normalizeStoreSettings,
+    saveStoreSettingsToCache
+} from '../utils/storeSettings';
 import './StatisticsPage.css';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
@@ -10,8 +14,7 @@ const METRIC_CARDS = [
     key: 'pickRate',
     label: 'Pick rate',
     unit: '/hr',
-    goal: 100,
-    goalLabel: 'Goal: 100/hr',
+        goalKey: 'pickRateGoal',
     size: 'large',
     section: 'picking'
   },
@@ -19,8 +22,7 @@ const METRIC_CARDS = [
     key: 'firstTimePickPercent',
     label: 'First-time pick',
     unit: '%',
-    goal: 92,
-    goalLabel: 'Goal: 92%',
+        goalKey: 'firstTimePickRateGoal',
     size: 'large',
     section: 'picking'
   },
@@ -28,8 +30,7 @@ const METRIC_CARDS = [
     key: 'preSubstitutionPercent',
     label: 'Pre-substitution',
     unit: '%',
-    goal: 95,
-    goalLabel: 'Goal: 95%',
+        goalKey: 'preSubstitutionGoal',
     size: 'small',
     section: 'picking'
   },
@@ -37,8 +38,7 @@ const METRIC_CARDS = [
     key: 'postSubstitutionPercent',
     label: 'Post-substitution',
     unit: '%',
-    goal: 99,
-    goalLabel: 'Goal: 99%',
+        goalKey: 'postSubstitutionGoal',
     size: 'small',
     section: 'picking'
   },
@@ -46,8 +46,7 @@ const METRIC_CARDS = [
     key: 'onTimePercent',
     label: 'On-time',
     unit: '%',
-    goal: 100,
-    goalLabel: 'Goal: 100%',
+        goalKey: 'onTimePickPercentGoal',
     size: 'small',
     section: 'picking'
   },
@@ -106,27 +105,52 @@ const formatValue = (metric, value) => {
   return safeValue.toFixed(1);
 };
 
-const getMetricTone = (metric, value) => {
-  if (metric.goal == null) {
+const getMetricTone = (metric, value, storeSettings) => {
+    if (!metric.goalKey) {
+        return 'neutral';
+    }
+
+    const goalSetting = storeSettings?.goals?.[metric.goalKey];
+    if (!goalSetting || goalSetting.enabled === false) {
     return 'neutral';
   }
 
   const safeValue = toNumber(value);
+    const goalValue = toNumber(goalSetting.value);
 
-  if (safeValue > metric.goal) {
+    if (safeValue > goalValue) {
     return 'success';
   }
 
-  if (safeValue < metric.goal) {
+    if (safeValue < goalValue) {
     return 'danger';
   }
 
   return 'neutral';
 };
 
+const formatGoalLabel = (metric, storeSettings) => {
+    if (!metric.goalKey) {
+        return '';
+    }
+
+    const goalSetting = storeSettings?.goals?.[metric.goalKey];
+    if (!goalSetting || goalSetting.enabled === false) {
+        return 'Goal disabled';
+    }
+
+    const numericGoal = toNumber(goalSetting.value);
+    if (metric.unit === '/hr') {
+        return `Goal: ${numericGoal.toFixed(2)}/hr`;
+    }
+
+    return `Goal: ${Math.round(numericGoal)}%`;
+};
+
 const StatisticsPage = () => {
     const [summary, setSummary] = useState(null);
     const [activeScope, setActiveScope] = useState('you');
+    const [activeRange, setActiveRange] = useState('today');
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
 
@@ -189,20 +213,28 @@ const StatisticsPage = () => {
             return null;
         }
 
+        const timeframeKey = activeRange === 'allTime' ? 'statsAllTime' : 'statsToday';
+
         if (activeScope === 'store') {
-            return summary.store?.stats || null;
+            return summary.store?.[timeframeKey] || summary.store?.stats || null;
         }
 
-        return summary.user?.stats || null;
-    }, [activeScope, summary]);
+        return summary.user?.[timeframeKey] || summary.user?.stats || null;
+    }, [activeRange, activeScope, summary]);
 
     const pickRateForTopBar = useMemo(() => {
-        return toNumber(summary?.user?.stats?.pickRate);
+        return toNumber(summary?.user?.statsToday?.pickRate ?? summary?.user?.stats?.pickRate);
     }, [summary]);
 
     const walkHistory = useMemo(() => {
         return Array.isArray(summary?.user?.walkHistory) ? summary.user.walkHistory : [];
     }, [summary]);
+
+    const storeSettings = useMemo(() => {
+        const settings = normalizeStoreSettings(summary?.store?.settings);
+        saveStoreSettingsToCache(settings);
+        return settings;
+    }, [summary?.store?.settings]);
 
     return (
         <div className="statistics-page">
@@ -238,10 +270,20 @@ const StatisticsPage = () => {
                     </div>
 
                     <div className="toggle-group" aria-label="Date range">
-                        <button type="button" className="toggle-pill active" disabled>
+                        <button
+                            type="button"
+                            className={`toggle-pill ${activeRange === 'today' ? 'active' : ''}`}
+                            onClick={() => setActiveRange('today')}
+                            aria-pressed={activeRange === 'today'}
+                        >
                             Today
                         </button>
-                        <button type="button" className="toggle-pill" disabled>
+                        <button
+                            type="button"
+                            className={`toggle-pill ${activeRange === 'allTime' ? 'active' : ''}`}
+                            onClick={() => setActiveRange('allTime')}
+                            aria-pressed={activeRange === 'allTime'}
+                        >
                             All time
                         </button>
                     </div>
@@ -257,7 +299,8 @@ const StatisticsPage = () => {
                             <div className="metrics-grid metrics-grid--large">
                                 {METRIC_CARDS.filter((card) => card.section === 'picking' && card.size === 'large').map((metric) => {
                                     const value = activeStats[metric.key];
-                                    const tone = getMetricTone(metric, value);
+                                    const tone = getMetricTone(metric, value, storeSettings);
+                                    const goalLabel = formatGoalLabel(metric, storeSettings);
 
                                     return (
                                         <article key={metric.key} className={`metric-card metric-card--${tone} metric-card--large`}>
@@ -266,7 +309,7 @@ const StatisticsPage = () => {
                                                 {metric.unit ? <span className="metric-card-unit">{metric.unit}</span> : null}
                                             </div>
                                             <p className="metric-card-label">{metric.label}</p>
-                                            {metric.goalLabel ? <p className="metric-card-goal">{metric.goalLabel}</p> : null}
+                                            {goalLabel ? <p className="metric-card-goal">{goalLabel}</p> : null}
                                         </article>
                                     );
                                 })}
@@ -275,7 +318,8 @@ const StatisticsPage = () => {
                             <div className="metrics-grid metrics-grid--small">
                                 {METRIC_CARDS.filter((card) => card.section === 'picking' && card.size === 'small').map((metric) => {
                                     const value = activeStats[metric.key];
-                                    const tone = getMetricTone(metric, value);
+                                    const tone = getMetricTone(metric, value, storeSettings);
+                                    const goalLabel = formatGoalLabel(metric, storeSettings);
 
                                     return (
                                         <article key={metric.key} className={`metric-card metric-card--${tone} metric-card--small`}>
@@ -284,7 +328,7 @@ const StatisticsPage = () => {
                                                 {metric.unit ? <span className="metric-card-unit">{metric.unit}</span> : null}
                                             </div>
                                             <p className="metric-card-label">{metric.label}</p>
-                                            {metric.goalLabel ? <p className="metric-card-goal">{metric.goalLabel}</p> : null}
+                                            {goalLabel ? <p className="metric-card-goal">{goalLabel}</p> : null}
                                         </article>
                                     );
                                 })}
@@ -321,6 +365,10 @@ const StatisticsPage = () => {
                                                             <span className="walk-history-metric-label">Orders</span>
                                                             <strong>{Math.round(toNumber(walk.orderCount))}</strong>
                                                         </div>
+                                                        <div>
+                                                            <span className="walk-history-metric-label">FTPR</span>
+                                                            <strong>{`${toNumber(walk.firstTimePickRate).toFixed(1)}%`}</strong>
+                                                        </div>
                                                     </div>
                                                 </article>
                                             ))}
@@ -335,7 +383,7 @@ const StatisticsPage = () => {
                         <section className="stats-section" aria-label="Staging">
                             <h2>Staging</h2>
                             <article className="metric-card metric-card--neutral metric-card--single">
-                                <div className="metric-card-value">0</div>
+                                <div className="metric-card-value">{Math.round(toNumber(activeStats.totesStaged))}</div>
                                 <p className="metric-card-label">Totes staged</p>
                             </article>
                         </section>
@@ -343,7 +391,7 @@ const StatisticsPage = () => {
                         <section className="stats-section" aria-label="Dispensing">
                             <h2>Dispensing</h2>
                             <article className="metric-card metric-card--neutral metric-card--single">
-                                <div className="metric-card-value">0</div>
+                                <div className="metric-card-value">{Math.round(toNumber(activeStats.ordersDispensed))}</div>
                                 <p className="metric-card-label">Orders dispensed</p>
                             </article>
                         </section>

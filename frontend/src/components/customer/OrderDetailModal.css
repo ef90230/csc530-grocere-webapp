@@ -75,6 +75,32 @@
   flex-shrink: 0;
 }
 
+.order-detail-checkin-btn {
+  min-height: 30px;
+  border-radius: 6px;
+  border: 1px solid #174a98;
+  background: #1f5fcb;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  padding: 0 0.65rem;
+  cursor: pointer;
+  margin-top: 2px;
+}
+
+.order-detail-checkin-btn:hover {
+  background: #184ea8;
+}
+
+.order-detail-checkin-error {
+  margin: 0;
+  padding: 0.5rem 1rem 0;
+  color: #8d1111;
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+
 .order-detail-id {
   margin: 0;
   font-size: 20px;
@@ -84,15 +110,63 @@
 }
 
 .order-detail-status {
-  display: inline-block;
-  background-color: #e3f2fd;
-  color: #1976d2;
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 20px;
+  border-radius: 4px;
+  padding: 0 0.5rem;
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
   white-space: nowrap;
   margin-top: 4px;
+}
+
+.order-detail-status--picking_not_started {
+  background: #d9d9d9;
+  color: #2d2d2d;
+}
+
+.order-detail-status--picking_in_progress {
+  background: #e8c34b;
+  color: #493300;
+}
+
+.order-detail-status--staging_in_progress {
+  background: #2f66c1;
+  color: #fff;
+}
+
+.order-detail-status--picking_complete {
+  background: #7cbf6b;
+  color: #183f11;
+}
+
+.order-detail-status--staging_complete {
+  background: #5aa9d6;
+  color: #072842;
+}
+
+.order-detail-status--ready_for_pickup {
+  background: #3b942a;
+  color: #eefbe9;
+}
+
+.order-detail-status--dispensing_in_progress {
+  background: #5941a7;
+  color: #fff;
+}
+
+.order-detail-status--cancelled {
+  background: #7a2020;
+  color: #fff;
+}
+
+.order-detail-status--completed {
+  background: #2f8a6f;
+  color: #ecfffa;
 }
 
 @media (max-width: 640px) {
@@ -205,6 +279,11 @@
   color: #8d1111;
 }
 
+.order-detail-item__status--canceled {
+  background: #efefef;
+  color: #545454;
+}
+
 .order-detail-item__pricing {
   display: flex;
   justify-content: space-between;
@@ -270,11 +349,18 @@
 
 .order-detail-total {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 0.55rem;
   background-color: #f9f9f9;
   padding: 12px;
   border-radius: 6px;
+}
+
+.order-detail-total-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .order-detail-total-label {

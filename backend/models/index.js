@@ -13,12 +13,18 @@ const PickPath = require('./PickPath');
 const Cart = require('./Cart');
 const CartItem = require('./CartItem');
 const Timeslot = require('./Timeslot');
+const StagingLocation = require('./StagingLocation');
+const StagingAssignment = require('./StagingAssignment');
+const StagingLocationSetting = require('./StagingLocationSetting');
 Store.hasMany(Employee, { foreignKey: 'storeId', as: 'employees' });
 Store.hasMany(Aisle, { foreignKey: 'storeId', as: 'aisles' });
 Store.hasMany(Location, { foreignKey: 'storeId', as: 'locations' });
 Store.hasMany(Order, { foreignKey: 'storeId', as: 'orders' });
 Store.hasMany(PickPath, { foreignKey: 'storeId', as: 'pickPaths' });
 Store.hasMany(ItemLocation, { foreignKey: 'storeId', as: 'itemLocations' });
+Store.hasMany(StagingLocation, { foreignKey: 'storeId', as: 'stagingLocations' });
+Store.hasMany(StagingAssignment, { foreignKey: 'storeId', as: 'stagingAssignments' });
+Store.hasOne(StagingLocationSetting, { foreignKey: 'storeId', as: 'stagingLocationSetting' });
 Employee.belongsTo(Store, { foreignKey: 'storeId', as: 'store' });
 Employee.hasMany(Order, { foreignKey: 'assignedPickerId', as: 'pickingOrders' });
 Employee.hasMany(Order, { foreignKey: 'assignedDispenserId', as: 'dispensingOrders' });
@@ -48,6 +54,7 @@ Order.belongsTo(Employee, { foreignKey: 'assignedPickerId', as: 'picker' });
 Order.belongsTo(Employee, { foreignKey: 'assignedDispenserId', as: 'dispenser' });
 Order.hasMany(OrderItem, { foreignKey: 'orderId', as: 'items' });
 Order.hasOne(Timeslot, { foreignKey: 'orderNumber', sourceKey: 'orderNumber', as: 'timeslot' });
+Order.hasMany(StagingAssignment, { foreignKey: 'orderId', as: 'stagingAssignments' });
 OrderItem.belongsTo(Order, { foreignKey: 'orderId', as: 'order' });
 OrderItem.belongsTo(Item, { foreignKey: 'itemId', as: 'item' });
 OrderItem.belongsTo(Item, { foreignKey: 'substitutedItemId', as: 'substitutedItem' });
@@ -55,6 +62,12 @@ PickPath.belongsTo(Store, { foreignKey: 'storeId', as: 'store' });
 PickPath.belongsTo(Employee, { foreignKey: 'createdBy', as: 'creator' });
 Timeslot.belongsTo(Order, { foreignKey: 'orderNumber', targetKey: 'orderNumber', as: 'order' });
 Timeslot.belongsTo(OrderItem, { foreignKey: 'items', as: 'itemList' });
+StagingLocation.belongsTo(Store, { foreignKey: 'storeId', as: 'store' });
+StagingLocation.hasMany(StagingAssignment, { foreignKey: 'stagingLocationId', as: 'assignments' });
+StagingAssignment.belongsTo(Store, { foreignKey: 'storeId', as: 'store' });
+StagingAssignment.belongsTo(Order, { foreignKey: 'orderId', as: 'order' });
+StagingAssignment.belongsTo(StagingLocation, { foreignKey: 'stagingLocationId', as: 'stagingLocation' });
+StagingLocationSetting.belongsTo(Store, { foreignKey: 'storeId', as: 'store' });
 
 const EMPLOYEE_METRIC_COLUMNS = {
   pickRate: {
@@ -96,6 +109,11 @@ const EMPLOYEE_METRIC_COLUMNS = {
     type: DataTypes.DECIMAL(5, 2),
     allowNull: false,
     defaultValue: 0.00
+  },
+  totesStaged: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0
   }
 };
 
@@ -120,6 +138,7 @@ const ORDER_ITEM_OPTION_COLUMNS = {
     allowNull: true
   }
 };
+
 
 const ensureEmployeeMetricColumns = async () => {
   const queryInterface = sequelize.getQueryInterface();
@@ -282,6 +301,9 @@ module.exports = {
   PickPath,
   Cart,
   CartItem,
+  StagingLocation,
+  StagingAssignment,
+  StagingLocationSetting,
   Timeslot,
   ensureEmployeeMetricColumns,
   syncDatabase

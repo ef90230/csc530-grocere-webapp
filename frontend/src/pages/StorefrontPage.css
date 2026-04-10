@@ -153,14 +153,61 @@
 
 .storefront-order-status-pill {
   flex-shrink: 0;
-  background: #f4cd4d;
-  color: #1b1b1b;
-  border-radius: 999px;
-  padding: 0.25rem 0.75rem;
-  font-size: 0.72rem;
-  font-weight: 800;
+  border-radius: 4px;
+  padding: 0 0.5rem;
+  min-height: 20px;
+  font-size: 0.65rem;
+  font-weight: 900;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.storefront-order-status-pill--picking_not_started {
+  background: #d9d9d9;
+  color: #2d2d2d;
+}
+
+.storefront-order-status-pill--picking_in_progress {
+  background: #e8c34b;
+  color: #493300;
+}
+
+.storefront-order-status-pill--staging_in_progress {
+  background: #2f66c1;
+  color: #fff;
+}
+
+.storefront-order-status-pill--picking_complete {
+  background: #7cbf6b;
+  color: #183f11;
+}
+
+.storefront-order-status-pill--staging_complete {
+  background: #5aa9d6;
+  color: #072842;
+}
+
+.storefront-order-status-pill--ready_for_pickup {
+  background: #3b942a;
+  color: #eefbe9;
+}
+
+.storefront-order-status-pill--dispensing_in_progress {
+  background: #5941a7;
+  color: #fff;
+}
+
+.storefront-order-status-pill--cancelled {
+  background: #7a2020;
+  color: #fff;
+}
+
+.storefront-order-status-pill--completed {
+  background: #2f8a6f;
+  color: #ecfffa;
 }
 
 .storefront-order-card__body {

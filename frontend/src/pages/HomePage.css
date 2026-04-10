@@ -3,79 +3,135 @@
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
-  background-color: #fff;
+  background-color: #ececec;
 }
 
 .home-content {
   flex: 1;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem;
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 1rem 0.6rem;
   padding-bottom: 90px;
   overflow-y: auto;
 }
 
-.home-content h1 {
+.home-hero {
+  margin: 0.15rem 0.1rem 0.9rem;
+  background: #f4df9e;
+  border: 1px solid #b99f47;
+  border-radius: 12px;
+  padding: 0.7rem 0.7rem 0.8rem;
+}
+
+.home-hero h1 {
+  margin: 0;
   font-size: 2rem;
-  margin-bottom: 2rem;
-  text-align: center;
+  line-height: 1;
+}
+
+.home-hero p {
+  margin: 0.45rem 0 0;
+  font-size: 1.28rem;
+  font-weight: 700;
+  line-height: 1.15;
 }
 
 .buttons-column {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 0.95rem;
   width: 100%;
-  max-width: 420px;
+  max-width: 100%;
 }
 
-.action-button {
-  padding: 2rem;
-  font-size: 1.2rem;
-  font-weight: bold;
-  border: none;
-  border-radius: 8px;
+.home-action-button {
+  min-height: 136px;
+  padding: 0.9rem 1rem;
+  border: 1px solid #272727;
+  border-radius: 16px;
   cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  color: white;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  color: #111;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  text-align: center;
 }
 
-.action-button:hover {
+.home-action-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 7px 14px rgba(0, 0, 0, 0.2);
+}
+
+.home-card-title {
+  font-size: 2.7rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.home-card-stat {
+  font-size: 1.62rem;
+  font-weight: 700;
+  line-height: 1.1;
 }
 
 .picking-btn {
-  background-color: #28a745;
+  background-color: #8dbb78;
 }
 
 .picking-btn:hover {
-  background-color: #218838;
+  background-color: #84af70;
 }
 
 .staging-btn {
-  background-color: #dc3545;
+  background-color: #da6666;
 }
 
 .staging-btn:hover {
-  background-color: #c82333;
+  background-color: #c85b5b;
 }
 
 .orders-btn {
-  background-color: #6f42c1;
+  background-color: #8a79bf;
 }
 
 .orders-btn:hover {
-  background-color: #5a32a3;
+  background-color: #7a6cab;
 }
 
 .inventory-btn {
-  background-color: #007bff;
+  background-color: #6f9fcb;
 }
 
 .inventory-btn:hover {
-  background-color: #0056b3;
+  background-color: #6494bf;
+}
+
+@media (max-width: 640px) {
+  .home-hero h1 {
+    font-size: 1.7rem;
+  }
+
+  .home-hero p {
+    font-size: 1.05rem;
+  }
+
+  .home-action-button {
+    min-height: 88px;
+    border-radius: 12px;
+    gap: 0.14rem;
+  }
+
+  .home-card-title {
+    font-size: 1.9rem;
+  }
+
+  .home-card-stat {
+    font-size: 1.05rem;
+  }
 }

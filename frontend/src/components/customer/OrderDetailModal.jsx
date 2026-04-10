@@ -1,23 +1,53 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
+import ParkingSpaceDialog from '../common/ParkingSpaceDialog';
+import {
+  calculateCurrentEstimatedOrderTotal,
+  calculateOrderTotalAtTimeOfOrdering,
+  deriveCustomerOrderStatus,
+  CUSTOMER_ORDER_PHASE,
+  CUSTOMER_ORDER_STATUS_LABELS,
+  CUSTOMER_ORDER_STATUS_TO_PILL_VARIANT
+} from '../../utils/customerOrderStatus';
+import {
+  collectOccupiedParkingSpaces,
+  getParkingSpaceOptions,
+  toParkingSpaceNumber
+} from '../../utils/parkingSpaces';
 import './OrderDetailModal.css';
 
-const ORDER_STATUS_LABELS = {
-  assigned: 'Picker Assigned',
-  picking: 'Picking In Progress',
-  picked: 'Picking Complete',
-  staging: 'Partially Staged',
-  staged: 'Staging Complete',
-  ready: 'Ready for Pickup',
-  dispensing: 'Dispensing In Progress',
-  complete: 'Complete'
-};
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 const formatCurrency = (value) => `$${Number(value || 0).toFixed(2)}`;
 
-const getItemStatus = (orderItem) => {
+const getCanceledLabel = (canceledQuantity, orderedQuantity) => {
+  const canceled = Math.max(0, Number(canceledQuantity || 0));
+  const ordered = Math.max(0, Number(orderedQuantity || 0));
+
+  if (canceled <= 0) {
+    return '';
+  }
+
+  if (ordered > 0 && canceled >= ordered) {
+    return 'Canceled';
+  }
+
+  return `${canceled} of ${ordered} Canceled`;
+};
+
+const getItemStatus = (orderItem, options = {}) => {
   const orderedQuantity = Number(orderItem?.quantity || 0);
   const pickedQuantity = Math.max(0, Number(orderItem?.pickedQuantity || 0));
   const normalizedStatus = String(orderItem?.status || '').toLowerCase();
+  const isOrderComplete = Boolean(options?.isOrderComplete);
+  const canceledQuantity = Math.max(0, orderedQuantity - pickedQuantity);
+
+  if (normalizedStatus === 'out_of_stock') {
+    return { label: 'Not Found', kind: 'not-found' };
+  }
+
+  if (isOrderComplete && canceledQuantity > 0 && normalizedStatus !== 'out_of_stock') {
+    return { label: getCanceledLabel(canceledQuantity, orderedQuantity), kind: 'canceled' };
+  }
 
   if (normalizedStatus === 'found' || pickedQuantity >= orderedQuantity) {
     return { label: 'Picked', kind: 'picked' };
@@ -38,8 +68,16 @@ const getItemStatus = (orderItem) => {
   return { label: 'Not Yet Picked', kind: 'pending' };
 };
 
-const getSubstituteStatus = (orderItem) => {
+const getSubstituteStatus = (orderItem, options = {}) => {
+  const orderedQuantity = Number(orderItem?.quantity || 0);
+  const pickedQuantity = Math.max(0, Number(orderItem?.pickedQuantity || 0));
   const normalizedStatus = String(orderItem?.status || '').toLowerCase();
+  const isOrderComplete = Boolean(options?.isOrderComplete);
+  const canceledQuantity = Math.max(0, orderedQuantity - pickedQuantity);
+
+  if (isOrderComplete && canceledQuantity > 0) {
+    return { label: getCanceledLabel(canceledQuantity, orderedQuantity), kind: 'canceled' };
+  }
 
   if (normalizedStatus === 'substituted') {
     return { label: 'Picked', kind: 'picked' };
@@ -52,20 +90,147 @@ const getSubstituteStatus = (orderItem) => {
   return { label: 'Not Yet Picked', kind: 'pending' };
 };
 
-const OrderDetailModal = ({ order, onClose }) => {
-  const orderTotal = useMemo(() => {
-    if (!Array.isArray(order?.items)) {
-      return 0;
-    }
+const OrderDetailModal = ({ order, onClose, onOrderUpdated }) => {
+  const [isCheckInDialogOpen, setIsCheckInDialogOpen] = useState(false);
+  const [selectedParkingSpace, setSelectedParkingSpace] = useState(null);
+  const [occupiedParkingSpaceSet, setOccupiedParkingSpaceSet] = useState(new Set());
+  const [isCheckInSubmitting, setIsCheckInSubmitting] = useState(false);
+  const [checkInError, setCheckInError] = useState('');
 
-    return order.items.reduce((sum, orderItem) => {
-      const unitPrice = Number(orderItem?.item?.price || 0);
-      const quantity = Number(orderItem?.quantity || 0);
-      return sum + (unitPrice * quantity);
-    }, 0);
+  const orderTotalAtTimeOfOrdering = useMemo(() => {
+    return calculateOrderTotalAtTimeOfOrdering(order);
   }, [order]);
 
-  const statusLabel = ORDER_STATUS_LABELS[order?.status] || order?.status || 'Unknown';
+  const currentEstimatedTotal = useMemo(() => {
+    return calculateCurrentEstimatedOrderTotal(order);
+  }, [order]);
+
+  const customerOrderPhase = deriveCustomerOrderStatus(order);
+  const isOrderComplete = customerOrderPhase === CUSTOMER_ORDER_PHASE.ORDER_COMPLETE;
+  const statusLabel = CUSTOMER_ORDER_STATUS_LABELS[customerOrderPhase] || 'ORDER PLACED';
+  const statusVariant = CUSTOMER_ORDER_STATUS_TO_PILL_VARIANT[customerOrderPhase] || 'picking_not_started';
+  const canCheckIn = customerOrderPhase === CUSTOMER_ORDER_PHASE.READY_FOR_PICKUP;
+  const shouldShowCurrentEstimatedTotal = ![
+    CUSTOMER_ORDER_PHASE.ORDER_CANCELED,
+    CUSTOMER_ORDER_PHASE.ORDER_PLACED
+  ].includes(customerOrderPhase);
+  const adjustedTotalLabel = isOrderComplete ? 'Final Total' : 'Current Estimated Total';
+
+  const availableParkingSpaces = useMemo(() => {
+    const currentParkingSpace = toParkingSpaceNumber(selectedParkingSpace);
+
+    return getParkingSpaceOptions({
+      occupiedSpaces: Array.from(occupiedParkingSpaceSet),
+      includeSpaces: currentParkingSpace ? [currentParkingSpace] : []
+    });
+  }, [occupiedParkingSpaceSet, selectedParkingSpace]);
+
+  const openCheckInDialog = async () => {
+    const token = window.localStorage.getItem('authToken');
+    setCheckInError('');
+    setSelectedParkingSpace(toParkingSpaceNumber(order?.parkingSpot));
+    setIsCheckInDialogOpen(true);
+
+    if (!token) {
+      setOccupiedParkingSpaceSet(new Set());
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/api/orders`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        setOccupiedParkingSpaceSet(new Set());
+        return;
+      }
+
+      const payload = await response.json();
+      setOccupiedParkingSpaceSet(collectOccupiedParkingSpaces(payload?.orders || [], order?.id));
+    } catch {
+      setOccupiedParkingSpaceSet(new Set());
+    }
+  };
+
+  const closeCheckInDialog = () => {
+    if (isCheckInSubmitting) {
+      return;
+    }
+
+    setIsCheckInDialogOpen(false);
+    setSelectedParkingSpace(null);
+  };
+
+  const handleCheckIn = async () => {
+    const token = window.localStorage.getItem('authToken');
+    if (!token || !order?.customer?.id || !order?.id) {
+      setCheckInError('Unable to complete check in right now.');
+      return;
+    }
+
+    if (!selectedParkingSpace) {
+      setCheckInError('Please select a parking space.');
+      return;
+    }
+
+    setIsCheckInSubmitting(true);
+    setCheckInError('');
+
+    try {
+      const checkInResponse = await fetch(`${API_BASE}/api/customers/${order.customer.id}/checkin`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          orderId: order.id,
+          parkingSpot: String(selectedParkingSpace)
+        })
+      });
+
+      if (!checkInResponse.ok) {
+        const payload = await checkInResponse.json().catch(() => ({}));
+        throw new Error(payload.message || 'Unable to check in.');
+      }
+
+      const statusResponse = await fetch(`${API_BASE}/api/orders/${order.id}/status`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status: 'dispensing' })
+      });
+
+      if (!statusResponse.ok) {
+        const payload = await statusResponse.json().catch(() => ({}));
+        throw new Error(payload.message || 'Unable to update order status.');
+      }
+
+      const updatedOrder = {
+        ...order,
+        status: 'dispensing',
+        isCheckedIn: true,
+        checkInTime: new Date().toISOString(),
+        parkingSpot: String(selectedParkingSpace),
+        customer: {
+          ...(order?.customer || {}),
+          vehicleInfo: order?.customer?.vehicleInfo
+        }
+      };
+
+      onOrderUpdated?.(updatedOrder);
+      closeCheckInDialog();
+    } catch (error) {
+      setCheckInError(error.message || 'Unable to check in.');
+    } finally {
+      setIsCheckInSubmitting(false);
+    }
+  };
 
   return (
     <div className="order-detail-overlay" onClick={onClose}>
@@ -73,7 +238,16 @@ const OrderDetailModal = ({ order, onClose }) => {
         <div className="order-detail-header">
           <h2 className="order-detail-id">Order #{order?.id}</h2>
           <div className="order-detail-header-actions">
-            <span className="order-detail-status">{statusLabel}</span>
+            <span className={`order-detail-status order-detail-status--${statusVariant}`}>{statusLabel}</span>
+            {canCheckIn ? (
+              <button
+                type="button"
+                className="order-detail-checkin-btn"
+                onClick={openCheckInDialog}
+              >
+                Check In
+              </button>
+            ) : null}
             <button
               type="button"
               className="order-detail-close"
@@ -84,6 +258,8 @@ const OrderDetailModal = ({ order, onClose }) => {
             </button>
           </div>
         </div>
+
+        {checkInError ? <p className="order-detail-checkin-error">{checkInError}</p> : null}
 
         <section className="order-detail-section">
           <h3 className="order-detail-section-title">Items</h3>
@@ -97,9 +273,9 @@ const OrderDetailModal = ({ order, onClose }) => {
                 const quantity = Number(orderItem?.quantity || 0);
                 const unitPrice = Number(item?.price || 0);
                 const subtotal = quantity * unitPrice;
-                const itemStatus = getItemStatus(orderItem);
+                const itemStatus = getItemStatus(orderItem, { isOrderComplete });
                 const shouldShowSubstituteStatus = Boolean(substitutedItem) && String(orderItem?.status || '').toLowerCase() !== 'found';
-                const substituteStatus = shouldShowSubstituteStatus ? getSubstituteStatus(orderItem) : null;
+                const substituteStatus = shouldShowSubstituteStatus ? getSubstituteStatus(orderItem, { isOrderComplete }) : null;
 
                 return (
                   <article key={index} className="order-detail-item">
@@ -150,15 +326,40 @@ const OrderDetailModal = ({ order, onClose }) => {
         <section className="order-detail-section">
           <h3 className="order-detail-section-title">Order Total</h3>
           <div className="order-detail-total">
-            {order?.status === 'complete' ? (
-              <p className="order-detail-total-label">Final Total</p>
-            ) : (
-              <p className="order-detail-total-label">Estimated Total</p>
-            )}
-            <p className="order-detail-total-value">{formatCurrency(orderTotal)}</p>
+            <div className="order-detail-total-row">
+              <p className="order-detail-total-label">Est. Total At Time of Ordering</p>
+              <p className="order-detail-total-value">{formatCurrency(orderTotalAtTimeOfOrdering)}</p>
+            </div>
+            {shouldShowCurrentEstimatedTotal ? (
+              <div className="order-detail-total-row">
+                <p className="order-detail-total-label">{adjustedTotalLabel}</p>
+                <p className="order-detail-total-value">{formatCurrency(currentEstimatedTotal)}</p>
+              </div>
+            ) : null}
           </div>
         </section>
       </div>
+
+      {isCheckInDialogOpen ? (
+        <ParkingSpaceDialog
+          title="Check In"
+          subtitle={`Order #${order?.id}`}
+          promptText="Select the space you are parked in."
+          spaces={availableParkingSpaces}
+          occupiedSpaceSet={occupiedParkingSpaceSet}
+          selectedSpace={selectedParkingSpace}
+          onSelectSpace={(spaceNumber) => {
+            if (occupiedParkingSpaceSet.has(Number(spaceNumber)) && Number(selectedParkingSpace) !== Number(spaceNumber)) {
+              return;
+            }
+            setSelectedParkingSpace(Number(spaceNumber));
+          }}
+          onClose={closeCheckInDialog}
+          onConfirm={handleCheckIn}
+          isSubmitting={isCheckInSubmitting}
+          confirmLabel="Set"
+        />
+      ) : null}
     </div>
   );
 };

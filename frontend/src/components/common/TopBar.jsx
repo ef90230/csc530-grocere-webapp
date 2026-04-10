@@ -22,6 +22,7 @@ const TopBar = ({
   const navigate = useNavigate();
   const [isMenuVisible, setIsMenuVisible] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
+  const isEmployee = window.localStorage.getItem('userType') === 'employee';
 
   useEffect(() => {
     if (!isClosing) {
@@ -104,10 +105,16 @@ const TopBar = ({
         <PopupMenu
           isClosing={isClosing}
           onClose={closeMenu}
+          onBackroomLocations={() => handleNavigate('/staging/locations')}
           onInventory={() => handleNavigate('/inventory')}
           onStoreMap={() => handleNavigate('/map')}
+          onParkingLot={() => handleNavigate('/parking-lot')}
           onMyStats={() => handleNavigate('/stats')}
+          onStoreSettings={() => handleNavigate('/store-settings')}
           onLogout={handleLogout}
+          showBackroomLocations={isEmployee}
+          showParkingLot={isEmployee}
+          showStoreSettings={isEmployee}
         />
       )}
     </>

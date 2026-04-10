@@ -1,0 +1,144 @@
+.store-settings-page {
+  min-height: 100vh;
+  background: #e6e6e6;
+}
+
+.store-settings-content {
+  padding: 0.75rem 0.7rem 5.5rem;
+}
+
+.store-settings-header {
+  border: 1px solid #5f5f5f;
+  border-radius: 10px;
+  background: #f0d77e;
+  padding: 0.65rem 0.75rem;
+  margin-bottom: 0.8rem;
+}
+
+.store-settings-header h1 {
+  margin: 0;
+  font-size: 1.45rem;
+}
+
+.store-settings-header p {
+  margin: 0.15rem 0 0;
+  font-weight: 700;
+}
+
+.store-settings-message {
+  margin: 0 0 0.7rem;
+  border-radius: 8px;
+  border: 1px solid #7f7f7f;
+  background: #f5f5f5;
+  padding: 0.55rem 0.7rem;
+  font-weight: 700;
+}
+
+.store-settings-message--error {
+  border-color: #9f2f2f;
+  background: #f7dada;
+  color: #6f1111;
+}
+
+.store-settings-message--success {
+  border-color: #2f7a3f;
+  background: #dff1d9;
+  color: #154120;
+}
+
+.store-settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.store-settings-section {
+  border: 1px solid #5f5f5f;
+  border-radius: 10px;
+  background: #f6f6f6;
+  padding: 0.7rem;
+}
+
+.store-settings-section h2 {
+  margin: 0 0 0.6rem;
+  font-size: 1.08rem;
+}
+
+.store-settings-goal-row {
+  border: 1px solid #d0d0d0;
+  border-radius: 8px;
+  background: #fff;
+  padding: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+
+.store-settings-goal-row:last-child {
+  margin-bottom: 0;
+}
+
+.store-settings-goal-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.store-settings-goal-main label {
+  font-weight: 700;
+}
+
+.store-settings-goal-main input,
+.store-settings-timeslot-row input {
+  border: 1px solid #7b7b7b;
+  border-radius: 6px;
+  min-height: 36px;
+  padding: 0 0.5rem;
+  font-size: 1rem;
+}
+
+.store-settings-goal-main input:disabled {
+  background: #e9e9e9;
+  color: #777;
+}
+
+.store-settings-toggle {
+  margin-top: 0.45rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  font-weight: 700;
+}
+
+.store-settings-timeslot-row {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.store-settings-timeslot-row label {
+  font-weight: 700;
+}
+
+.store-settings-hint {
+  margin: 0.5rem 0 0;
+  color: #4f4f4f;
+  line-height: 1.32;
+}
+
+.store-settings-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.store-settings-save-btn {
+  min-height: 38px;
+  border: 1px solid #173f7c;
+  border-radius: 7px;
+  background: #1f54a7;
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 800;
+  padding: 0 0.95rem;
+}
+
+.store-settings-save-btn:disabled {
+  opacity: 0.6;
+}

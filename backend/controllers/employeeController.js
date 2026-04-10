@@ -1,8 +1,19 @@
 const { Employee, Store, Order } = require('../models');
+const { Op } = require('sequelize');
 const {
-  calculateAverageWalkPickRate,
   getCompletedPickWalkHistory
 } = require('../utils/employeeMetricsService');
+const {
+  normalizeStoreSettings,
+  getStoreSettingsFromStore,
+  buildBackroomDoorLocationWithStoreSettings,
+  getTimeslotKeyFromDate
+} = require('../utils/storeSettings');
+const {
+  getEmployeeTimeframeStats,
+  aggregateStoreStats,
+  EMPTY_STATS
+} = require('../utils/employeeTimeframeStatsService');
 
 const METRIC_FIELDS = [
   'pickRate',
@@ -12,12 +23,24 @@ const METRIC_FIELDS = [
   'postSubstitutionPercent',
   'percentNotFound',
   'onTimePercent',
-  'weightedEfficiency'
+  'weightedEfficiency',
+  'totesStaged',
+  'ordersDispensed'
 ];
 
 const toNumber = (value) => {
   const numericValue = Number(value);
   return Number.isFinite(numericValue) ? numericValue : 0;
+};
+
+const toInteger = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : fallback;
+};
+
+const resolveStoreIdFromRequest = (req) => {
+  const storeId = toInteger(req?.user?.storeId, 0);
+  return storeId > 0 ? storeId : null;
 };
 
 const mapEmployeeStats = (employee) => {
@@ -44,7 +67,7 @@ const getStoreAggregatedStats = (employees) => {
       return sum + toNumber(employee[field]);
     }, 0);
 
-    if (field === 'itemsPicked') {
+    if (field === 'itemsPicked' || field === 'totesStaged' || field === 'ordersDispensed') {
       accumulator[field] = total;
       return accumulator;
     }
@@ -194,7 +217,8 @@ const getEmployeeMetrics = async (req, res) => {
         'postSubstitutionPercent',
         'percentNotFound',
         'onTimePercent',
-        'weightedEfficiency'
+        'weightedEfficiency',
+        'totesStaged'
       ]
     });
 
@@ -229,7 +253,7 @@ const getMyAndStoreStats = async (req, res) => {
     }
 
     const currentEmployee = await Employee.findByPk(req.user.id, {
-      attributes: ['id', 'firstName', 'lastName', 'storeId', ...METRIC_FIELDS]
+      attributes: ['id', 'firstName', 'lastName', 'storeId']
     });
 
     if (!currentEmployee) {
@@ -241,16 +265,34 @@ const getMyAndStoreStats = async (req, res) => {
         storeId: currentEmployee.storeId,
         isActive: true
       },
-      attributes: ['id', ...METRIC_FIELDS]
+      attributes: ['id']
     });
 
-    const myStats = mapEmployeeStats(currentEmployee);
-    const storeStats = getStoreAggregatedStats(storeEmployees);
-    const walkHistory = await getCompletedPickWalkHistory(currentEmployee.id);
-    const storeWalkHistory = await getCompletedPickWalkHistory(storeEmployees.map((employee) => employee.id));
+    const employeeIds = storeEmployees.map((employee) => employee.id);
+    const timeframeEntries = await Promise.all(employeeIds.map(async (employeeId) => {
+      const stats = await getEmployeeTimeframeStats(employeeId);
+      return {
+        employeeId,
+        ...stats
+      };
+    }));
 
-    myStats.pickRate = calculateAverageWalkPickRate(walkHistory);
-    storeStats.pickRate = calculateAverageWalkPickRate(storeWalkHistory);
+    const myTimeframes = timeframeEntries.find((entry) => entry.employeeId === currentEmployee.id) || {
+      employeeId: currentEmployee.id,
+      today: { ...EMPTY_STATS },
+      allTime: { ...EMPTY_STATS }
+    };
+
+    const myStats = myTimeframes.today;
+    const myAllTimeStats = myTimeframes.allTime;
+    const storeStats = aggregateStoreStats(timeframeEntries, 'today');
+    const storeAllTimeStats = aggregateStoreStats(timeframeEntries, 'allTime');
+    const walkHistory = await getCompletedPickWalkHistory(currentEmployee.id);
+
+    const storeRecord = await Store.findByPk(currentEmployee.storeId, {
+      attributes: ['id', 'backroomDoorLocation']
+    });
+    const storeSettings = storeRecord ? getStoreSettingsFromStore(storeRecord) : normalizeStoreSettings(null);
 
     res.json({
       success: true,
@@ -260,16 +302,150 @@ const getMyAndStoreStats = async (req, res) => {
         lastName: currentEmployee.lastName,
         storeId: currentEmployee.storeId,
         stats: myStats,
+        statsToday: myStats,
+        statsAllTime: myAllTimeStats,
         walkHistory
       },
       store: {
         employeeCount: storeEmployees.length,
-        stats: storeStats
+        stats: storeStats,
+        statsToday: storeStats,
+        statsAllTime: storeAllTimeStats,
+        settings: storeSettings
       }
     });
   } catch (error) {
     console.error('Get my/store stats error:', error);
     res.status(500).json({ message: 'Server error retrieving statistics' });
+  }
+};
+
+const getStoreSettings = async (req, res) => {
+  try {
+    if (req.userType !== 'employee') {
+      return res.status(403).json({ message: 'Only employees can access store settings.' });
+    }
+
+    const storeId = resolveStoreIdFromRequest(req);
+    if (!storeId) {
+      return res.status(400).json({ message: 'Employee store is required.' });
+    }
+
+    const store = await Store.findByPk(storeId, {
+      attributes: ['id', 'storeNumber', 'name', 'backroomDoorLocation']
+    });
+
+    if (!store) {
+      return res.status(404).json({ message: 'Store not found.' });
+    }
+
+    const settings = getStoreSettingsFromStore(store);
+
+    return res.json({
+      success: true,
+      store: {
+        id: store.id,
+        storeNumber: store.storeNumber,
+        name: store.name
+      },
+      settings
+    });
+  } catch (error) {
+    console.error('Get store settings error:', error);
+    return res.status(500).json({ message: 'Server error retrieving store settings' });
+  }
+};
+
+const updateStoreSettings = async (req, res) => {
+  try {
+    if (req.userType !== 'employee') {
+      return res.status(403).json({ message: 'Only employees can update store settings.' });
+    }
+
+    const storeId = resolveStoreIdFromRequest(req);
+    if (!storeId) {
+      return res.status(400).json({ message: 'Employee store is required.' });
+    }
+
+    const store = await Store.findByPk(storeId, {
+      attributes: ['id', 'storeNumber', 'name', 'backroomDoorLocation']
+    });
+
+    if (!store) {
+      return res.status(404).json({ message: 'Store not found.' });
+    }
+
+    const requestedSettings = normalizeStoreSettings(req.body?.settings);
+    const existingSettings = getStoreSettingsFromStore(store);
+    const currentDefaultLimit = toInteger(existingSettings?.timeslot?.defaultLimit, 20);
+    const nextDefaultLimit = toInteger(requestedSettings?.timeslot?.defaultLimit, currentDefaultLimit);
+
+    if (!Number.isInteger(nextDefaultLimit) || nextDefaultLimit < 1) {
+      return res.status(400).json({ message: 'Timeslot order limit must be an integer greater than 0.' });
+    }
+
+    const activeOrders = await Order.findAll({
+      where: {
+        storeId,
+        status: {
+          [Op.notIn]: ['cancelled', 'completed']
+        },
+        scheduledPickupTime: {
+          [Op.gte]: new Date()
+        }
+      },
+      attributes: ['scheduledPickupTime']
+    });
+
+    const orderCountByTimeslotKey = activeOrders.reduce((accumulator, order) => {
+      const slotKey = getTimeslotKeyFromDate(order?.scheduledPickupTime);
+      if (!slotKey) {
+        return accumulator;
+      }
+
+      accumulator[slotKey] = (accumulator[slotKey] || 0) + 1;
+      return accumulator;
+    }, {});
+
+    const currentOverrides = existingSettings?.timeslot?.overrides || {};
+    const nextOverrides = Object.entries(orderCountByTimeslotKey).reduce((accumulator, [slotKey, slotCount]) => {
+      const count = toInteger(slotCount, 0);
+      const currentEffectiveLimit = toInteger(currentOverrides[slotKey], currentDefaultLimit);
+
+      if (count <= nextDefaultLimit) {
+        return accumulator;
+      }
+
+      accumulator[slotKey] = Math.max(currentEffectiveLimit, count);
+      return accumulator;
+    }, {});
+
+    const nextSettings = normalizeStoreSettings({
+      ...requestedSettings,
+      timeslot: {
+        ...requestedSettings.timeslot,
+        defaultLimit: nextDefaultLimit,
+        overrides: nextOverrides
+      }
+    });
+
+    await store.update({
+      backroomDoorLocation: buildBackroomDoorLocationWithStoreSettings(store.backroomDoorLocation, nextSettings)
+    });
+
+    return res.json({
+      success: true,
+      message: 'Store settings updated successfully.',
+      store: {
+        id: store.id,
+        storeNumber: store.storeNumber,
+        name: store.name
+      },
+      settings: nextSettings
+    });
+  } catch (error) {
+    console.error('Update store settings error:', error);
+    return res.status(500).json({ message: 'Server error updating store settings' });
   }
 };
 
@@ -280,5 +456,7 @@ module.exports = {
   updateEmployee,
   deleteEmployee,
   getEmployeeMetrics,
-  getMyAndStoreStats
+  getMyAndStoreStats,
+  getStoreSettings,
+  updateStoreSettings
 };

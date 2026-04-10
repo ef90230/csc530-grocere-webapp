@@ -1,5 +1,53 @@
 const { Customer, Order, Store } = require('../models');
 
+const parseOrderNotesObject = (notesValue) => {
+  if (!notesValue) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(notesValue);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
+const extractOrderCheckIn = (order) => {
+  const parsedNotes = parseOrderNotesObject(order?.notes);
+  const checkIn = parsedNotes?.checkIn;
+
+  return {
+    isCheckedIn: Boolean(checkIn?.isCheckedIn),
+    checkInTime: checkIn?.checkInTime || null,
+    parkingSpot: checkIn?.parkingSpot || null,
+    vehicleInfo: checkIn?.vehicleInfo || null
+  };
+};
+
+const buildOrderNotesWithCheckIn = (order, checkInPatch) => {
+  const parsedNotes = parseOrderNotesObject(order?.notes);
+  const orderNote = typeof parsedNotes?.orderNote === 'string'
+    ? parsedNotes.orderNote
+    : (typeof order?.notes === 'string' && !parsedNotes ? order.notes : '');
+  const itemNotesByOrderItemId = parsedNotes?.itemNotesByOrderItemId && typeof parsedNotes.itemNotesByOrderItemId === 'object'
+    ? parsedNotes.itemNotesByOrderItemId
+    : {};
+
+  return JSON.stringify({
+    ...(parsedNotes || {}),
+    orderNote,
+    itemNotesByOrderItemId,
+    checkIn: {
+      ...(parsedNotes?.checkIn || {}),
+      ...checkInPatch
+    }
+  });
+};
+
 const getCustomers = async (req, res) => {
   try {
     const { search, isCheckedIn } = req.query;
@@ -91,23 +139,47 @@ const checkIn = async (req, res) => {
       return res.status(404).json({ message: 'Customer not found' });
     }
 
-    const { vehicleInfo, parkingSpot } = req.body;
+    const { orderId, vehicleInfo, parkingSpot } = req.body;
+    const resolvedOrderId = Number(orderId);
 
-    await customer.update({
-      isCheckedIn: true,
-      checkInTime: new Date(),
-      vehicleInfo: vehicleInfo || customer.vehicleInfo,
-      parkingSpot: parkingSpot || customer.parkingSpot
+    if (!Number.isInteger(resolvedOrderId)) {
+      return res.status(400).json({ message: 'orderId is required for check in.' });
+    }
+
+    const order = await Order.findOne({
+      where: {
+        id: resolvedOrderId,
+        customerId: customer.id
+      }
     });
+
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found for customer.' });
+    }
+
+    const currentCheckIn = extractOrderCheckIn(order);
+    const nextCheckInTime = new Date().toISOString();
+
+    await order.update({
+      notes: buildOrderNotesWithCheckIn(order, {
+        isCheckedIn: true,
+        checkInTime: nextCheckInTime,
+        vehicleInfo: vehicleInfo || currentCheckIn.vehicleInfo,
+        parkingSpot: parkingSpot || currentCheckIn.parkingSpot
+      })
+    });
+
+    const updatedCheckIn = extractOrderCheckIn(order);
 
     res.json({
       success: true,
       message: 'Checked in successfully',
-      customer: {
-        id: customer.id,
-        isCheckedIn: customer.isCheckedIn,
-        checkInTime: customer.checkInTime,
-        parkingSpot: customer.parkingSpot
+      order: {
+        id: order.id,
+        isCheckedIn: updatedCheckIn.isCheckedIn,
+        checkInTime: updatedCheckIn.checkInTime,
+        parkingSpot: updatedCheckIn.parkingSpot,
+        vehicleInfo: updatedCheckIn.vehicleInfo
       }
     });
   } catch (error) {
@@ -124,10 +196,28 @@ const checkOut = async (req, res) => {
       return res.status(404).json({ message: 'Customer not found' });
     }
 
-    await customer.update({
-      isCheckedIn: false,
-      checkInTime: null,
-      parkingSpot: null
+    const resolvedOrderId = Number(req.body?.orderId);
+    if (!Number.isInteger(resolvedOrderId)) {
+      return res.status(400).json({ message: 'orderId is required for check out.' });
+    }
+
+    const order = await Order.findOne({
+      where: {
+        id: resolvedOrderId,
+        customerId: customer.id
+      }
+    });
+
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found for customer.' });
+    }
+
+    await order.update({
+      notes: buildOrderNotesWithCheckIn(order, {
+        isCheckedIn: false,
+        checkInTime: null,
+        parkingSpot: null
+      })
     });
 
     res.json({
@@ -145,7 +235,6 @@ const getCheckedInCustomers = async (req, res) => {
     const storeId = req.params.storeId;
 
     const customers = await Customer.findAll({
-      where: { isCheckedIn: true },
       attributes: { exclude: ['password'] },
       include: [
         {
@@ -156,16 +245,44 @@ const getCheckedInCustomers = async (req, res) => {
             status: ['ready', 'staged']
           },
           required: true,
-          attributes: ['id', 'orderNumber', 'status', 'scheduledPickupTime']
+          attributes: ['id', 'orderNumber', 'status', 'scheduledPickupTime', 'notes']
         }
       ],
-      order: [['checkInTime', 'ASC']]
+      order: [['lastName', 'ASC'], ['firstName', 'ASC']]
     });
+
+    const customersWithCheckedInOrders = customers
+      .map((customer) => {
+        const customerJson = customer.toJSON();
+        const checkedInOrders = (customerJson.orders || [])
+          .map((order) => {
+            const checkIn = extractOrderCheckIn(order);
+            return {
+              ...order,
+              isCheckedIn: checkIn.isCheckedIn,
+              checkInTime: checkIn.checkInTime,
+              parkingSpot: checkIn.parkingSpot,
+              vehicleInfo: checkIn.vehicleInfo
+            };
+          })
+          .filter((order) => order.isCheckedIn);
+
+        return {
+          ...customerJson,
+          orders: checkedInOrders
+        };
+      })
+      .filter((customer) => customer.orders.length > 0)
+      .sort((left, right) => {
+        const leftEarliest = new Date(left.orders[0]?.checkInTime || 0).getTime();
+        const rightEarliest = new Date(right.orders[0]?.checkInTime || 0).getTime();
+        return leftEarliest - rightEarliest;
+      });
 
     res.json({
       success: true,
-      count: customers.length,
-      customers
+      count: customersWithCheckedInOrders.length,
+      customers: customersWithCheckedInOrders
     });
   } catch (error) {
     console.error('Get checked-in customers error:', error);

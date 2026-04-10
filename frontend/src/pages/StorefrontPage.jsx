@@ -2,20 +2,16 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import CustomerPopupMenu from '../components/customer/CustomerPopupMenu';
 import CustomerItemDetailCard from '../components/customer/CustomerItemDetailCard';
+import {
+  deriveCustomerOrderStatus,
+  isCustomerOrderActive,
+  CUSTOMER_ORDER_STATUS_LABELS,
+  CUSTOMER_ORDER_STATUS_TO_PILL_VARIANT
+} from '../utils/customerOrderStatus';
 import './StorefrontPage.css';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 const CLOSE_ANIMATION_MS = 280;
-const ACTIVE_ORDER_STATUSES = ['assigned', 'picking', 'picked', 'staging', 'staged', 'ready', 'dispensing'];
-const ORDER_STATUS_LABELS = {
-  assigned: 'Picker Assigned',
-  picking: 'Picking In Progress',
-  picked: 'Picking Complete',
-  staging: 'Partially Staged',
-  staged: 'Staging Complete',
-  ready: 'Ready for Pickup',
-  dispensing: 'Dispensing In Progress'
-};
 
 const getOnHandTotal = (item) => (
   Array.isArray(item?.locations)
@@ -176,7 +172,7 @@ const StorefrontPage = () => {
         if (ordersResponse.ok) {
           const ordersPayload = await ordersResponse.json();
           const matchingOrder = (ordersPayload?.orders || [])
-            .filter((order) => ACTIVE_ORDER_STATUSES.includes(order?.status))
+            .filter((order) => isCustomerOrderActive(order))
             .sort((left, right) => new Date(left?.scheduledPickupTime) - new Date(right?.scheduledPickupTime))[0] || null;
 
           setActiveOrder(matchingOrder);
@@ -369,6 +365,7 @@ const StorefrontPage = () => {
     (sum, orderItem) => sum + Number(orderItem?.quantity || 0),
     0
   ) || 0;
+  const activeOrderPhase = activeOrder ? deriveCustomerOrderStatus(activeOrder) : null;
 
   const activeOrderStoreLabel = activeOrder?.store?.storeNumber
     ? `Store ${activeOrder.store.storeNumber}`
@@ -452,8 +449,10 @@ const StorefrontPage = () => {
                   ? `Some items in your order at ${activeOrderStoreLabel} were not found.`
                   : `You have one order at ${activeOrderStoreLabel}.`}
               </p>
-              <span className="storefront-order-status-pill">
-                {ORDER_STATUS_LABELS[activeOrder.status] || activeOrder.status}
+              <span
+                className={`storefront-order-status-pill storefront-order-status-pill--${CUSTOMER_ORDER_STATUS_TO_PILL_VARIANT[activeOrderPhase]}`}
+              >
+                {CUSTOMER_ORDER_STATUS_LABELS[activeOrderPhase] || 'ORDER PLACED'}
               </span>
             </div>
             <div className="storefront-order-card__body">
