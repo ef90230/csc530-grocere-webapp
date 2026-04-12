@@ -33,8 +33,17 @@
   padding: 0.45rem 0.9rem;
   font-weight: 600;
   font-size: 0.9rem;
-  cursor: not-allowed;
-  opacity: 0.85;
+  cursor: pointer;
+  transition: all 200ms ease;
+}
+
+.leaderboard-button:hover {
+  background-color: #5a32a1;
+  opacity: 0.95;
+}
+
+.leaderboard-button:active {
+  transform: scale(0.95);
 }
 
 .statistics-toggle-row {
@@ -101,6 +110,31 @@
   padding: 0.35rem;
   text-align: center;
   background-color: #cdcdcd;
+  position: relative;
+}
+
+.metric-card-info-button {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: 999px;
+  background: #1f58c8;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.metric-card-info-button:hover {
+  background: #1849a6;
 }
 
 .metric-card--neutral {
@@ -278,6 +312,47 @@
 .walk-history-empty {
   font-size: 0.9rem;
   color: #4b4b4b;
+}
+
+.stats-info-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 260;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.stats-info-overlay-hint {
+  color: #fff;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
+.stats-info-card {
+  width: min(95vw, 560px);
+  max-height: 78vh;
+  overflow-y: auto;
+  background: #ececec;
+  border: 2px solid #222;
+  border-radius: 14px;
+  padding: 0.9rem;
+}
+
+.stats-info-card h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.2;
+}
+
+.stats-info-card p {
+  margin: 0.65rem 0 0;
+  font-size: 1rem;
+  line-height: 1.45;
 }
 
 @media (max-width: 430px) {

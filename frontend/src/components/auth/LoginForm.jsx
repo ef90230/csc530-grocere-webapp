@@ -12,7 +12,7 @@ const loginSchema = z.object({
     .string()
     .min(1, 'Password is required')
     .min(8, 'Password must be at least 8 characters'),
-  userType: z.enum(['customer', 'employee'], { required_error: 'User type is required' }),
+    userType: z.enum(['customer', 'employee', 'admin'], { required_error: 'User type is required' }),
 });
 
 const LoginForm = ({ onSubmit }) => {
@@ -31,6 +31,7 @@ const LoginForm = ({ onSubmit }) => {
                 <select {...register('userType')} defaultValue="customer">
                     <option value="customer">Customer</option>
                     <option value="employee">Employee</option>
+                    <option value="admin">Admin</option>
                 </select>
                 {errors.userType && (
                     <span className="error-text">{errors.userType.message}</span>

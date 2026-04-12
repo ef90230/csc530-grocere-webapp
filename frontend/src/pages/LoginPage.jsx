@@ -13,7 +13,7 @@ const LoginPage = () => {
         try {
             await login(data);
             // Redirect based on user type
-            if (data.userType === 'employee') {
+            if (data.userType === 'employee' || data.userType === 'admin') {
                 navigate('/home');
             } else {
                 navigate('/storefront');

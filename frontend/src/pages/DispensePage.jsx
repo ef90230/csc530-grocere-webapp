@@ -105,7 +105,7 @@ const DispensePage = () => {
 
     useEffect(() => {
         const userType = window.localStorage.getItem('userType');
-        if (!token || userType !== 'employee' || !orderId) {
+        if (!token || (userType !== 'employee' && userType !== 'admin') || !orderId) {
             navigate('/orders');
         }
     }, [navigate, orderId, token]);
@@ -458,7 +458,7 @@ const DispensePage = () => {
                                             className={`dispense-tote-row ${isChecked ? 'dispense-tote-row--checked' : ''}`}
                                             onClick={() => toggleToteChecked(toteKey)}
                                         >
-                                            <span className="dispense-tote-check">{isChecked ? '✓' : ''}</span>
+                                            <span className="dispense-tote-check">{isChecked ? 'âœ“' : ''}</span>
                                             <span className="dispense-tote-customer">{customerName}</span>
                                             <span className="dispense-tote-order">Order {orderNumber || `#${orderId}`}</span>
                                             <span className="dispense-tote-location">{getLocationTag(tote)}</span>
@@ -611,3 +611,5 @@ const DispensePage = () => {
 };
 
 export default DispensePage;
+
+

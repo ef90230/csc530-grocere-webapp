@@ -14,6 +14,7 @@ const {
   closeWalk,
   closeLatestOpenWalk
 } = require('../utils/walkPerformanceStore');
+const { recordOrderWaitTime } = require('../utils/storeWaitTimeHistoryStore');
 
 const COMMODITY_DISPLAY_NAMES = {
   ambient: 'Ambient Regular',
@@ -607,6 +608,22 @@ const updateOrderStatus = async (req, res) => {
 
     if (status === 'completed' && !order.actualPickupTime) {
       updateData.actualPickupTime = new Date();
+
+      try {
+        const parsedNotes = JSON.parse(order.notes || '{}');
+        const checkInTime = parsedNotes?.checkIn?.checkInTime;
+        if (checkInTime) {
+          const checkInDate = new Date(checkInTime);
+          if (!Number.isNaN(checkInDate.getTime())) {
+            const waitMinutes = (Date.now() - checkInDate.getTime()) / 60000;
+            if (waitMinutes > 0 && order.storeId) {
+              recordOrderWaitTime(order.storeId, waitMinutes);
+            }
+          }
+        }
+      } catch {
+        // notes may not be valid JSON; skip wait time recording
+      }
     }
 
     if (
@@ -637,7 +654,7 @@ const updateOrderStatus = async (req, res) => {
 const updateOrderItem = async (req, res) => {
   try {
     const { id, itemId } = req.params;
-    const { status, substitutedItemId, pickedQuantity, attemptCount } = req.body;
+    const { status, substitutedItemId, pickedQuantity, attemptCount, countAsNotFoundMetric } = req.body;
 
     const orderItem = await OrderItem.findOne({
       where: {
@@ -693,7 +710,7 @@ const updateOrderItem = async (req, res) => {
       });
     }
 
-    if (assignedPickerId && walkCommodity && walkStartedAt && ['out_of_stock', 'skipped'].includes(normalizedStatus)) {
+    if (assignedPickerId && walkCommodity && walkStartedAt && normalizedStatus === 'out_of_stock' && Boolean(countAsNotFoundMetric)) {
       const remainingQty = Math.max(0, Number(orderItem.quantity || 0) - previousPickedQuantity);
       const mistakeQty = Math.max(1, remainingQty);
 

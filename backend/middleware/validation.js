@@ -67,7 +67,7 @@ const employeeRegistrationValidation = () => {
     ...passwordValidation(),
     body('role')
       .optional()
-      .isIn(['manager', 'picker', 'stager', 'dispenser'])
+      .isIn(['manager', 'picker', 'stager', 'dispenser', 'admin'])
       .withMessage('Invalid role'),
     body('storeId')
       .isInt({ min: 1 })

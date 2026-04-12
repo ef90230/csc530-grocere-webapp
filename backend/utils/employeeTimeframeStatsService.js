@@ -1,4 +1,4 @@
-const { Employee, Order, OrderItem } = require('../models');
+const { Order, OrderItem, Item } = require('../models');
 const { Op } = require('sequelize');
 const {
   getCompletedPickWalkHistory
@@ -7,7 +7,14 @@ const {
   getEmployeeDayTotals,
   getLocalDayKey
 } = require('./employeeTotesHistoryStore');
+const {
+  getEmployeeDayTotals: getEmployeeItemsStagedDayTotals
+} = require('./employeeStagedItemsHistoryStore');
 const { getWalkSummariesForEmployee } = require('./walkPerformanceStore');
+const {
+  getStoreDayTotals: getStoreWaitTimeDayTotals,
+  getLocalDayKey: getLocalDayKeyForWaitTime
+} = require('./storeWaitTimeHistoryStore');
 
 const AVERAGE_METRIC_FIELDS = [
   'pickRate',
@@ -22,7 +29,10 @@ const AVERAGE_METRIC_FIELDS = [
 const TOTAL_METRIC_FIELDS = [
   'itemsPicked',
   'totesStaged',
-  'ordersDispensed'
+  'itemsStaged',
+  'ordersDispensed',
+  'totesDispensed',
+  'itemsDispensed'
 ];
 
 const EMPTY_STATS = {
@@ -35,8 +45,13 @@ const EMPTY_STATS = {
   onTimePercent: 0,
   weightedEfficiency: 0,
   totesStaged: 0,
-  ordersDispensed: 0
+  itemsStaged: 0,
+  ordersDispensed: 0,
+  totesDispensed: 0,
+  itemsDispensed: 0
 };
+
+const NON_DISPENSABLE_ITEM_STATUSES = new Set(['out_of_stock', 'skipped', 'not_found', 'cancelled', 'canceled']);
 
 const toNumber = (value) => {
   const parsed = Number(value);
@@ -44,6 +59,25 @@ const toNumber = (value) => {
 };
 
 const clampPercent = (value) => Math.max(0, Math.min(100, toNumber(value)));
+
+const resolveDispensableItemQuantity = (orderItem) => {
+  const normalizedStatus = String(orderItem?.status || '').trim().toLowerCase();
+  if (NON_DISPENSABLE_ITEM_STATUSES.has(normalizedStatus)) {
+    return 0;
+  }
+
+  const pickedQuantity = toNumber(orderItem?.pickedQuantity);
+  if (pickedQuantity > 0) {
+    return Math.max(0, Math.round(pickedQuantity));
+  }
+
+  const quantity = toNumber(orderItem?.quantity);
+  if (quantity > 0) {
+    return Math.max(0, Math.round(quantity));
+  }
+
+  return 0;
+};
 
 const getDayKey = (dateInput) => {
   const date = new Date(dateInput);
@@ -107,7 +141,10 @@ const finalizeDayAccumulator = (dayData = {}) => {
     onTimePercent: Number(clampPercent(onTimePercent).toFixed(2)),
     weightedEfficiency: Number(clampPercent(weightedEfficiency).toFixed(2)),
     totesStaged: Math.max(0, Math.round(toNumber(dayData.totesStaged))),
-    ordersDispensed: Math.max(0, Math.round(toNumber(dayData.ordersDispensed)))
+    itemsStaged: Math.max(0, Math.round(toNumber(dayData.itemsStaged))),
+    ordersDispensed: Math.max(0, Math.round(toNumber(dayData.ordersDispensed))),
+    totesDispensed: Math.max(0, Math.round(toNumber(dayData.totesDispensed))),
+    itemsDispensed: Math.max(0, Math.round(toNumber(dayData.itemsDispensed)))
   };
 };
 
@@ -127,7 +164,10 @@ const ensureDayAccumulator = (accumulatorByDay, dayKey) => {
       walkRates: [],
       ftprRates: [],
       totesStaged: 0,
-      ordersDispensed: 0
+      itemsStaged: 0,
+      ordersDispensed: 0,
+      totesDispensed: 0,
+      itemsDispensed: 0
     };
   }
 
@@ -174,10 +214,6 @@ const buildEmployeeDayStatsMap = async (employeeId) => {
       if (item.status === 'substituted') {
         day.substituted += 1;
       }
-
-      if (item.status === 'out_of_stock' || item.status === 'skipped') {
-        day.notFound += 1;
-      }
     });
   });
 
@@ -212,7 +248,23 @@ const buildEmployeeDayStatsMap = async (employeeId) => {
       status: 'completed',
       actualPickupTime: { [Op.ne]: null }
     },
-    attributes: ['actualPickupTime']
+    attributes: ['actualPickupTime'],
+    include: [
+      {
+        model: OrderItem,
+        as: 'items',
+        required: false,
+        attributes: ['status', 'quantity', 'pickedQuantity'],
+        include: [
+          {
+            model: Item,
+            as: 'item',
+            required: false,
+            attributes: ['commodity']
+          }
+        ]
+      }
+    ]
   });
 
   dispenserOrders.forEach((order) => {
@@ -223,6 +275,25 @@ const buildEmployeeDayStatsMap = async (employeeId) => {
     }
 
     day.ordersDispensed += 1;
+
+    const dispensedCommoditySet = new Set();
+    let dispensedItemCount = 0;
+
+    (order.items || []).forEach((orderItem) => {
+      const itemQty = resolveDispensableItemQuantity(orderItem);
+      if (itemQty <= 0) {
+        return;
+      }
+
+      dispensedItemCount += itemQty;
+      const commodity = String(orderItem?.item?.commodity || '').trim().toLowerCase();
+      if (commodity) {
+        dispensedCommoditySet.add(commodity);
+      }
+    });
+
+    day.totesDispensed += dispensedCommoditySet.size;
+    day.itemsDispensed += dispensedItemCount;
   });
 
   const walkHistory = await getCompletedPickWalkHistory(normalizedEmployeeId);
@@ -245,6 +316,7 @@ const buildEmployeeDayStatsMap = async (employeeId) => {
     }
 
     day.ftprRates.push(toNumber(walkSummary?.firstTimePickRate));
+    day.notFound += Math.max(0, Math.round(toNumber(walkSummary?.mistakeItems)));
   });
 
   const totesByDay = getEmployeeDayTotals(normalizedEmployeeId);
@@ -257,22 +329,15 @@ const buildEmployeeDayStatsMap = async (employeeId) => {
     day.totesStaged = Math.max(0, Math.round(toNumber(toteCount)));
   });
 
-  const todayKey = getLocalDayKey(new Date());
-  const hasTodayTotesInHistory = Number.isFinite(toNumber(totesByDay[todayKey])) && toNumber(totesByDay[todayKey]) > 0;
-
-  if (!hasTodayTotesInHistory) {
-    const employeeRecord = await Employee.findByPk(normalizedEmployeeId, {
-      attributes: ['id', 'totesStaged']
-    });
-
-    const fallbackTodayTotes = Math.max(0, Math.round(toNumber(employeeRecord?.totesStaged)));
-    if (fallbackTodayTotes > 0) {
-      const day = ensureDayAccumulator(dayAccumulator, todayKey);
-      if (day) {
-        day.totesStaged = fallbackTodayTotes;
-      }
+  const stagedItemsByDay = getEmployeeItemsStagedDayTotals(normalizedEmployeeId);
+  Object.entries(stagedItemsByDay).forEach(([dayKey, stagedItems]) => {
+    const day = ensureDayAccumulator(dayAccumulator, dayKey);
+    if (!day) {
+      return;
     }
-  }
+
+    day.itemsStaged = Math.max(0, Math.round(toNumber(stagedItems)));
+  });
 
   return Object.entries(dayAccumulator).reduce((accumulator, [dayKey, dayData]) => {
     accumulator[dayKey] = finalizeDayAccumulator(dayData);
@@ -337,12 +402,40 @@ const aggregateStoreStats = (employeeStats, timeframeKey) => {
   return summary;
 };
 
+const getStoreWaitTimeStats = (storeId) => {
+  const dayTotals = getStoreWaitTimeDayTotals(storeId);
+  const todayKey = getLocalDayKeyForWaitTime(new Date());
+
+  const todayData = dayTotals[todayKey] || { totalMinutes: 0, orderCount: 0 };
+  const todayAvg = todayData.orderCount > 0 ? todayData.totalMinutes / todayData.orderCount : 0;
+
+  let allTotalMinutes = 0;
+  let allOrderCount = 0;
+  Object.values(dayTotals).forEach((day) => {
+    allTotalMinutes += toNumber(day.totalMinutes);
+    allOrderCount += Math.max(0, Math.round(toNumber(day.orderCount)));
+  });
+  const allTimeAvg = allOrderCount > 0 ? allTotalMinutes / allOrderCount : 0;
+
+  return {
+    today: {
+      avgWaitTimeMinutes: Number(todayAvg.toFixed(2)),
+      cumulativeWaitTimeMinutes: Number(todayData.totalMinutes.toFixed(2))
+    },
+    allTime: {
+      avgWaitTimeMinutes: Number(allTimeAvg.toFixed(2)),
+      cumulativeWaitTimeMinutes: Number(allTotalMinutes.toFixed(2))
+    }
+  };
+};
+
 module.exports = {
   EMPTY_STATS,
   getEmployeeTimeframeStats,
   aggregateStoreStats,
   buildAllTimeFromDayStats,
   buildEmployeeDayStatsMap,
+  getStoreWaitTimeStats,
   getDayBounds,
   addDays
 };

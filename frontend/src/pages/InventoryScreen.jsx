@@ -18,6 +18,8 @@ const SORT_OPTIONS = [
 
 const InventoryScreen = () => {
   const navigate = useNavigate();
+  const userType = window.localStorage.getItem('userType');
+  const isAdmin = userType === 'admin';
   const [items, setItems] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('name_asc');
@@ -164,15 +166,16 @@ const InventoryScreen = () => {
             View Map
           </button>
         </div>
-        <div className="toolbar" style={{ marginBottom: '1rem' }}>
+        <div className="toolbar inventory-toolbar">
           <input
             type="text"
+            className="inventory-search-input"
             placeholder="Search by name or UPC"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            style={{ marginRight: '1rem' }}
           />
           <select
+            className="inventory-sort-select"
             value={sortBy}
             onChange={e => setSortBy(e.target.value)}
           >
@@ -187,37 +190,39 @@ const InventoryScreen = () => {
         {error && <p style={{ color: 'red' }}>{error}</p>}
         {!loading && !error && (
           <div className="inventory-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>UPC</th>
-                  <th>Category</th>
-                  <th>Stock</th>
-                  <th>Aisle</th>
-                </tr>
-              </thead>
-              <tbody>
-                {processedItems.map(item => {
-                  const stock = totalStock(item);
-                  const aisle =
-                    item.locations && item.locations[0] &&
-                    item.locations[0].location &&
-                    item.locations[0].location.aisle
-                      ? item.locations[0].location.aisle.aisleNumber
-                      : '';
-                  return (
-                    <tr key={item.id} className="inventory-row" onClick={() => setSelectedItem(item)}>
-                      <td>{item.name}</td>
-                      <td>{item.upc}</td>
-                      <td>{item.category}</td>
-                      <td>{stock}</td>
-                      <td>{aisle}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div className="inventory-table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>UPC</th>
+                    <th>Category</th>
+                    <th>Stock</th>
+                    <th>Aisle</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {processedItems.map(item => {
+                    const stock = totalStock(item);
+                    const aisle =
+                      item.locations && item.locations[0] &&
+                      item.locations[0].location &&
+                      item.locations[0].location.aisle
+                        ? item.locations[0].location.aisle.aisleNumber
+                        : '';
+                    return (
+                      <tr key={item.id} className="inventory-row" onClick={() => setSelectedItem(item)}>
+                        <td>{item.name}</td>
+                        <td>{item.upc}</td>
+                        <td>{item.category}</td>
+                        <td>{stock}</td>
+                        <td>{aisle}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
             {processedItems.length === 0 && <p>No items found.</p>}
           </div>
         )}
@@ -226,6 +231,7 @@ const InventoryScreen = () => {
         <ItemCard
           item={selectedItem}
           aisles={storeAisles}
+          isAdmin={isAdmin}
           onClose={() => setSelectedItem(null)}
           onItemUpdated={handleItemUpdated}
         />

@@ -28,8 +28,8 @@ const formatLocationLabel = (location) => {
         return 'Location unavailable';
     }
 
-    const aisle = location.aisleNumber || '—';
-    const section = location.section ? ` • Section ${location.section}` : '';
+    const aisle = location.aisleNumber || 'â€”';
+    const section = location.section ? ` â€¢ Section ${location.section}` : '';
     return `Aisle ${aisle}${section}`;
 };
 
@@ -71,7 +71,7 @@ const PickingPage = () => {
         const token = window.localStorage.getItem('authToken');
         const userType = window.localStorage.getItem('userType');
 
-        if (!token || userType !== 'employee') {
+        if (!token || (userType !== 'employee' && userType !== 'admin')) {
             navigate('/');
             return undefined;
         }
@@ -552,7 +552,8 @@ const PickingPage = () => {
                 },
                 body: JSON.stringify({
                     status: 'out_of_stock',
-                    pickedQuantity: Number(entry?.pickedQuantity || 0)
+                    pickedQuantity: Number(entry?.pickedQuantity || 0),
+                    countAsNotFoundMetric: true
                 })
             });
 
@@ -684,7 +685,7 @@ const PickingPage = () => {
         <div className="picking-page">
             <TopBar
                 title={`${commodityTitle} Picking`}
-                leftActionLabel="×"
+                leftActionLabel="Ã—"
                 leftActionAriaLabel="End pick walk"
                 onLeftAction={() => setIsEndPromptOpen(true)}
                 statMode="walk"
@@ -703,7 +704,7 @@ const PickingPage = () => {
 
                 {!errorMessage && isLoading ? (
                     <section className="picking-empty-state">
-                        <h2>Preparing your pick walk…</h2>
+                        <h2>Preparing your pick walkâ€¦</h2>
                     </section>
                 ) : null}
 
@@ -794,7 +795,7 @@ const PickingPage = () => {
                         <div className="picking-info-grid">
                             <div className="picking-info-row">
                                 <span className="key">UPC/PLU</span>
-                                <strong>{(substituteMode ? substituteMode.originalEntry.substitute.upc : currentItem.item.upc) || '—'}</strong>
+                                <strong>{(substituteMode ? substituteMode.originalEntry.substitute.upc : currentItem.item.upc) || 'â€”'}</strong>
                             </div>
                             <div className="picking-info-row">
                                 <span className="key">Price</span>
@@ -861,7 +862,7 @@ const PickingPage = () => {
                                         key={aisle.id || aisleNumber}
                                         className={`picking-map-aisle ${isHighlighted ? 'picking-map-aisle--highlighted' : ''}`}
                                     >
-                                        Aisle {aisleNumber || '—'}
+                                        Aisle {aisleNumber || 'â€”'}
                                     </div>
                                 );
                             })}
@@ -1003,3 +1004,4 @@ const PickingPage = () => {
 };
 
 export default PickingPage;
+

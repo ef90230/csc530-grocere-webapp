@@ -1,5 +1,7 @@
 export const STORE_SETTINGS_CACHE_KEY = 'grocereStoreSettingsCache';
 
+export const DEFAULT_WAIT_TIME_WARNING_MINUTES = 5;
+
 export const DEFAULT_STORE_SETTINGS = {
   goals: {
     pickRateGoal: {
@@ -79,6 +81,8 @@ export const normalizeStoreSettings = (inputSettings) => {
 
   const hasGoal = (goalKey) => hasOwn(goals, goalKey) && goals[goalKey] && typeof goals[goalKey] === 'object';
 
+  const waitTimeWarningMinutes = Math.max(1, Math.round(Math.min(1440, toNumber(source.waitTimeWarningMinutes, DEFAULT_WAIT_TIME_WARNING_MINUTES))));
+
   return {
     goals: {
       pickRateGoal: normalizeGoal(hasGoal('pickRateGoal') ? goals.pickRateGoal : undefined, DEFAULT_STORE_SETTINGS.goals.pickRateGoal, { min: 0.01 }),
@@ -90,7 +94,8 @@ export const normalizeStoreSettings = (inputSettings) => {
     timeslot: {
       defaultLimit: Math.round(Math.max(1, toNumber(timeslot.defaultLimit, DEFAULT_STORE_SETTINGS.timeslot.defaultLimit))),
       overrides: normalizeOverrides(timeslot.overrides)
-    }
+    },
+    waitTimeWarningMinutes
   };
 };
 

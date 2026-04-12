@@ -11,6 +11,7 @@ const {
   Employee
 } = require('../models');
 const { applyTotesDelta } = require('../utils/employeeTotesHistoryStore');
+const { applyItemsStagedDelta } = require('../utils/employeeStagedItemsHistoryStore');
 
 const ALLOWED_ITEM_TYPES = ['ambient', 'chilled', 'frozen', 'hot', 'oversized'];
 const INACTIVE_ORDER_STATUSES = ['dispensing', 'completed', 'cancelled'];
@@ -23,11 +24,58 @@ const COMMODITY_DISPLAY_NAMES = {
   oversized: 'Oversized'
 };
 
+const NON_DISPENSABLE_ITEM_STATUSES = new Set(['out_of_stock', 'skipped', 'not_found', 'cancelled', 'canceled']);
+
 const normalizeItemType = (value) => String(value || '').trim().toLowerCase();
 
 const parseLocationId = (value) => {
   const parsed = Number(value);
   return Number.isInteger(parsed) ? parsed : null;
+};
+
+const resolveDispensableItemQuantity = (orderItem) => {
+  const normalizedStatus = String(orderItem?.status || '').trim().toLowerCase();
+  if (NON_DISPENSABLE_ITEM_STATUSES.has(normalizedStatus)) {
+    return 0;
+  }
+
+  const pickedQuantity = Number(orderItem?.pickedQuantity);
+  if (Number.isFinite(pickedQuantity) && pickedQuantity > 0) {
+    return Math.max(0, Math.round(pickedQuantity));
+  }
+
+  const quantity = Number(orderItem?.quantity);
+  if (Number.isFinite(quantity) && quantity > 0) {
+    return Math.max(0, Math.round(quantity));
+  }
+
+  return 0;
+};
+
+const getStagedItemCountForCommodity = async (orderId, commodity, transaction) => {
+  const normalizedOrderId = Number(orderId);
+  const normalizedCommodity = normalizeItemType(commodity);
+
+  if (!Number.isInteger(normalizedOrderId) || !ALLOWED_ITEM_TYPES.includes(normalizedCommodity)) {
+    return 0;
+  }
+
+  const orderItems = await OrderItem.findAll({
+    where: { orderId: normalizedOrderId },
+    attributes: ['quantity', 'pickedQuantity', 'status'],
+    include: [
+      {
+        model: Item,
+        as: 'item',
+        required: true,
+        where: { commodity: normalizedCommodity },
+        attributes: ['id']
+      }
+    ],
+    transaction
+  });
+
+  return orderItems.reduce((sum, orderItem) => sum + resolveDispensableItemQuantity(orderItem), 0);
 };
 
 const getStoreIdFromRequest = (req) => {
@@ -69,6 +117,18 @@ const updateEmployeeTotesStaged = async (employeeId, storeId, delta, transaction
   const nextValue = Math.max(0, Number(employee.totesStaged || 0) + delta);
   await employee.update({ totesStaged: nextValue }, { transaction });
   applyTotesDelta(resolvedEmployeeId, delta);
+};
+
+const updateEmployeeStagingMetrics = async (employeeId, storeId, toteDelta, itemsDelta, transaction) => {
+  await updateEmployeeTotesStaged(employeeId, storeId, toteDelta, transaction);
+
+  const resolvedEmployeeId = Number(employeeId);
+  const normalizedItemsDelta = Math.round(Number(itemsDelta));
+  if (!Number.isInteger(resolvedEmployeeId) || !Number.isInteger(normalizedItemsDelta) || normalizedItemsDelta === 0) {
+    return;
+  }
+
+  applyItemsStagedDelta(resolvedEmployeeId, normalizedItemsDelta);
 };
 
 const getActiveAssignmentRows = async (storeId, extraWhere = {}) => {
@@ -548,7 +608,8 @@ const assignGroup = async (req, res) => {
       stagingLocationId
     }, { transaction });
 
-    await updateEmployeeTotesStaged(req?.user?.id, storeId, 1, transaction);
+    const stagedItemCount = await getStagedItemCountForCommodity(orderId, commodity, transaction);
+    await updateEmployeeStagingMetrics(req?.user?.id, storeId, 1, stagedItemCount, transaction);
 
     await transaction.commit();
 
@@ -586,6 +647,8 @@ const unassignGroup = async (req, res) => {
       return res.status(400).json({ message: 'commodity must be one of ambient, chilled, frozen, hot, or oversized.' });
     }
 
+    const stagedItemCount = await getStagedItemCountForCommodity(orderId, commodity, transaction);
+
     const removedCount = await StagingAssignment.destroy({
       where: {
         storeId,
@@ -596,7 +659,7 @@ const unassignGroup = async (req, res) => {
     });
 
     if (removedCount > 0) {
-      await updateEmployeeTotesStaged(req?.user?.id, storeId, -1, transaction);
+      await updateEmployeeStagingMetrics(req?.user?.id, storeId, -1, -stagedItemCount, transaction);
     }
 
     await transaction.commit();

@@ -12,6 +12,7 @@ const {
 const {
   getEmployeeTimeframeStats,
   aggregateStoreStats,
+  getStoreWaitTimeStats,
   EMPTY_STATS
 } = require('../utils/employeeTimeframeStatsService');
 
@@ -25,7 +26,10 @@ const METRIC_FIELDS = [
   'onTimePercent',
   'weightedEfficiency',
   'totesStaged',
-  'ordersDispensed'
+  'itemsStaged',
+  'ordersDispensed',
+  'totesDispensed',
+  'itemsDispensed'
 ];
 
 const toNumber = (value) => {
@@ -67,7 +71,14 @@ const getStoreAggregatedStats = (employees) => {
       return sum + toNumber(employee[field]);
     }, 0);
 
-    if (field === 'itemsPicked' || field === 'totesStaged' || field === 'ordersDispensed') {
+    if (
+      field === 'itemsPicked'
+      || field === 'totesStaged'
+      || field === 'itemsStaged'
+      || field === 'ordersDispensed'
+      || field === 'totesDispensed'
+      || field === 'itemsDispensed'
+    ) {
       accumulator[field] = total;
       return accumulator;
     }
@@ -294,6 +305,8 @@ const getMyAndStoreStats = async (req, res) => {
     });
     const storeSettings = storeRecord ? getStoreSettingsFromStore(storeRecord) : normalizeStoreSettings(null);
 
+    const waitTimeStats = getStoreWaitTimeStats(currentEmployee.storeId);
+
     res.json({
       success: true,
       user: {
@@ -308,9 +321,9 @@ const getMyAndStoreStats = async (req, res) => {
       },
       store: {
         employeeCount: storeEmployees.length,
-        stats: storeStats,
-        statsToday: storeStats,
-        statsAllTime: storeAllTimeStats,
+        stats: { ...storeStats, ...waitTimeStats.today },
+        statsToday: { ...storeStats, ...waitTimeStats.today },
+        statsAllTime: { ...storeAllTimeStats, ...waitTimeStats.allTime },
         settings: storeSettings
       }
     });
@@ -449,6 +462,55 @@ const updateStoreSettings = async (req, res) => {
   }
 };
 
+const getStoreLeaderboard = async (req, res) => {
+  try {
+    if (req.userType !== 'employee') {
+      return res.status(403).json({ message: 'Only employees can access the leaderboard' });
+    }
+
+    const currentEmployee = await Employee.findByPk(req.user.id, {
+      attributes: ['id', 'storeId']
+    });
+
+    if (!currentEmployee) {
+      return res.status(404).json({ message: 'Employee not found' });
+    }
+
+    // Fetch all active employees for this store
+    const storeEmployees = await Employee.findAll({
+      where: {
+        storeId: currentEmployee.storeId,
+        isActive: true
+      },
+      attributes: ['id', 'firstName', 'lastName']
+    });
+
+    // Get today's stats for all employees
+    const leaderboardEntries = await Promise.all(
+      storeEmployees.map(async (employee) => {
+        const stats = await getEmployeeTimeframeStats(employee.id);
+        return {
+          id: employee.id,
+          firstName: employee.firstName,
+          lastName: employee.lastName,
+          pickRate: toNumber(stats.today.pickRate),
+          firstTimePickPercent: toNumber(stats.today.firstTimePickPercent),
+          itemsPicked: toNumber(stats.today.itemsPicked),
+          weightedEfficiency: toNumber(stats.today.weightedEfficiency)
+        };
+      })
+    );
+
+    return res.json({
+      success: true,
+      leaderboard: leaderboardEntries
+    });
+  } catch (error) {
+    console.error('Get store leaderboard error:', error);
+    return res.status(500).json({ message: 'Server error retrieving leaderboard' });
+  }
+};
+
 module.exports = {
   getEmployees,
   getEmployee,
@@ -458,5 +520,6 @@ module.exports = {
   getEmployeeMetrics,
   getMyAndStoreStats,
   getStoreSettings,
-  updateStoreSettings
+  updateStoreSettings,
+  getStoreLeaderboard
 };

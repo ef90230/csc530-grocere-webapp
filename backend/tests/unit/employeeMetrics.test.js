@@ -12,8 +12,15 @@ jest.mock('../../models', () => ({
   }
 }));
 
+jest.mock('../../utils/walkPerformanceStore', () => ({
+  getWalkSummariesForEmployee: jest.fn(() => []),
+  makeWalkKey: jest.fn(() => ''),
+  getWalkFtprByKey: jest.fn(() => 0)
+}));
+
 const { Op } = require('sequelize');
 const { Employee, Order, OrderItem } = require('../../models');
+const { getWalkSummariesForEmployee } = require('../../utils/walkPerformanceStore');
 const {
   calculateAverageWalkPickRate,
   getCompletedPickWalkHistory,
@@ -96,7 +103,8 @@ describe('employeeMetricsService', () => {
         initialTotal: 6,
         itemsPicked: 5,
         orderCount: 2,
-        pickRate: 4
+        pickRate: 4,
+        firstTimePickRate: 0
       },
       {
         commodity: 'frozen',
@@ -106,7 +114,8 @@ describe('employeeMetricsService', () => {
         initialTotal: 4,
         itemsPicked: 4,
         orderCount: 1,
-        pickRate: 2
+        pickRate: 2,
+        firstTimePickRate: 0
       }
     ]);
   });
@@ -116,7 +125,14 @@ describe('employeeMetricsService', () => {
     OrderItem.findAll.mockResolvedValue([
       { status: 'found', foundOnFirstAttempt: true },
       { status: 'substituted', foundOnFirstAttempt: false },
-      { status: 'out_of_stock', foundOnFirstAttempt: false }
+      { status: 'skipped', foundOnFirstAttempt: false }
+    ]);
+    getWalkSummariesForEmployee.mockReturnValue([
+      {
+        totalItems: 3,
+        mistakeItems: 1,
+        firstTimePickRate: 66.67
+      }
     ]);
     Order.findAll
       .mockResolvedValueOnce([

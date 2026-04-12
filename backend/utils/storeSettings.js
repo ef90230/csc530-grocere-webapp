@@ -24,6 +24,7 @@ const DEFAULT_GOALS = {
 };
 
 const DEFAULT_TIMESLOT_ORDER_LIMIT = 20;
+const DEFAULT_WAIT_TIME_WARNING_MINUTES = 5;
 
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 const isUnsafeObjectKey = (key) => key === '__proto__' || key === 'prototype' || key === 'constructor';
@@ -79,6 +80,7 @@ const normalizeStoreSettings = (inputSettings) => {
   const hasGoal = (goalKey) => hasOwn(goals, goalKey) && goals[goalKey] && typeof goals[goalKey] === 'object';
 
   const defaultLimit = Math.round(clamp(toNumber(timeslot.defaultLimit, DEFAULT_TIMESLOT_ORDER_LIMIT), 1, 500));
+  const waitTimeWarningMinutes = Math.max(1, Math.round(clamp(toNumber(source.waitTimeWarningMinutes, DEFAULT_WAIT_TIME_WARNING_MINUTES), 1, 1440)));
 
   return {
     goals: {
@@ -91,7 +93,8 @@ const normalizeStoreSettings = (inputSettings) => {
     timeslot: {
       defaultLimit,
       overrides: normalizeOverrides(timeslot.overrides)
-    }
+    },
+    waitTimeWarningMinutes
   };
 };
 
@@ -145,6 +148,7 @@ const getTimeslotCapacityForDate = (storeSettings, dateValue) => {
 module.exports = {
   DEFAULT_GOALS,
   DEFAULT_TIMESLOT_ORDER_LIMIT,
+  DEFAULT_WAIT_TIME_WARNING_MINUTES,
   STORE_SETTINGS_KEY,
   normalizeStoreSettings,
   getStoreSettingsFromStore,

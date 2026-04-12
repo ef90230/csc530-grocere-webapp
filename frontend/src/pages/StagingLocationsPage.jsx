@@ -73,6 +73,8 @@ const buildOrderToteKey = (orderId, commodity) => `${orderId}:${commodity}`;
 
 const StagingLocationsPage = () => {
     const navigate = useNavigate();
+    const userType = window.localStorage.getItem('userType');
+    const isAdmin = userType === 'admin';
     const [locations, setLocations] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [errorMessage, setErrorMessage] = useState('');
@@ -124,7 +126,7 @@ const StagingLocationsPage = () => {
 
     useEffect(() => {
         const userType = window.localStorage.getItem('userType');
-        if (!token || userType !== 'employee') {
+        if (!token || (userType !== 'employee' && userType !== 'admin')) {
             navigate('/');
             return undefined;
         }
@@ -312,6 +314,10 @@ const StagingLocationsPage = () => {
     };
 
     const openLocationEdit = (location) => {
+        if (!isAdmin) {
+            return;
+        }
+
         setDialogErrorMessage('');
         setSelectedLocation(location);
         setLocationNameDraft(location.name || '');
@@ -476,27 +482,31 @@ const StagingLocationsPage = () => {
 
             <main className="staging-locations-content">
                 <section className="staging-locations-controls">
-                    <button
-                        type="button"
-                        className="staging-control-btn staging-control-btn--blue"
-                        onClick={() => {
-                            setDialogErrorMessage('');
-                            setIsLocationFormOpen(true);
-                        }}
-                    >
-                        New Location
-                    </button>
-                    <button
-                        type="button"
-                        className="staging-control-btn staging-control-btn--blue"
-                        onClick={() => {
-                            setDialogErrorMessage('');
-                            setLimitDraft(String(currentLimit));
-                            setIsOptionsOpen(true);
-                        }}
-                    >
-                        Options
-                    </button>
+                    {isAdmin ? (
+                        <button
+                            type="button"
+                            className="staging-control-btn staging-control-btn--blue"
+                            onClick={() => {
+                                setDialogErrorMessage('');
+                                setIsLocationFormOpen(true);
+                            }}
+                        >
+                            New Location
+                        </button>
+                    ) : null}
+                    {isAdmin ? (
+                        <button
+                            type="button"
+                            className="staging-control-btn staging-control-btn--blue"
+                            onClick={() => {
+                                setDialogErrorMessage('');
+                                setLimitDraft(String(currentLimit));
+                                setIsOptionsOpen(true);
+                            }}
+                        >
+                            Options
+                        </button>
+                    ) : null}
                     <select
                         className="staging-sort-select"
                         value={sortMode}
@@ -752,3 +762,4 @@ const StagingLocationsPage = () => {
 };
 
 export default StagingLocationsPage;
+

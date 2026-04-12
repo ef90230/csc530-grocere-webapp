@@ -102,7 +102,7 @@ const StoreSettingsPage = () => {
     const token = window.localStorage.getItem('authToken');
     const userType = window.localStorage.getItem('userType');
 
-    if (!token || userType !== 'employee') {
+    if (!token || (userType !== 'employee' && userType !== 'admin')) {
       navigate('/');
       return;
     }
@@ -318,3 +318,5 @@ const StoreSettingsPage = () => {
 };
 
 export default StoreSettingsPage;
+
+

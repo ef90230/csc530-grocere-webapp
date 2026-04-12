@@ -20,7 +20,9 @@ import SignupPage from './pages/SignupPage';
 import StagingPage from './pages/StagingPage';
 import StagingLocationsPage from './pages/StagingLocationsPage';
 import StatisticsPage from './pages/StatisticsPage';
+import LeaderboardPage from './pages/LeaderboardPage';
 import StoreSettingsPage from './pages/StoreSettingsPage';
+import EmployeeSettingsPage from './pages/EmployeeSettingsPage';
 
 const getAuthState = () => {
     const token = localStorage.getItem('authToken');
@@ -35,12 +37,17 @@ const getAuthState = () => {
 // Protected route component
 const ProtectedRoute = ({ children, allowedRole }) => {
     const { isAuthenticated, userType } = getAuthState();
+    const isEmployeeLikeUser = userType === 'employee' || userType === 'admin';
 
     if (!isAuthenticated) {
         return <Navigate to="/" replace />;
     }
 
     if (allowedRole && userType !== allowedRole) {
+        if (allowedRole === 'employee' && isEmployeeLikeUser) {
+            return children;
+        }
+
         if (allowedRole === 'customer') {
             return <Navigate to="/home" replace />;
         }
@@ -144,6 +151,22 @@ function App() {
                             element={
                                 <ProtectedRoute allowedRole="employee">
                                     <StatisticsPage />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="/leaderboard"
+                            element={
+                                <ProtectedRoute allowedRole="employee">
+                                    <LeaderboardPage />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="/employee-settings"
+                            element={
+                                <ProtectedRoute allowedRole="employee">
+                                    <EmployeeSettingsPage />
                                 </ProtectedRoute>
                             }
                         />

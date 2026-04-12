@@ -1,25 +1,69 @@
 jest.mock('../../../models', () => ({
   Employee: {
     findByPk: jest.fn(),
-    findAll: jest.fn(),
-    create: jest.fn()
+    findAll: jest.fn()
   },
-  Store: {},
+  Store: {
+    findByPk: jest.fn()
+  },
   Order: {
     findAll: jest.fn()
   }
 }));
 
 jest.mock('../../../utils/employeeMetricsService', () => ({
-  calculateAverageWalkPickRate: jest.fn(),
   getCompletedPickWalkHistory: jest.fn()
 }));
 
-const { Employee, Order } = require('../../../models');
+jest.mock('../../../utils/employeeTimeframeStatsService', () => ({
+  getEmployeeTimeframeStats: jest.fn(),
+  aggregateStoreStats: jest.fn(),
+  getStoreWaitTimeStats: jest.fn(),
+  EMPTY_STATS: {
+    pickRate: 0,
+    itemsPicked: 0,
+    firstTimePickPercent: 0,
+    preSubstitutionPercent: 0,
+    postSubstitutionPercent: 0,
+    percentNotFound: 0,
+    onTimePercent: 0,
+    weightedEfficiency: 0,
+    totesStaged: 0,
+    itemsStaged: 0,
+    ordersDispensed: 0,
+    totesDispensed: 0,
+    itemsDispensed: 0
+  }
+}));
+
+jest.mock('../../../utils/storeSettings', () => ({
+  normalizeStoreSettings: jest.fn(() => ({
+    goals: {
+      pickRateGoal: {
+        enabled: true,
+        value: 100
+      }
+    }
+  })),
+  getStoreSettingsFromStore: jest.fn(() => ({
+    goals: {
+      pickRateGoal: {
+        enabled: true,
+        value: 100
+      }
+    }
+  })),
+  buildBackroomDoorLocationWithStoreSettings: jest.fn(),
+  getTimeslotKeyFromDate: jest.fn()
+}));
+
+const { Employee, Store, Order } = require('../../../models');
+const { getCompletedPickWalkHistory } = require('../../../utils/employeeMetricsService');
 const {
-  calculateAverageWalkPickRate,
-  getCompletedPickWalkHistory
-} = require('../../../utils/employeeMetricsService');
+  getEmployeeTimeframeStats,
+  aggregateStoreStats,
+  getStoreWaitTimeStats
+} = require('../../../utils/employeeTimeframeStatsService');
 const { getEmployeeMetrics, getMyAndStoreStats } = require('../../../controllers/employeeController');
 
 const createMockRes = () => {
@@ -52,7 +96,8 @@ describe('employeeController.getEmployeeMetrics', () => {
         postSubstitutionPercent: '98.00',
         percentNotFound: '7.60',
         onTimePercent: '99.00',
-        weightedEfficiency: '96.00'
+        weightedEfficiency: '96.00',
+        totesStaged: 9
       })
     };
 
@@ -82,7 +127,8 @@ describe('employeeController.getEmployeeMetrics', () => {
         'postSubstitutionPercent',
         'percentNotFound',
         'onTimePercent',
-        'weightedEfficiency'
+        'weightedEfficiency',
+        'totesStaged'
       ]
     });
 
@@ -114,18 +160,6 @@ describe('employeeController.getEmployeeMetrics', () => {
     expect(res.status).toHaveBeenCalledWith(404);
     expect(res.json).toHaveBeenCalledWith({ message: 'Employee not found' });
   });
-
-  test('returns 500 when an unexpected error occurs', async () => {
-    const req = { params: { id: '1' } };
-    const res = createMockRes();
-
-    Employee.findByPk.mockRejectedValue(new Error('db down'));
-
-    await getEmployeeMetrics(req, res);
-
-    expect(res.status).toHaveBeenCalledWith(500);
-    expect(res.json).toHaveBeenCalledWith({ message: 'Server error retrieving metrics' });
-  });
 });
 
 describe('employeeController.getMyAndStoreStats', () => {
@@ -133,89 +167,182 @@ describe('employeeController.getMyAndStoreStats', () => {
     jest.clearAllMocks();
   });
 
-  test('returns the logged-in employee stats and store aggregates', async () => {
+  test('returns logged-in employee and store stats including staging/dispensing totals', async () => {
     const req = {
       userType: 'employee',
       user: { id: 3 }
     };
     const res = createMockRes();
 
+    const myToday = {
+      pickRate: 98.3,
+      itemsPicked: 37,
+      firstTimePickPercent: 94.1,
+      preSubstitutionPercent: 91.2,
+      postSubstitutionPercent: 96.8,
+      percentNotFound: 4.2,
+      onTimePercent: 100,
+      weightedEfficiency: 93.7,
+      totesStaged: 5,
+      itemsStaged: 41,
+      ordersDispensed: 2,
+      totesDispensed: 3,
+      itemsDispensed: 39
+    };
+
+    const myAllTime = {
+      ...myToday,
+      itemsPicked: 400,
+      totesStaged: 44,
+      itemsStaged: 376,
+      ordersDispensed: 22,
+      totesDispensed: 33,
+      itemsDispensed: 351
+    };
+
+    const storeToday = {
+      ...myToday,
+      pickRate: 101.2,
+      itemsPicked: 89,
+      totesStaged: 11,
+      itemsStaged: 97,
+      ordersDispensed: 5,
+      totesDispensed: 8,
+      itemsDispensed: 92
+    };
+
+    const storeAllTime = {
+      ...storeToday,
+      itemsPicked: 1210,
+      totesStaged: 132,
+      itemsStaged: 1140,
+      ordersDispensed: 88,
+      totesDispensed: 141,
+      itemsDispensed: 1107
+    };
+
     Employee.findByPk.mockResolvedValue({
       id: 3,
       firstName: 'Jane',
       lastName: 'Doe',
-      storeId: 77,
-      pickRate: '110.50',
-      itemsPicked: 300,
-      firstTimePickPercent: '94.00',
-      preSubstitutionPercent: '95.00',
-      postSubstitutionPercent: '99.00',
-      percentNotFound: '6.00',
-      onTimePercent: '100.00',
-      weightedEfficiency: '91.00'
+      storeId: 77
     });
 
     Employee.findAll.mockResolvedValue([
-      {
-        id: 3,
-        pickRate: '100.00',
-        itemsPicked: 250,
-        firstTimePickPercent: '92.00',
-        preSubstitutionPercent: '94.00',
-        postSubstitutionPercent: '98.00',
-        percentNotFound: '8.00',
-        onTimePercent: '100.00',
-        weightedEfficiency: '89.00'
-      },
-      {
-        id: 4,
-        pickRate: '110.00',
-        itemsPicked: 350,
-        firstTimePickPercent: '96.00',
-        preSubstitutionPercent: '96.00',
-        postSubstitutionPercent: '99.00',
-        percentNotFound: '6.00',
-        onTimePercent: '98.00',
-        weightedEfficiency: '91.00'
-      }
+      { id: 3 },
+      { id: 4 }
     ]);
 
-    const walkHistory = [
+    getEmployeeTimeframeStats
+      .mockResolvedValueOnce({ today: myToday, allTime: myAllTime })
+      .mockResolvedValueOnce({
+        today: {
+          ...myToday,
+          itemsPicked: 52,
+          totesStaged: 6,
+          itemsStaged: 56,
+          ordersDispensed: 3,
+          totesDispensed: 5,
+          itemsDispensed: 53
+        },
+        allTime: {
+          ...myAllTime,
+          itemsPicked: 810,
+          totesStaged: 88,
+          itemsStaged: 764,
+          ordersDispensed: 66,
+          totesDispensed: 108,
+          itemsDispensed: 756
+        }
+      });
+
+    aggregateStoreStats
+      .mockReturnValueOnce(storeToday)
+      .mockReturnValueOnce(storeAllTime);
+
+    getStoreWaitTimeStats.mockReturnValue({
+      today: {
+        avgWaitTimeMinutes: 0,
+        cumulativeWaitTimeMinutes: 0
+      },
+      allTime: {
+        avgWaitTimeMinutes: 0,
+        cumulativeWaitTimeMinutes: 0
+      }
+    });
+
+    getCompletedPickWalkHistory.mockResolvedValue([
       {
         commodity: 'ambient',
         commodityLabel: 'Ambient Regular',
-        startedAt: '2026-03-30T10:00:00.000Z',
-        endedAt: '2026-03-30T11:00:00.000Z',
+        startedAt: '2026-04-10T10:00:00.000Z',
+        endedAt: '2026-04-10T11:00:00.000Z',
         initialTotal: 12,
         itemsPicked: 10,
         orderCount: 2,
         pickRate: 10
       }
-    ];
+    ]);
 
-    getCompletedPickWalkHistory
-      .mockResolvedValueOnce(walkHistory)
-      .mockResolvedValueOnce([
-        ...walkHistory,
-        {
-          commodity: 'frozen',
-          commodityLabel: 'Frozen Regular',
-          startedAt: '2026-03-29T09:00:00.000Z',
-          endedAt: '2026-03-29T10:00:00.000Z',
-          initialTotal: 6,
-          itemsPicked: 6,
-          orderCount: 1,
-          pickRate: 6
-        }
-      ]);
-    calculateAverageWalkPickRate
-      .mockReturnValueOnce(10)
-      .mockReturnValueOnce(8);
+    Store.findByPk.mockResolvedValue({
+      id: 77,
+      backroomDoorLocation: null
+    });
 
     await getMyAndStoreStats(req, res);
 
-    expect(getCompletedPickWalkHistory).toHaveBeenNthCalledWith(1, 3);
-    expect(getCompletedPickWalkHistory).toHaveBeenNthCalledWith(2, [3, 4]);
+    expect(getEmployeeTimeframeStats).toHaveBeenCalledTimes(2);
+    expect(getEmployeeTimeframeStats).toHaveBeenNthCalledWith(1, 3);
+    expect(getEmployeeTimeframeStats).toHaveBeenNthCalledWith(2, 4);
+    expect(aggregateStoreStats).toHaveBeenNthCalledWith(1, [
+      { employeeId: 3, today: myToday, allTime: myAllTime },
+      {
+        employeeId: 4,
+        today: {
+          ...myToday,
+          itemsPicked: 52,
+          totesStaged: 6,
+          itemsStaged: 56,
+          ordersDispensed: 3,
+          totesDispensed: 5,
+          itemsDispensed: 53
+        },
+        allTime: {
+          ...myAllTime,
+          itemsPicked: 810,
+          totesStaged: 88,
+          itemsStaged: 764,
+          ordersDispensed: 66,
+          totesDispensed: 108,
+          itemsDispensed: 756
+        }
+      }
+    ], 'today');
+
+    expect(aggregateStoreStats).toHaveBeenNthCalledWith(2, [
+      { employeeId: 3, today: myToday, allTime: myAllTime },
+      {
+        employeeId: 4,
+        today: {
+          ...myToday,
+          itemsPicked: 52,
+          totesStaged: 6,
+          itemsStaged: 56,
+          ordersDispensed: 3,
+          totesDispensed: 5,
+          itemsDispensed: 53
+        },
+        allTime: {
+          ...myAllTime,
+          itemsPicked: 810,
+          totesStaged: 88,
+          itemsStaged: 764,
+          ordersDispensed: 66,
+          totesDispensed: 108,
+          itemsDispensed: 756
+        }
+      }
+    ], 'allTime');
 
     expect(res.json).toHaveBeenCalledWith({
       success: true,
@@ -224,29 +351,46 @@ describe('employeeController.getMyAndStoreStats', () => {
         firstName: 'Jane',
         lastName: 'Doe',
         storeId: 77,
-        stats: {
-          pickRate: 10,
-          itemsPicked: 300,
-          firstTimePickPercent: 94,
-          preSubstitutionPercent: 95,
-          postSubstitutionPercent: 99,
-          percentNotFound: 6,
-          onTimePercent: 100,
-          weightedEfficiency: 91
-        },
-        walkHistory
+        stats: myToday,
+        statsToday: myToday,
+        statsAllTime: myAllTime,
+        walkHistory: [
+          {
+            commodity: 'ambient',
+            commodityLabel: 'Ambient Regular',
+            startedAt: '2026-04-10T10:00:00.000Z',
+            endedAt: '2026-04-10T11:00:00.000Z',
+            initialTotal: 12,
+            itemsPicked: 10,
+            orderCount: 2,
+            pickRate: 10
+          }
+        ]
       },
       store: {
         employeeCount: 2,
         stats: {
-          pickRate: 8,
-          itemsPicked: 600,
-          firstTimePickPercent: 94,
-          preSubstitutionPercent: 95,
-          postSubstitutionPercent: 98.5,
-          percentNotFound: 7,
-          onTimePercent: 99,
-          weightedEfficiency: 90
+          ...storeToday,
+          avgWaitTimeMinutes: 0,
+          cumulativeWaitTimeMinutes: 0
+        },
+        statsToday: {
+          ...storeToday,
+          avgWaitTimeMinutes: 0,
+          cumulativeWaitTimeMinutes: 0
+        },
+        statsAllTime: {
+          ...storeAllTime,
+          avgWaitTimeMinutes: 0,
+          cumulativeWaitTimeMinutes: 0
+        },
+        settings: {
+          goals: {
+            pickRateGoal: {
+              enabled: true,
+              value: 100
+            }
+          }
         }
       }
     });

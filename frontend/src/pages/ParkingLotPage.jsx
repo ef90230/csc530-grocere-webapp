@@ -46,6 +46,8 @@ const getStoredThreshold = () => {
 
 const ParkingLotPage = () => {
     const navigate = useNavigate();
+    const userType = window.localStorage.getItem('userType');
+    const isAdmin = userType === 'admin';
     const [spaces, setSpaces] = useState(getStoredSpaces);
     const [orders, setOrders] = useState([]);
     const [sortMode, setSortMode] = useState('number');
@@ -63,7 +65,7 @@ const ParkingLotPage = () => {
 
     useEffect(() => {
         const userType = window.localStorage.getItem('userType');
-        if (!token || userType !== 'employee') {
+        if (!token || (userType !== 'employee' && userType !== 'admin')) {
             navigate('/');
         }
     }, [navigate, token]);
@@ -219,6 +221,10 @@ const ParkingLotPage = () => {
     };
 
     const handleAddSpace = () => {
+        if (!isAdmin) {
+            return;
+        }
+
         const firstAvailable = getFirstAvailableSpaceNumber(spaces);
         if (!firstAvailable) {
             window.alert("You've hit your space limit.");
@@ -238,11 +244,19 @@ const ParkingLotPage = () => {
             return;
         }
 
+        if (!isAdmin) {
+            return;
+        }
+
         setErrorMessage('');
         setSpacePendingDelete(space.number);
     };
 
     const confirmDeleteSpace = () => {
+        if (!isAdmin) {
+            return;
+        }
+
         if (!Number.isInteger(spacePendingDelete)) {
             return;
         }
@@ -308,13 +322,15 @@ const ParkingLotPage = () => {
 
             <main className="parking-lot-content">
                 <section className="parking-controls">
-                    <button
-                        type="button"
-                        className="parking-control-btn"
-                        onClick={handleAddSpace}
-                    >
-                        Add Space
-                    </button>
+                    {isAdmin ? (
+                        <button
+                            type="button"
+                            className="parking-control-btn"
+                            onClick={handleAddSpace}
+                        >
+                            Add Space
+                        </button>
+                    ) : null}
                     <select className="parking-sort-select" value={sortMode} onChange={(event) => setSortMode(event.target.value)}>
                         <option value="number">Number</option>
                         <option value="occupied-first">Occupied first</option>
@@ -394,3 +410,5 @@ const ParkingLotPage = () => {
 };
 
 export default ParkingLotPage;
+
+

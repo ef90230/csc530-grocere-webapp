@@ -22,7 +22,9 @@ const TopBar = ({
   const navigate = useNavigate();
   const [isMenuVisible, setIsMenuVisible] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
-  const isEmployee = window.localStorage.getItem('userType') === 'employee';
+  const storedUserType = window.localStorage.getItem('userType');
+  const isEmployee = storedUserType === 'employee' || storedUserType === 'admin';
+  const isAdmin = storedUserType === 'admin';
 
   useEffect(() => {
     if (!isClosing) {
@@ -53,6 +55,7 @@ const TopBar = ({
     localStorage.removeItem('authToken');
     localStorage.removeItem('userType');
     localStorage.removeItem('userDisplayName');
+    localStorage.removeItem('employeeUserId');
     closeMenu();
     navigate('/');
   };
@@ -110,11 +113,13 @@ const TopBar = ({
           onStoreMap={() => handleNavigate('/map')}
           onParkingLot={() => handleNavigate('/parking-lot')}
           onMyStats={() => handleNavigate('/stats')}
+          onMySettings={() => handleNavigate('/employee-settings')}
           onStoreSettings={() => handleNavigate('/store-settings')}
           onLogout={handleLogout}
           showBackroomLocations={isEmployee}
           showParkingLot={isEmployee}
-          showStoreSettings={isEmployee}
+          showMySettings={isEmployee}
+          showStoreSettings={isAdmin}
         />
       )}
     </>

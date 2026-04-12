@@ -4,6 +4,11 @@ import {
   normalizeStoreSettings,
   saveStoreSettingsToCache
 } from '../../utils/storeSettings';
+import {
+  DEFAULT_EMPLOYEE_SETTINGS,
+  getStoredEmployeeId,
+  readEmployeeSettingsFromCache
+} from '../../utils/employeeSettings';
 import './StatBar.css';
 
 const TARGET_PICK_RATE = 100;
@@ -60,7 +65,13 @@ const StatBar = ({
   const [profileName, setProfileName] = useState('');
   const [profilePickRate, setProfilePickRate] = useState(null);
   const [storeSettings, setStoreSettings] = useState(() => readStoreSettingsFromCache());
+  const [employeeId, setEmployeeId] = useState(() => getStoredEmployeeId());
+  const [employeeSettings, setEmployeeSettings] = useState(() => readEmployeeSettingsFromCache(getStoredEmployeeId()));
   const [tick, setTick] = useState(() => Date.now());
+
+  useEffect(() => {
+    setEmployeeSettings(readEmployeeSettingsFromCache(employeeId));
+  }, [employeeId]);
 
   useEffect(() => {
     if (mode !== 'walk') {
@@ -78,7 +89,7 @@ const StatBar = ({
     const token = window.localStorage.getItem('authToken');
     const userType = window.localStorage.getItem('userType');
 
-    if (!token || userType !== 'employee') {
+    if (!token || (userType !== 'employee' && userType !== 'admin')) {
       return;
     }
 
@@ -98,10 +109,17 @@ const StatBar = ({
         }
 
         const payload = await response.json();
+        const profileId = payload?.user?.id;
         const firstName = payload?.user?.firstName || '';
         const lastName = payload?.user?.lastName || '';
         const fullName = `${firstName} ${lastName}`.trim();
         const numericPickRate = Number(payload?.user?.pickRate);
+
+        if (profileId !== undefined && profileId !== null) {
+          const resolvedEmployeeId = String(profileId);
+          window.localStorage.setItem('employeeUserId', resolvedEmployeeId);
+          setEmployeeId(resolvedEmployeeId);
+        }
 
         if (fullName) {
           setProfileName(fullName);
@@ -190,8 +208,21 @@ const StatBar = ({
     Number(pickRateGoal.value) || TARGET_PICK_RATE,
     Boolean(pickRateGoal.enabled)
   );
+  const showDayPickRate = employeeSettings?.displayLivePickRateForDay ?? DEFAULT_EMPLOYEE_SETTINGS.displayLivePickRateForDay;
+  const showWalkPickRate = employeeSettings?.displayLivePickRateForEachWalk ?? DEFAULT_EMPLOYEE_SETTINGS.displayLivePickRateForEachWalk;
 
   if (mode === 'walk') {
+    if (!showWalkPickRate) {
+      return (
+        <>
+          <section className="statbar statbar--on-target" aria-label="Employee walk stats">
+            <span className="statbar-name">{resolvedUserName}</span>
+          </section>
+          <div className="statbar-spacer" />
+        </>
+      );
+    }
+
     return (
       <>
         <section className={`statbar statbar--${rateState}`} aria-label="Current pick walk stats">
@@ -202,6 +233,17 @@ const StatBar = ({
             </div>
           </div>
           <span className="statbar-rate">Live Pick Rate: {formatPickRate(walkPickRate)}</span>
+        </section>
+        <div className="statbar-spacer" />
+      </>
+    );
+  }
+
+  if (!showDayPickRate) {
+    return (
+      <>
+        <section className="statbar statbar--on-target" aria-label="Employee daily stats">
+          <span className="statbar-name">{resolvedUserName}</span>
         </section>
         <div className="statbar-spacer" />
       </>

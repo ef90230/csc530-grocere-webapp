@@ -332,13 +332,14 @@ const calculateEmployeeMetrics = async (employeeId) => {
   const totalPicks = pickedItems.length;
   const firstTimePicks = pickedItems.filter((item) => item.foundOnFirstAttempt).length;
   const substituted = pickedItems.filter((item) => item.status === 'substituted').length;
-  const notFound = orderItems.filter((item) => ['out_of_stock', 'skipped'].includes(item.status)).length;
-
   const firstTimePickPercent = totalPicks === 0 ? 0 : (firstTimePicks / totalPicks) * 100;
   const postSubstitutionPercent = totalPicks === 0 ? 0 : (substituted / totalPicks) * 100;
   // Pre-substitution percent is never allowed to exceed post-substitution percent.
   const preSubstitutionPercent = Math.min(postSubstitutionPercent, 100);
-  const percentNotFound = totalItems === 0 ? 0 : (notFound / totalItems) * 100;
+  const walkSummaries = getWalkSummariesForEmployee(employeeId, { closedOnly: true });
+  const totalWalkItems = walkSummaries.reduce((sum, walk) => sum + toNumber(walk?.totalItems), 0);
+  const notFoundItems = walkSummaries.reduce((sum, walk) => sum + toNumber(walk?.mistakeItems), 0);
+  const percentNotFound = totalWalkItems === 0 ? 0 : (notFoundItems / totalWalkItems) * 100;
 
   // On-time percentage: compare actual pickup vs scheduled pickup for orders that have been picked up.
   const orders = await Order.findAll({

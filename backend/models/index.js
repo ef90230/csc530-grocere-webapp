@@ -139,7 +139,6 @@ const ORDER_ITEM_OPTION_COLUMNS = {
   }
 };
 
-
 const ensureEmployeeMetricColumns = async () => {
   const queryInterface = sequelize.getQueryInterface();
   let employeeTable;

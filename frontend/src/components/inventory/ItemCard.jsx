@@ -21,7 +21,7 @@ const getAisleLabel = (locationRow) => {
   return `Aisle ${aisleNumber} • Section ${section}`;
 };
 
-const ItemCard = ({ item, aisles, onClose, onItemUpdated }) => {
+const ItemCard = ({ item, aisles, isAdmin, onClose, onItemUpdated }) => {
   const [mode, setMode] = useState('view');
   const [copyFeedback, setCopyFeedback] = useState('');
   const [saving, setSaving] = useState(false);
@@ -237,9 +237,13 @@ const ItemCard = ({ item, aisles, onClose, onItemUpdated }) => {
             </div>
 
             <div className="item-card-actions">
-              <button type="button" className="action-button full" onClick={() => setMode('editInfo')}>Edit Info</button>
+              {isAdmin ? (
+                <button type="button" className="action-button full" onClick={() => setMode('editInfo')}>Edit Info</button>
+              ) : null}
               <button type="button" className="action-button full" onClick={() => setMode('adjustQuantity')}>Adjust Quantity</button>
-              <button type="button" className="delete-button" onClick={() => {}}>Delete From System</button>
+              {isAdmin ? (
+                <button type="button" className="delete-button" onClick={() => {}}>Delete From System</button>
+              ) : null}
             </div>
           </>
         )}

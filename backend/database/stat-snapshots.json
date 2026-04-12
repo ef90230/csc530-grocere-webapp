@@ -1,0 +1,81 @@
+{
+  "2-2026-04-12": {
+    "18": {
+      "timestamp": "2026-04-12T18:40:34.321Z",
+      "pickRate": 0,
+      "itemsPicked": 0,
+      "firstTimePickPercent": 0,
+      "preSubstitutionPercent": 0,
+      "postSubstitutionPercent": 0,
+      "percentNotFound": 0,
+      "onTimePercent": 0,
+      "weightedEfficiency": 0,
+      "totesStaged": 0,
+      "itemsStaged": 0,
+      "ordersDispensed": 0,
+      "totesDispensed": 0,
+      "itemsDispensed": 0
+    }
+  },
+  "3-2026-04-12": {
+    "18": {
+      "timestamp": "2026-04-12T18:40:34.365Z",
+      "pickRate": 0,
+      "itemsPicked": 0,
+      "firstTimePickPercent": 0,
+      "preSubstitutionPercent": 0,
+      "postSubstitutionPercent": 0,
+      "percentNotFound": 0,
+      "onTimePercent": 0,
+      "weightedEfficiency": 0,
+      "totesStaged": 0,
+      "itemsStaged": 0,
+      "ordersDispensed": 0,
+      "totesDispensed": 0,
+      "itemsDispensed": 0
+    }
+  },
+  "4-2026-04-12": {
+    "18": {
+      "timestamp": "2026-04-12T18:40:34.165Z",
+      "pickRate": 0,
+      "itemsPicked": 0,
+      "firstTimePickPercent": 0,
+      "preSubstitutionPercent": 0,
+      "postSubstitutionPercent": 0,
+      "percentNotFound": 0,
+      "onTimePercent": 0,
+      "weightedEfficiency": 0,
+      "totesStaged": 0,
+      "itemsStaged": 0,
+      "ordersDispensed": 0,
+      "totesDispensed": 0,
+      "itemsDispensed": 0
+    }
+  },
+  "5-2026-04-12": {
+    "18": {
+      "timestamp": "2026-04-12T18:40:34.226Z",
+      "pickRate": 0,
+      "itemsPicked": 0,
+      "firstTimePickPercent": 0,
+      "preSubstitutionPercent": 0,
+      "postSubstitutionPercent": 0,
+      "percentNotFound": 0,
+      "onTimePercent": 0,
+      "weightedEfficiency": 0,
+      "totesStaged": 0,
+      "itemsStaged": 0,
+      "ordersDispensed": 0,
+      "totesDispensed": 0,
+      "itemsDispensed": 0
+    }
+  },
+  "store-2026-04-12": {
+    "18": {
+      "timestamp": "2026-04-12T18:40:34.407Z",
+      "avgWaitTimeMinutes": 0,
+      "cumulativeWaitTimeMinutes": 0
+    }
+  }
+}

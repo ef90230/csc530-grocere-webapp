@@ -151,7 +151,7 @@ const StagingPage = () => {
         const token = window.localStorage.getItem('authToken');
         const userType = window.localStorage.getItem('userType');
 
-        if (!token || userType !== 'employee') {
+        if (!token || (userType !== 'employee' && userType !== 'admin')) {
             navigate('/');
             return undefined;
         }
@@ -452,7 +452,7 @@ const StagingPage = () => {
                                         <div>
                                             <p className="staging-order-customer">{getCustomerName(entry.order)}</p>
                                             <p className="staging-order-meta">
-                                                Order {entry.order.orderNumber || `#${orderId}`} • Due {formatDueTime(entry.order.scheduledPickupTime)}
+                                                Order {entry.order.orderNumber || `#${orderId}`} â€¢ Due {formatDueTime(entry.order.scheduledPickupTime)}
                                             </p>
                                         </div>
                                         <span className="staging-order-progress">
@@ -546,3 +546,4 @@ const StagingPage = () => {
 };
 
 export default StagingPage;
+
