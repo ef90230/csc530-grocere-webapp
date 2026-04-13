@@ -103,6 +103,11 @@ const getCustomerName = (order) => {
     return resolvedName || 'Customer';
 };
 
+const toDialLink = (phoneValue = '') => {
+    const digits = String(phoneValue || '').trim();
+    return digits ? `tel:${digits.replace(/[^0-9+]/g, '')}` : '';
+};
+
 const getOrderIdSortValue = (order) => {
     const parsedNumber = Number(String(order.orderNumber || '').replace(/[^0-9]/g, ''));
     if (Number.isFinite(parsedNumber) && parsedNumber > 0) {
@@ -806,6 +811,12 @@ const OrderListPage = () => {
                         <p className="order-modal-subtitle">Order {activeOrder.orderNumber || `#${activeOrder.id}`}</p>
 
                         <div className="order-modal-action-stack">
+                            {activeOrder?.customer?.phone ? (
+                                <a className="order-modal-call-link" href={toDialLink(activeOrder.customer.phone)}>
+                                    Call Customer ({activeOrder.customer.phone})
+                                </a>
+                            ) : null}
+
                             <button
                                 type="button"
                                 className="order-modal-btn order-modal-btn--primary"

@@ -1,5 +1,6 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/db');
+const { generateEntityUpc } = require('../utils/barcodeService');
 const Employee = require('./Employee');
 const Customer = require('./Customer');
 const Store = require('./Store');
@@ -274,12 +275,98 @@ const ensureOrderItemOptionColumns = async () => {
   }
 };
 
+const ensureCartUpcColumn = async () => {
+  const queryInterface = sequelize.getQueryInterface();
+  let cartTable;
+
+  try {
+    cartTable = await queryInterface.describeTable('carts');
+  } catch (error) {
+    if (error?.original?.code === '42501') {
+      console.warn('Skipping carts schema backfill due to insufficient DB permissions while inspecting carts table (code 42501).');
+      return;
+    }
+    throw error;
+  }
+
+  if (!cartTable.upc) {
+    try {
+      await queryInterface.addColumn('carts', 'upc', {
+        type: DataTypes.STRING,
+        allowNull: true,
+        unique: true
+      });
+    } catch (error) {
+      if (error?.original?.code === '42501') {
+        console.warn('Skipping carts schema backfill due to insufficient DB permissions (code 42501).');
+        return;
+      }
+      throw error;
+    }
+  }
+
+  const cartsMissingUpc = await Cart.findAll({
+    where: {
+      upc: null
+    }
+  });
+
+  for (const cart of cartsMissingUpc) {
+    cart.upc = generateEntityUpc('cart', cart.id);
+    await cart.save({ hooks: false });
+  }
+};
+
+const ensureStagingLocationUpcColumn = async () => {
+  const queryInterface = sequelize.getQueryInterface();
+  let stagingLocationTable;
+
+  try {
+    stagingLocationTable = await queryInterface.describeTable('staging_locations');
+  } catch (error) {
+    if (error?.original?.code === '42501') {
+      console.warn('Skipping staging_locations schema backfill due to insufficient DB permissions while inspecting staging_locations table (code 42501).');
+      return;
+    }
+    throw error;
+  }
+
+  if (!stagingLocationTable.upc) {
+    try {
+      await queryInterface.addColumn('staging_locations', 'upc', {
+        type: DataTypes.STRING,
+        allowNull: true,
+        unique: true
+      });
+    } catch (error) {
+      if (error?.original?.code === '42501') {
+        console.warn('Skipping staging_locations schema backfill due to insufficient DB permissions (code 42501).');
+        return;
+      }
+      throw error;
+    }
+  }
+
+  const locationsMissingUpc = await StagingLocation.findAll({
+    where: {
+      upc: null
+    }
+  });
+
+  for (const location of locationsMissingUpc) {
+    location.upc = generateEntityUpc('stagingLocation', location.id);
+    await location.save({ hooks: false });
+  }
+};
+
 const syncDatabase = async (force = false) => {
   try {
     await sequelize.sync({ force });
     await ensureEmployeeMetricColumns();
     await ensureCartItemOptionColumns();
     await ensureOrderItemOptionColumns();
+    await ensureCartUpcColumn();
+    await ensureStagingLocationUpcColumn();
     console.log('Database synchronized successfully');
   } catch (error) {
     console.error('Error synchronizing database:', error);
@@ -306,5 +393,7 @@ module.exports = {
   StagingLocationSetting,
   Timeslot,
   ensureEmployeeMetricColumns,
+  ensureCartUpcColumn,
+  ensureStagingLocationUpcColumn,
   syncDatabase
 };
