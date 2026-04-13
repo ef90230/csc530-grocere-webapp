@@ -4,6 +4,46 @@
   gap: 0.4rem;
 }
 
+.inventory-screen .inventory-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  gap: 0.75rem;
+}
+
+.inventory-screen .inventory-title-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.inventory-screen .inventory-title-action-btn {
+  padding: 0.5rem 1rem;
+  background-color: #007bff;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.inventory-screen .inventory-title-action-btn:hover {
+  background-color: #0063cf;
+}
+
+.inventory-screen .inventory-title-action-btn--green {
+  background-color: #1f8e3e;
+}
+
+.inventory-screen .inventory-title-action-btn--green:hover {
+  background-color: #187030;
+}
+
+.inventory-screen .inventory-message-error {
+  color: #b42318;
+  margin: 0 0 0.75rem;
+}
+
 .inventory-screen .inventory-toolbar {
   margin-bottom: 1rem;
   padding: 0.45rem;
@@ -112,7 +152,138 @@
   background-color: #f0f6ff;
 }
 
+.inventory-screen .inventory-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1150;
+  padding: 1rem;
+}
+
+.inventory-screen .inventory-modal {
+  width: min(92vw, 420px);
+  background: #fff;
+  border-radius: 12px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.inventory-screen .inventory-modal--form {
+  max-height: min(85vh, 700px);
+}
+
+.inventory-screen .inventory-modal h3 {
+  margin: 0;
+}
+
+.inventory-screen .inventory-modal p {
+  margin: 0;
+}
+
+.inventory-screen .inventory-scanner-video {
+  width: 100%;
+  min-height: 220px;
+  max-height: 320px;
+  border-radius: 8px;
+  background: #111;
+  object-fit: cover;
+}
+
+.inventory-screen .inventory-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.inventory-screen .inventory-modal-btn,
+.inventory-screen .inventory-modal-close {
+  border: none;
+  border-radius: 8px;
+  padding: 0.45rem 0.85rem;
+  cursor: pointer;
+  font-weight: 700;
+  background: #1f58c8;
+  color: #fff;
+}
+
+.inventory-screen .inventory-modal-btn--ghost {
+  background: #e8edf8;
+  color: #1f58c8;
+}
+
+.inventory-screen .inventory-create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  overflow-y: auto;
+  padding-right: 0.2rem;
+}
+
+.inventory-screen .inventory-modal--form .inventory-create-form {
+  flex: 1;
+  min-height: 0;
+}
+
+.inventory-screen .inventory-create-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.inventory-screen .inventory-create-form input,
+.inventory-screen .inventory-create-form select,
+.inventory-screen .inventory-create-form textarea {
+  border: 1px solid #b5b8be;
+  border-radius: 6px;
+  padding: 0.4rem 0.5rem;
+  font: inherit;
+}
+
+.inventory-screen .inventory-create-form textarea {
+  resize: vertical;
+}
+
+.inventory-screen .inventory-checkbox-field {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.inventory-screen .inventory-checkbox-field input {
+  width: auto;
+  margin: 0;
+}
+
 @media (max-width: 768px) {
+  .inventory-screen .inventory-modal {
+    width: min(94vw, 420px);
+    max-height: calc(100vh - 1.5rem);
+    padding: 0.9rem;
+  }
+
+  .inventory-screen .inventory-modal--form {
+    max-height: calc(100vh - 1.5rem);
+  }
+
+  .inventory-screen .inventory-title-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .inventory-screen .inventory-title-actions {
+    width: 100%;
+  }
+
+  .inventory-screen .inventory-title-action-btn {
+    flex: 1;
+  }
+
   .inventory-screen .inventory-toolbar {
     flex-direction: column;
     align-items: stretch;

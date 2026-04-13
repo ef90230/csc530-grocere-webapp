@@ -165,7 +165,11 @@ const itemValidation = () => {
     body('commodity')
       .optional()
       .isIn(['ambient', 'chilled', 'frozen', 'hot', 'oversized', 'restricted'])
-      .withMessage('Invalid commodity type')
+      .withMessage('Invalid commodity type'),
+    body('isRestricted')
+      .optional()
+      .isBoolean()
+      .withMessage('Restricted flag must be true or false')
   ];
 };
 

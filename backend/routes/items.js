@@ -9,6 +9,9 @@ const {
   getAvailableItems,
   checkItemAvailability,
   updateItemInventory,
+  addItemLocationAssignment,
+  reassignItemLocationAssignment,
+  deleteItemLocationAssignment,
   getOrganizationInsights
 } = require('../controllers/itemController');
 const { protect, restrictTo } = require('../middleware/auth');
@@ -43,5 +46,8 @@ router.put(
 router.delete('/:id', restrictTo('manager'), deleteItem);
 
 router.put('/:id/location/:locationId', updateItemInventory);
+router.post('/:id/locations', addItemLocationAssignment);
+router.patch('/:id/locations/:locationId', reassignItemLocationAssignment);
+router.delete('/:id/locations/:locationId', deleteItemLocationAssignment);
 
 module.exports = router;

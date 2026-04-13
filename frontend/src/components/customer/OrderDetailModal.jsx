@@ -45,6 +45,10 @@ const getItemStatus = (orderItem, options = {}) => {
     return { label: 'Not Found', kind: 'not-found' };
   }
 
+  if (normalizedStatus === 'canceled' || normalizedStatus === 'cancelled') {
+    return { label: 'Canceled', kind: 'canceled' };
+  }
+
   if (isOrderComplete && canceledQuantity > 0 && normalizedStatus !== 'out_of_stock') {
     return { label: getCanceledLabel(canceledQuantity, orderedQuantity), kind: 'canceled' };
   }
@@ -77,6 +81,10 @@ const getSubstituteStatus = (orderItem, options = {}) => {
 
   if (isOrderComplete && canceledQuantity > 0) {
     return { label: getCanceledLabel(canceledQuantity, orderedQuantity), kind: 'canceled' };
+  }
+
+  if (normalizedStatus === 'canceled' || normalizedStatus === 'cancelled') {
+    return { label: 'Canceled', kind: 'canceled' };
   }
 
   if (normalizedStatus === 'substituted') {

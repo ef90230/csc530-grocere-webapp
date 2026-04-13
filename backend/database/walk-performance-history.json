@@ -173,6 +173,102 @@
       "extraMistakes": 0,
       "pickedQuantity": 3,
       "totalQuantity": 3
+    },
+    "3::2026-04-13T13:17:13.900Z::ambient": {
+      "key": "3::2026-04-13T13:17:13.900Z::ambient",
+      "employeeId": 3,
+      "storeId": 1,
+      "commodity": "ambient",
+      "startedAt": "2026-04-13T13:17:13.900Z",
+      "endedAt": "2026-04-13T13:39:30.675Z",
+      "closed": true,
+      "orderIds": [
+        27
+      ],
+      "itemTotals": {
+        "88": 2
+      },
+      "itemMistakes": {},
+      "itemMistakeFlags": {},
+      "extraMistakes": 0,
+      "pickedQuantity": 2,
+      "totalQuantity": 2
+    },
+    "3::2026-04-13T14:06:49.435Z::frozen": {
+      "key": "3::2026-04-13T14:06:49.435Z::frozen",
+      "employeeId": 3,
+      "storeId": 1,
+      "commodity": "frozen",
+      "startedAt": "2026-04-13T14:06:49.435Z",
+      "endedAt": "2026-04-13T14:07:08.922Z",
+      "closed": true,
+      "orderIds": [
+        28
+      ],
+      "itemTotals": {
+        "93": 3,
+        "94": 7
+      },
+      "itemMistakes": {
+        "94": 7
+      },
+      "itemMistakeFlags": {
+        "89": true,
+        "90": true,
+        "91": true,
+        "92": true,
+        "94": true
+      },
+      "extraMistakes": 10,
+      "pickedQuantity": 3,
+      "totalQuantity": 10
+    },
+    "3::2026-04-13T14:11:31.870Z::ambient": {
+      "key": "3::2026-04-13T14:11:31.870Z::ambient",
+      "employeeId": 3,
+      "storeId": 1,
+      "commodity": "ambient",
+      "startedAt": "2026-04-13T14:11:31.870Z",
+      "endedAt": "2026-04-13T14:12:37.438Z",
+      "closed": true,
+      "orderIds": [
+        28
+      ],
+      "itemTotals": {
+        "89": 7,
+        "90": 3,
+        "91": 4
+      },
+      "itemMistakes": {
+        "89": 7
+      },
+      "itemMistakeFlags": {
+        "89": true,
+        "92": true
+      },
+      "extraMistakes": 1,
+      "pickedQuantity": 7,
+      "totalQuantity": 14
+    },
+    "3::2026-04-13T14:28:40.516Z::chilled": {
+      "key": "3::2026-04-13T14:28:40.516Z::chilled",
+      "employeeId": 3,
+      "storeId": 1,
+      "commodity": "chilled",
+      "startedAt": "2026-04-13T14:28:40.516Z",
+      "endedAt": "2026-04-13T14:28:49.847Z",
+      "closed": true,
+      "orderIds": [
+        28
+      ],
+      "itemTotals": {
+        "92": 1
+      },
+      "itemMistakes": {},
+      "itemMistakeFlags": {},
+      "extraMistakes": 0,
+      "pickedQuantity": 1,
+      "totalQuantity": 1
     }
   }
 }

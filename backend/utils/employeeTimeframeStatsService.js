@@ -71,6 +71,37 @@ const isItemPicked = (orderItem) => {
   return toNumber(orderItem?.pickedQuantity) > 0;
 };
 
+const resolveOriginalPickedQuantity = (orderItem) => {
+  const status = normalizeStatus(orderItem?.status);
+  if (status === 'substituted') {
+    return 0;
+  }
+
+  const orderedQtyRaw = Math.max(0, Math.round(toNumber(orderItem?.quantity)));
+  const orderedQty = orderedQtyRaw > 0 ? orderedQtyRaw : 1;
+  const pickedQty = Math.max(0, Math.round(toNumber(orderItem?.pickedQuantity)));
+
+  if (pickedQty > 0) {
+    return Math.min(orderedQty, pickedQty);
+  }
+
+  if (status === 'found') {
+    return orderedQty;
+  }
+
+  return 0;
+};
+
+const resolveOriginalSubstitutedQuantity = (orderItem) => {
+  const status = normalizeStatus(orderItem?.status);
+  if (status !== 'substituted') {
+    return 0;
+  }
+
+  const orderedQtyRaw = Math.max(0, Math.round(toNumber(orderItem?.quantity)));
+  return orderedQtyRaw > 0 ? orderedQtyRaw : 1;
+};
+
 const resolveItemPickedAt = (orderItem, order) => {
   const itemPickedAt = new Date(orderItem?.pickedAt);
   if (!Number.isNaN(itemPickedAt.getTime())) {
@@ -141,6 +172,9 @@ const cloneEmptyStats = () => ({ ...EMPTY_STATS });
 
 const finalizeDayAccumulator = (dayData = {}) => {
   const totalItems = toNumber(dayData.totalItems);
+  const originalItemsTotal = toNumber(dayData.originalItemsTotal);
+  const originalItemsPicked = toNumber(dayData.originalItemsPicked);
+  const originalItemsSubstituted = toNumber(dayData.originalItemsSubstituted);
   const totalPicks = toNumber(dayData.totalPicks);
   const substituted = toNumber(dayData.substituted);
   const notFound = toNumber(dayData.notFound);
@@ -152,8 +186,12 @@ const finalizeDayAccumulator = (dayData = {}) => {
   const firstTimePickPercent = ftprRates.length > 0
     ? ftprRates.reduce((sum, rate) => sum + toNumber(rate), 0) / ftprRates.length
     : 0;
-  const postSubstitutionPercent = totalPicks > 0 ? (substituted / totalPicks) * 100 : 0;
-  const preSubstitutionPercent = Math.min(postSubstitutionPercent, 100);
+  const postSubstitutionPercent = originalItemsTotal > 0
+    ? ((originalItemsPicked + originalItemsSubstituted) / originalItemsTotal) * 100
+    : 0;
+  const preSubstitutionPercent = originalItemsTotal > 0
+    ? (originalItemsPicked / originalItemsTotal) * 100
+    : 0;
   const percentNotFound = totalItems > 0 ? (notFound / totalItems) * 100 : 0;
   const onTimePercent = onTimeTotal > 0 ? (onTimeCount / onTimeTotal) * 100 : 0;
   const weightedEfficiency = totalPicks > 0
@@ -188,6 +226,9 @@ const ensureDayAccumulator = (accumulatorByDay, dayKey) => {
   if (!accumulatorByDay[dayKey]) {
     accumulatorByDay[dayKey] = {
       totalItems: 0,
+      originalItemsTotal: 0,
+      originalItemsPicked: 0,
+      originalItemsSubstituted: 0,
       totalPicks: 0,
       substituted: 0,
       notFound: 0,
@@ -242,7 +283,11 @@ const buildEmployeeDayStatsMap = async (employeeId) => {
       const itemStatus = normalizeStatus(item?.status);
       const orderedQty = Math.max(0, Math.round(toNumber(item.quantity)));
       const pickedQty = Math.max(0, Math.round(toNumber(item.pickedQuantity)));
-      day.totalItems += orderedQty > 0 ? orderedQty : 1;
+      const normalizedOrderedQty = orderedQty > 0 ? orderedQty : 1;
+      day.totalItems += normalizedOrderedQty;
+      day.originalItemsTotal += normalizedOrderedQty;
+      day.originalItemsPicked += resolveOriginalPickedQuantity(item);
+      day.originalItemsSubstituted += resolveOriginalSubstitutedQuantity(item);
 
       if (!hasWalkSummaries && (item.status === 'found' || item.status === 'substituted')) {
         day.totalPicks += pickedQty > 0 ? pickedQty : 1;

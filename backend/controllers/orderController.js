@@ -148,26 +148,29 @@ const buildPickQueue = (orders, pathIndexMap) => {
 
       const item = orderItem.item;
       const itemLocations = Array.isArray(item?.locations) ? item.locations : [];
+      const unassignedQuantity = Math.max(0, Number(item?.unassignedQuantity || 0));
 
-      const locations = itemLocations.map((locationRow) => {
-        const locationId = Number(locationRow.locationId);
-        const aisleNumber = String(locationRow?.location?.aisle?.aisleNumber || '—');
-        const section = locationRow?.location?.section || '';
-        const shelf = locationRow?.location?.shelf || '';
-        const locationPathIndex = pathIndexMap.has(locationId)
-          ? pathIndexMap.get(locationId)
-          : Number.MAX_SAFE_INTEGER;
+      const locations = itemLocations
+        .filter((locationRow) => Number(locationRow?.quantityOnHand || 0) > 0)
+        .map((locationRow) => {
+          const locationId = Number(locationRow.locationId);
+          const aisleNumber = String(locationRow?.location?.aisle?.aisleNumber || '—');
+          const section = locationRow?.location?.section || '';
+          const shelf = locationRow?.location?.shelf || '';
+          const locationPathIndex = pathIndexMap.has(locationId)
+            ? pathIndexMap.get(locationId)
+            : Number.MAX_SAFE_INTEGER;
 
-        return {
-          locationId,
-          aisleNumber,
-          section,
-          shelf,
-          quantityOnHand: Number(locationRow.quantityOnHand || 0),
-          pathIndex: locationPathIndex,
-          coordinates: locationRow?.location?.coordinates || null
-        };
-      });
+          return {
+            locationId,
+            aisleNumber,
+            section,
+            shelf,
+            quantityOnHand: Number(locationRow.quantityOnHand || 0),
+            pathIndex: locationPathIndex,
+            coordinates: locationRow?.location?.coordinates || null
+          };
+        });
 
       const sortedLocations = [...locations].sort((left, right) => {
         if (left.pathIndex !== right.pathIndex) {
@@ -191,6 +194,10 @@ const buildPickQueue = (orders, pathIndexMap) => {
         return accumulator;
       }, {});
 
+      if (unassignedQuantity > 0) {
+        onHandByAisle.Unassigned = unassignedQuantity;
+      }
+
       queue.push({
         orderId: order.id,
         orderNumber: order.orderNumber,
@@ -212,7 +219,7 @@ const buildPickQueue = (orders, pathIndexMap) => {
         location: primaryLocation,
         allLocations: sortedLocations,
         otherLocationsCount: Math.max(sortedLocations.length - 1, 0),
-        onHandTotal: sortedLocations.reduce((sum, loc) => sum + Number(loc.quantityOnHand || 0), 0),
+        onHandTotal: sortedLocations.reduce((sum, loc) => sum + Number(loc.quantityOnHand || 0), 0) + unassignedQuantity,
         substitute: orderItem.substitutedItem ? {
           id: orderItem.substitutedItem.id,
           name: orderItem.substitutedItem.name,
@@ -261,7 +268,7 @@ const walkOrdersInclude = (commodity) => ([
         where: {
           commodity
         },
-        attributes: ['id', 'name', 'upc', 'price', 'imageUrl', 'commodity'],
+        attributes: ['id', 'name', 'upc', 'price', 'imageUrl', 'commodity', 'unassignedQuantity'],
         include: [
           {
             model: ItemLocation,
@@ -286,6 +293,12 @@ const walkOrdersInclude = (commodity) => ([
             ]
           }
         ]
+      },
+      {
+        model: Item,
+        as: 'substitutedItem',
+        required: false,
+        attributes: ['id', 'name', 'upc', 'price', 'imageUrl']
       }
     ]
   }

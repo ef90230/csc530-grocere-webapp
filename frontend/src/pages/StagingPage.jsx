@@ -684,7 +684,7 @@ const StagingPage = () => {
                                         <div>
                                             <p className="staging-order-customer">{getCustomerName(entry.order)}</p>
                                             <p className="staging-order-meta">
-                                                Order {entry.order.orderNumber || `#${orderId}`} â€¢ Due {formatDueTime(entry.order.scheduledPickupTime)}
+                                                Order {entry.order.orderNumber || `#${orderId}`} {'\u00B7'} Due {formatDueTime(entry.order.scheduledPickupTime)}
                                             </p>
                                         </div>
                                         <span className="staging-order-progress">

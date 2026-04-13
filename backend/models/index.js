@@ -273,6 +273,28 @@ const ensureOrderItemOptionColumns = async () => {
   }
 };
 
+const ensureOrderItemCanceledStatus = async () => {
+  try {
+    await sequelize.query(`
+      ALTER TYPE "enum_order_items_status" ADD VALUE IF NOT EXISTS 'canceled';
+    `);
+  } catch (error) {
+    if (error?.original?.code === '42501') {
+      console.warn(
+        'Skipping order_items status enum backfill due to insufficient DB permissions (code 42501).'
+      );
+      return;
+    }
+
+    // enum type may not exist yet in fresh environments before sync
+    if (error?.original?.code === '42704') {
+      return;
+    }
+
+    throw error;
+  }
+};
+
 const ensureStagingLocationCodeColumn = async () => {
   try {
     const [existingColumnsRows] = await sequelize.query(`
@@ -306,13 +328,48 @@ const ensureStagingLocationCodeColumn = async () => {
   }
 };
 
+const ensureItemUnassignedQuantityColumn = async () => {
+  try {
+    const [existingColumnsRows] = await sequelize.query(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'items'
+        AND column_name IN ('unassignedQuantity', 'unassignedquantity');
+    `);
+
+    const existingColumns = new Set(existingColumnsRows.map((row) => row.column_name.toLowerCase()));
+    const needsColumn = !existingColumns.has('unassignedquantity');
+
+    if (!needsColumn) {
+      return;
+    }
+
+    await sequelize.query(
+      'ALTER TABLE "items" ADD COLUMN IF NOT EXISTS unassignedquantity INTEGER NOT NULL DEFAULT 0;'
+    );
+
+    console.log('Ensured items option columns: unassignedQuantity');
+  } catch (error) {
+    if (error?.original?.code === '42501') {
+      console.warn(
+        'Skipping items schema backfill due to insufficient DB permissions (code 42501).'
+      );
+      return;
+    }
+    throw error;
+  }
+};
+
 const syncDatabase = async (force = false) => {
   try {
     await sequelize.sync({ force });
     await ensureEmployeeMetricColumns();
     await ensureCartItemOptionColumns();
     await ensureOrderItemOptionColumns();
+    await ensureOrderItemCanceledStatus();
     await ensureStagingLocationCodeColumn();
+    await ensureItemUnassignedQuantityColumn();
     console.log('Database synchronized successfully');
   } catch (error) {
     console.error('Error synchronizing database:', error);

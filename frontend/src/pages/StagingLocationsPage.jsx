@@ -4,6 +4,7 @@ import Navbar from '../components/common/Navbar';
 import TopBar from '../components/common/TopBar';
 import StagingLocationForm from '../components/staging/StagingLocationForm';
 import './StagingLocationsPage.css';
+import { BrowserMultiFormatReader } from '@zxing/browser';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
@@ -106,9 +107,7 @@ const StagingLocationsPage = () => {
     const [codeScannerMessage, setCodeScannerMessage] = useState('');
 
     const codeScannerVideoRef = useRef(null);
-    const codeScannerStreamRef = useRef(null);
-    const codeScannerDetectorRef = useRef(null);
-    const codeScannerFrameRef = useRef(null);
+    const codeScannerZxingControlsRef = useRef(null);
     const codeScannerHandlingRef = useRef(false);
 
     const token = window.localStorage.getItem('authToken');
@@ -116,17 +115,8 @@ const StagingLocationsPage = () => {
     const normalizeScannedCode = (value = '') => String(value || '').trim();
 
     const stopCodeScannerSession = () => {
-        if (codeScannerFrameRef.current) {
-            window.cancelAnimationFrame(codeScannerFrameRef.current);
-            codeScannerFrameRef.current = null;
-        }
-
-        if (codeScannerStreamRef.current) {
-            codeScannerStreamRef.current.getTracks().forEach((track) => track.stop());
-            codeScannerStreamRef.current = null;
-        }
-
-        codeScannerDetectorRef.current = null;
+        codeScannerZxingControlsRef.current?.stop();
+        codeScannerZxingControlsRef.current = null;
         codeScannerHandlingRef.current = false;
 
         if (codeScannerVideoRef.current) {
@@ -142,44 +132,12 @@ const StagingLocationsPage = () => {
     const handleOpenCodeScanner = async () => {
         setCodeScannerMessage('');
 
-        const BarcodeDetectorApi = window.BarcodeDetector;
-        const mediaDevices = navigator?.mediaDevices;
-
-        if (!BarcodeDetectorApi || !mediaDevices?.getUserMedia) {
+        if (!navigator?.mediaDevices?.getUserMedia) {
             setCodeScannerMessage('Camera unavailable');
             return;
         }
 
-        try {
-            const supportedFormats = typeof BarcodeDetectorApi.getSupportedFormats === 'function'
-                ? await BarcodeDetectorApi.getSupportedFormats()
-                : [];
-            const requestedFormats = ['code_128', 'code_39', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'qr_code'];
-            const detectorFormats = supportedFormats.length > 0
-                ? requestedFormats.filter((format) => supportedFormats.includes(format))
-                : requestedFormats;
-
-            if (supportedFormats.length > 0 && detectorFormats.length === 0) {
-                setCodeScannerMessage('No supported barcode formats found on this device.');
-                return;
-            }
-
-            const stream = await mediaDevices.getUserMedia({
-                video: {
-                    facingMode: { ideal: 'environment' }
-                },
-                audio: false
-            });
-
-            codeScannerStreamRef.current = stream;
-            codeScannerDetectorRef.current = new BarcodeDetectorApi({ formats: detectorFormats });
-            setIsCodeScannerOpen(true);
-        } catch (error) {
-            console.error('Unable to open code scanner', error);
-            stopCodeScannerSession();
-            setIsCodeScannerOpen(false);
-            setCodeScannerMessage('Camera unavailable');
-        }
+        setIsCodeScannerOpen(true);
     };
 
     const loadLocations = useCallback(async (signal) => {
@@ -588,57 +546,54 @@ const StagingLocationsPage = () => {
     };
 
     useEffect(() => {
-        if (!isCodeScannerOpen || !codeScannerVideoRef.current || !codeScannerStreamRef.current || !codeScannerDetectorRef.current) {
+        if (!isCodeScannerOpen || !codeScannerVideoRef.current) {
             return undefined;
         }
 
-        const video = codeScannerVideoRef.current;
-        video.srcObject = codeScannerStreamRef.current;
+        const reader = new BrowserMultiFormatReader();
+        codeScannerHandlingRef.current = false;
+        const videoEl = codeScannerVideoRef.current;
 
-        const startScanning = async () => {
+        const startReader = async () => {
             try {
-                await video.play();
-            } catch (error) {
-                console.error('Unable to start code scanner preview', error);
-                closeCodeScannerModal();
-                setCodeScannerMessage('Camera unavailable');
-                return;
-            }
+                const controls = await reader.decodeFromConstraints(
+                    { video: { facingMode: { ideal: 'environment' } } },
+                    videoEl,
+                    (result) => {
+                        if (!result || codeScannerHandlingRef.current) return;
 
-            const scan = async () => {
-                if (!codeScannerDetectorRef.current || !codeScannerVideoRef.current || codeScannerHandlingRef.current) {
-                    codeScannerFrameRef.current = window.requestAnimationFrame(scan);
-                    return;
-                }
+                        const rawValue = normalizeScannedCode(result.getText());
+                        if (!rawValue) return;
 
-                try {
-                    const barcodes = await codeScannerDetectorRef.current.detect(codeScannerVideoRef.current);
-                    if (Array.isArray(barcodes) && barcodes.length > 0) {
-                        const rawValue = normalizeScannedCode(barcodes[0]?.rawValue);
-                        if (rawValue) {
-                            codeScannerHandlingRef.current = true;
-                            setLocationCodeDraft(rawValue);
-                            closeCodeScannerModal();
-                            codeScannerHandlingRef.current = false;
-                            return;
+                        codeScannerHandlingRef.current = true;
+                        setLocationCodeDraft(rawValue);
+                        codeScannerZxingControlsRef.current?.stop();
+                        codeScannerZxingControlsRef.current = null;
+                        if (videoEl) {
+                            videoEl.srcObject = null;
                         }
+                        setIsCodeScannerOpen(false);
+                        codeScannerHandlingRef.current = false;
                     }
-                } catch (error) {
-                    console.error('Location code scan failed', error);
-                }
-
-                codeScannerFrameRef.current = window.requestAnimationFrame(scan);
-            };
-
-            codeScannerFrameRef.current = window.requestAnimationFrame(scan);
+                );
+                codeScannerZxingControlsRef.current = controls;
+            } catch (error) {
+                console.error('Unable to start code scanner', error);
+                setIsCodeScannerOpen(false);
+                setCodeScannerMessage('Camera unavailable');
+            }
         };
 
-        startScanning();
+        startReader();
 
         return () => {
-            stopCodeScannerSession();
+            codeScannerZxingControlsRef.current?.stop();
+            codeScannerZxingControlsRef.current = null;
+            codeScannerHandlingRef.current = false;
+            if (videoEl) {
+                videoEl.srcObject = null;
+            }
         };
-    // Effect depends on camera open state and refs managed by scanner helpers.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isCodeScannerOpen]);
 
