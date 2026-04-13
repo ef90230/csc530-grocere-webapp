@@ -273,12 +273,46 @@ const ensureOrderItemOptionColumns = async () => {
   }
 };
 
+const ensureStagingLocationCodeColumn = async () => {
+  try {
+    const [existingColumnsRows] = await sequelize.query(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'staging_locations'
+        AND column_name IN ('locationCode', 'locationcode');
+    `);
+
+    const existingColumns = new Set(existingColumnsRows.map((row) => row.column_name));
+    const needsLocationCode = !existingColumns.has('locationCode') && !existingColumns.has('locationcode');
+
+    if (!needsLocationCode) {
+      return;
+    }
+
+    await sequelize.query(
+      'ALTER TABLE "staging_locations" ADD COLUMN IF NOT EXISTS "locationCode" VARCHAR(120);'
+    );
+
+    console.log('Ensured staging_locations option columns: locationCode');
+  } catch (error) {
+    if (error?.original?.code === '42501') {
+      console.warn(
+        'Skipping staging_locations schema backfill due to insufficient DB permissions (code 42501).'
+      );
+      return;
+    }
+    throw error;
+  }
+};
+
 const syncDatabase = async (force = false) => {
   try {
     await sequelize.sync({ force });
     await ensureEmployeeMetricColumns();
     await ensureCartItemOptionColumns();
     await ensureOrderItemOptionColumns();
+    await ensureStagingLocationCodeColumn();
     console.log('Database synchronized successfully');
   } catch (error) {
     console.error('Error synchronizing database:', error);

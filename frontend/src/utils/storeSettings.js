@@ -28,8 +28,11 @@ export const DEFAULT_STORE_SETTINGS = {
   timeslot: {
     defaultLimit: 20,
     overrides: {}
-  }
+  },
+  storePhone: ''
 };
+
+const MAX_STORE_PHONE_LENGTH = 32;
 
 const toNumber = (value, fallback = 0) => {
   const parsed = Number(value);
@@ -39,6 +42,19 @@ const toNumber = (value, fallback = 0) => {
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
 const isUnsafeObjectKey = (key) => key === '__proto__' || key === 'prototype' || key === 'constructor';
+
+const normalizeStorePhone = (value) => {
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    return '';
+  }
+
+  const cleaned = String(value)
+    .replace(/[^0-9+()\-\s.]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return cleaned.slice(0, MAX_STORE_PHONE_LENGTH);
+};
 
 const normalizeOverrides = (inputOverrides) => {
   if (!inputOverrides || typeof inputOverrides !== 'object' || Array.isArray(inputOverrides)) {
@@ -95,7 +111,8 @@ export const normalizeStoreSettings = (inputSettings) => {
       defaultLimit: Math.round(Math.max(1, toNumber(timeslot.defaultLimit, DEFAULT_STORE_SETTINGS.timeslot.defaultLimit))),
       overrides: normalizeOverrides(timeslot.overrides)
     },
-    waitTimeWarningMinutes
+    waitTimeWarningMinutes,
+    storePhone: normalizeStorePhone(source.storePhone)
   };
 };
 

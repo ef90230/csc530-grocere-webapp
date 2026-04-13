@@ -29,7 +29,7 @@ const formatLocationLabel = (location) => {
     }
 
     const aisle = location.aisleNumber || 'â€”';
-    const section = location.section ? ` â€¢ Section ${location.section}` : '';
+    const section = location.section ? ` \u00B7 Section ${location.section}` : '';
     return `Aisle ${aisle}${section}`;
 };
 
@@ -685,7 +685,7 @@ const PickingPage = () => {
         <div className="picking-page">
             <TopBar
                 title={`${commodityTitle} Picking`}
-                leftActionLabel="Ã—"
+                leftActionLabel="X"
                 leftActionAriaLabel="End pick walk"
                 onLeftAction={() => setIsEndPromptOpen(true)}
                 statMode="walk"

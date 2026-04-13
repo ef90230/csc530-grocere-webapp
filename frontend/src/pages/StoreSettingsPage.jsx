@@ -89,6 +89,18 @@ const parseFiniteNumber = (rawValue, fallback) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const sanitizePhoneInput = (value) => {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  return value
+    .replace(/[^0-9+()\-\s.]/g, '')
+    .replace(/\s+/g, ' ')
+    .trimStart()
+    .slice(0, 32);
+};
+
 const StoreSettingsPage = () => {
   const navigate = useNavigate();
   const [storeSummary, setStoreSummary] = useState({ name: 'Store', storeNumber: '' });
@@ -190,6 +202,17 @@ const StoreSettingsPage = () => {
           ...current.timeslot,
           defaultLimit: safeValue
         }
+      };
+    });
+  };
+
+  const handleStorePhoneChange = (nextValue) => {
+    setSettings((previousSettings) => {
+      const current = normalizeStoreSettings(previousSettings);
+
+      return {
+        ...current,
+        storePhone: sanitizePhoneInput(nextValue)
       };
     });
   };
@@ -300,6 +323,23 @@ const StoreSettingsPage = () => {
               </div>
               <p className="store-settings-hint">
                 When this limit is lowered, any timeslot already above the new limit keeps its prior limit until a later update can adopt the new value safely.
+              </p>
+            </section>
+
+            <section className="store-settings-section">
+              <h2>Store Contact</h2>
+              <div className="store-settings-timeslot-row">
+                <label htmlFor="store-phone-input">Store phone number</label>
+                <input
+                  id="store-phone-input"
+                  type="tel"
+                  value={normalizedSettings.storePhone}
+                  onChange={(event) => handleStorePhoneChange(event.target.value)}
+                  placeholder="(555) 123-4567"
+                />
+              </div>
+              <p className="store-settings-hint">
+                Customers use this number when selecting Call Store from their order summary.
               </p>
             </section>
 

@@ -52,10 +52,42 @@ const EMPTY_STATS = {
 };
 
 const NON_DISPENSABLE_ITEM_STATUSES = new Set(['out_of_stock', 'skipped', 'not_found', 'cancelled', 'canceled']);
+const NOT_FOUND_ITEM_STATUSES = new Set(['not_found']);
+const CANCELED_ITEM_STATUSES = new Set(['cancelled', 'canceled']);
 
 const toNumber = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const normalizeStatus = (value) => String(value || '').trim().toLowerCase();
+
+const isItemPicked = (orderItem) => {
+  const status = normalizeStatus(orderItem?.status);
+  if (status === 'found' || status === 'substituted') {
+    return true;
+  }
+
+  return toNumber(orderItem?.pickedQuantity) > 0;
+};
+
+const resolveItemPickedAt = (orderItem, order) => {
+  const itemPickedAt = new Date(orderItem?.pickedAt);
+  if (!Number.isNaN(itemPickedAt.getTime())) {
+    return itemPickedAt;
+  }
+
+  const orderEndTime = new Date(order?.pickingEndTime);
+  if (!Number.isNaN(orderEndTime.getTime())) {
+    return orderEndTime;
+  }
+
+  const itemUpdatedAt = new Date(orderItem?.updatedAt);
+  if (!Number.isNaN(itemUpdatedAt.getTime())) {
+    return itemUpdatedAt;
+  }
+
+  return null;
 };
 
 const clampPercent = (value) => Math.max(0, Math.min(100, toNumber(value)));
@@ -181,65 +213,62 @@ const buildEmployeeDayStatsMap = async (employeeId) => {
   }
 
   const dayAccumulator = {};
+  const walkSummaries = getWalkSummariesForEmployee(normalizedEmployeeId, { closedOnly: true });
+  const hasWalkSummaries = walkSummaries.length > 0;
 
   const pickerOrders = await Order.findAll({
     where: {
       assignedPickerId: normalizedEmployeeId,
-      pickingEndTime: { [Op.ne]: null }
+      pickingStartTime: { [Op.ne]: null }
     },
-    attributes: ['id', 'pickingEndTime'],
+    attributes: ['id', 'status', 'scheduledPickupTime', 'pickingStartTime', 'pickingEndTime'],
     include: [
       {
         model: OrderItem,
         as: 'items',
-        attributes: ['status', 'foundOnFirstAttempt']
+        attributes: ['status', 'quantity', 'pickedQuantity', 'pickedAt', 'updatedAt']
       }
     ]
   });
 
   pickerOrders.forEach((order) => {
-    const dayKey = getDayKey(order.pickingEndTime);
+    const dayKey = getDayKey(order.pickingEndTime || order.scheduledPickupTime || order.pickingStartTime);
     const day = ensureDayAccumulator(dayAccumulator, dayKey);
     if (!day) {
       return;
     }
 
     (order.items || []).forEach((item) => {
-      day.totalItems += 1;
+      const itemStatus = normalizeStatus(item?.status);
+      const orderedQty = Math.max(0, Math.round(toNumber(item.quantity)));
+      const pickedQty = Math.max(0, Math.round(toNumber(item.pickedQuantity)));
+      day.totalItems += orderedQty > 0 ? orderedQty : 1;
 
-      if (item.status === 'found' || item.status === 'substituted') {
-        day.totalPicks += 1;
+      if (!hasWalkSummaries && (item.status === 'found' || item.status === 'substituted')) {
+        day.totalPicks += pickedQty > 0 ? pickedQty : 1;
       }
 
-      if (item.status === 'substituted') {
-        day.substituted += 1;
+      if (itemStatus === 'substituted') {
+        day.substituted += pickedQty > 0 ? pickedQty : 1;
+      }
+
+      if (!NOT_FOUND_ITEM_STATUSES.has(itemStatus)) {
+        const dueAt = new Date(order?.scheduledPickupTime);
+        const isDueValid = !Number.isNaN(dueAt.getTime());
+        const pickedAt = resolveItemPickedAt(item, order);
+        const pickedOnTime = Boolean(pickedAt)
+          && isDueValid
+          && pickedAt.getTime() <= dueAt.getTime();
+        const includeAsCanceled = CANCELED_ITEM_STATUSES.has(itemStatus);
+
+        if (isItemPicked(item) || includeAsCanceled) {
+          day.onTimeTotal += 1;
+          if (pickedOnTime) {
+            day.onTimeCount += 1;
+          }
+        }
       }
     });
-  });
-
-  const pickerPickupOrders = await Order.findAll({
-    where: {
-      assignedPickerId: normalizedEmployeeId,
-      actualPickupTime: { [Op.ne]: null }
-    },
-    attributes: ['scheduledPickupTime', 'actualPickupTime']
-  });
-
-  pickerPickupOrders.forEach((order) => {
-    const dayKey = getDayKey(order.actualPickupTime);
-    const day = ensureDayAccumulator(dayAccumulator, dayKey);
-    if (!day) {
-      return;
-    }
-
-    day.onTimeTotal += 1;
-
-    const scheduled = new Date(order.scheduledPickupTime);
-    const actual = new Date(order.actualPickupTime);
-
-    if (!Number.isNaN(scheduled.getTime()) && !Number.isNaN(actual.getTime()) && actual <= scheduled) {
-      day.onTimeCount += 1;
-    }
   });
 
   const dispenserOrders = await Order.findAll({
@@ -307,7 +336,6 @@ const buildEmployeeDayStatsMap = async (employeeId) => {
     day.walkRates.push(toNumber(walk?.pickRate));
   });
 
-  const walkSummaries = getWalkSummariesForEmployee(normalizedEmployeeId, { closedOnly: true });
   walkSummaries.forEach((walkSummary) => {
     const dayKey = getDayKey(walkSummary?.startedAt);
     const day = ensureDayAccumulator(dayAccumulator, dayKey);
@@ -315,6 +343,7 @@ const buildEmployeeDayStatsMap = async (employeeId) => {
       return;
     }
 
+    day.totalPicks += Math.max(0, Math.round(toNumber(walkSummary?.pickedQuantity)));
     day.ftprRates.push(toNumber(walkSummary?.firstTimePickRate));
     day.notFound += Math.max(0, Math.round(toNumber(walkSummary?.mistakeItems)));
   });

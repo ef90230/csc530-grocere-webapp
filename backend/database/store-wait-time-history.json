@@ -5,6 +5,14 @@
         "2026-04-11": {
           "totalMinutes": 3.3298,
           "orderCount": 3
+        },
+        "2026-04-12": {
+          "totalMinutes": 8.7119,
+          "orderCount": 3
+        },
+        "2026-04-13": {
+          "totalMinutes": 0.2653,
+          "orderCount": 1
         }
       }
     }

@@ -15,6 +15,7 @@ const {
   closeLatestOpenWalk
 } = require('../utils/walkPerformanceStore');
 const { recordOrderWaitTime } = require('../utils/storeWaitTimeHistoryStore');
+const { resolveStorePhoneFromStore } = require('../utils/storeSettings');
 
 const COMMODITY_DISPLAY_NAMES = {
   ambient: 'Ambient Regular',
@@ -319,7 +320,7 @@ const getOrders = async (req, res) => {
         {
           model: Store,
           as: 'store',
-          attributes: ['id', 'storeNumber', 'name']
+          attributes: ['id', 'storeNumber', 'name', 'phone', 'backroomDoorLocation']
         },
         {
           model: Employee,
@@ -378,8 +379,15 @@ const getOrders = async (req, res) => {
     const ordersWithStagingCounts = orders.map((order) => {
       const orderJson = order.toJSON();
       const checkIn = extractOrderCheckIn(orderJson.notes);
+      const resolvedStorePhone = resolveStorePhoneFromStore(orderJson.store);
       return {
         ...orderJson,
+        store: orderJson.store
+          ? {
+              ...orderJson.store,
+              storePhone: resolvedStorePhone
+            }
+          : null,
         isCheckedIn: checkIn.isCheckedIn,
         checkInTime: checkIn.checkInTime,
         parkingSpot: checkIn.parkingSpot,

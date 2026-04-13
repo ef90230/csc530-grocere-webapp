@@ -13,6 +13,7 @@ import './OrderListPage.css';
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 const WAIT_THRESHOLD_STORAGE_KEY = 'grocereWaitThresholdMinutes';
 const CANCEL_STATUS_TOAST_MESSAGE = 'Cannot cancel order in current status';
+const CALL_APP_FAILURE_MESSAGE = 'Failed to reach phone app';
 const TOAST_DURATION_MS = 5000;
 
 const DEFAULT_WAIT_THRESHOLD_MINUTES = 5;
@@ -42,7 +43,7 @@ const STATUS_LABELS = {
 };
 
 const STATUS_SORT_WEIGHT = {
-    [ORDER_PHASE.CANCELLED]: 0,
+    [ORDER_PHASE.CANCELLED]: 9,
     [ORDER_PHASE.DISPENSING_IN_PROGRESS]: 1,
     [ORDER_PHASE.READY_FOR_PICKUP]: 2,
     [ORDER_PHASE.STAGING_COMPLETE]: 3,
@@ -57,6 +58,8 @@ const toNumber = (value) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : 0;
 };
+
+const getDialablePhone = (value) => String(value || '').replace(/[^0-9+]/g, '');
 
 const getStoredThreshold = () => {
     const storedValue = Number(window.localStorage.getItem(WAIT_THRESHOLD_STORAGE_KEY));
@@ -210,7 +213,7 @@ const deriveOrderPhase = (order, stagedToteCountByOrderId) => {
     return ORDER_PHASE.PICKING_NOT_STARTED;
 };
 
-const isCardInteractive = (order) => order?.phase !== ORDER_PHASE.COMPLETED;
+const isCardInteractive = (order) => order?.phase !== ORDER_PHASE.COMPLETED && order?.phase !== ORDER_PHASE.CANCELLED;
 
 const OrderListPage = () => {
     const navigate = useNavigate();
@@ -608,6 +611,20 @@ const OrderListPage = () => {
         }
     };
 
+    const handleCallCustomer = (order) => {
+        const phoneNumber = getDialablePhone(order?.customer?.phone);
+        if (!phoneNumber) {
+            setErrorMessage(CALL_APP_FAILURE_MESSAGE);
+            return;
+        }
+
+        try {
+            window.location.href = `tel:${phoneNumber}`;
+        } catch {
+            setErrorMessage(CALL_APP_FAILURE_MESSAGE);
+        }
+    };
+
     const handleSaveThreshold = (event) => {
         event.preventDefault();
         const parsedValue = Number(waitThresholdDraft);
@@ -777,7 +794,7 @@ const OrderListPage = () => {
                                         ) : null}
                                     </div>
 
-                                    {order.phase !== ORDER_PHASE.COMPLETED ? (
+                                    {order.phase !== ORDER_PHASE.COMPLETED && order.phase !== ORDER_PHASE.CANCELLED ? (
                                         <button
                                             type="button"
                                             className="order-shortcut-btn"
@@ -855,6 +872,15 @@ const OrderListPage = () => {
                                 onClick={() => handleStartDispense(activeOrder)}
                             >
                                 Prep and Dispense Order
+                            </button>
+
+                            <button
+                                type="button"
+                                className="order-modal-btn order-modal-btn--primary"
+                                disabled={isSubmitting}
+                                onClick={() => handleCallCustomer(activeOrder)}
+                            >
+                                Call Customer
                             </button>
 
                             <button

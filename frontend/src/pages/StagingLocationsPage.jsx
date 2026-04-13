@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/common/Navbar';
 import TopBar from '../components/common/TopBar';
@@ -95,14 +95,92 @@ const StagingLocationsPage = () => {
 
     const [limitDraft, setLimitDraft] = useState('10');
     const [locationNameDraft, setLocationNameDraft] = useState('');
+    const [locationCodeDraft, setLocationCodeDraft] = useState('');
     const [selectedLocation, setSelectedLocation] = useState(null);
     const [isOrderTotesModalOpen, setIsOrderTotesModalOpen] = useState(false);
     const [isOrderTotesLoading, setIsOrderTotesLoading] = useState(false);
     const [selectedTote, setSelectedTote] = useState(null);
     const [orderTotesSummary, setOrderTotesSummary] = useState(null);
     const [updatingOrderToteKey, setUpdatingOrderToteKey] = useState('');
+    const [isCodeScannerOpen, setIsCodeScannerOpen] = useState(false);
+    const [codeScannerMessage, setCodeScannerMessage] = useState('');
+
+    const codeScannerVideoRef = useRef(null);
+    const codeScannerStreamRef = useRef(null);
+    const codeScannerDetectorRef = useRef(null);
+    const codeScannerFrameRef = useRef(null);
+    const codeScannerHandlingRef = useRef(false);
 
     const token = window.localStorage.getItem('authToken');
+
+    const normalizeScannedCode = (value = '') => String(value || '').trim();
+
+    const stopCodeScannerSession = () => {
+        if (codeScannerFrameRef.current) {
+            window.cancelAnimationFrame(codeScannerFrameRef.current);
+            codeScannerFrameRef.current = null;
+        }
+
+        if (codeScannerStreamRef.current) {
+            codeScannerStreamRef.current.getTracks().forEach((track) => track.stop());
+            codeScannerStreamRef.current = null;
+        }
+
+        codeScannerDetectorRef.current = null;
+        codeScannerHandlingRef.current = false;
+
+        if (codeScannerVideoRef.current) {
+            codeScannerVideoRef.current.srcObject = null;
+        }
+    };
+
+    const closeCodeScannerModal = () => {
+        stopCodeScannerSession();
+        setIsCodeScannerOpen(false);
+    };
+
+    const handleOpenCodeScanner = async () => {
+        setCodeScannerMessage('');
+
+        const BarcodeDetectorApi = window.BarcodeDetector;
+        const mediaDevices = navigator?.mediaDevices;
+
+        if (!BarcodeDetectorApi || !mediaDevices?.getUserMedia) {
+            setCodeScannerMessage('Camera unavailable');
+            return;
+        }
+
+        try {
+            const supportedFormats = typeof BarcodeDetectorApi.getSupportedFormats === 'function'
+                ? await BarcodeDetectorApi.getSupportedFormats()
+                : [];
+            const requestedFormats = ['code_128', 'code_39', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'qr_code'];
+            const detectorFormats = supportedFormats.length > 0
+                ? requestedFormats.filter((format) => supportedFormats.includes(format))
+                : requestedFormats;
+
+            if (supportedFormats.length > 0 && detectorFormats.length === 0) {
+                setCodeScannerMessage('No supported barcode formats found on this device.');
+                return;
+            }
+
+            const stream = await mediaDevices.getUserMedia({
+                video: {
+                    facingMode: { ideal: 'environment' }
+                },
+                audio: false
+            });
+
+            codeScannerStreamRef.current = stream;
+            codeScannerDetectorRef.current = new BarcodeDetectorApi({ formats: detectorFormats });
+            setIsCodeScannerOpen(true);
+        } catch (error) {
+            console.error('Unable to open code scanner', error);
+            stopCodeScannerSession();
+            setIsCodeScannerOpen(false);
+            setCodeScannerMessage('Camera unavailable');
+        }
+    };
 
     const loadLocations = useCallback(async (signal) => {
         const response = await fetch(`${API_BASE}/api/staging-locations`, {
@@ -321,6 +399,7 @@ const StagingLocationsPage = () => {
         setDialogErrorMessage('');
         setSelectedLocation(location);
         setLocationNameDraft(location.name || '');
+        setLocationCodeDraft(location.locationCode || '');
         setIsLocationEditOpen(true);
     };
 
@@ -341,7 +420,10 @@ const StagingLocationsPage = () => {
                     Authorization: `Bearer ${token}`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ name: locationNameDraft })
+                body: JSON.stringify({
+                    name: locationNameDraft,
+                    locationCode: locationCodeDraft
+                })
             });
 
             if (!response.ok) {
@@ -391,6 +473,41 @@ const StagingLocationsPage = () => {
             await loadLocations();
         } catch (error) {
             setDialogErrorMessage(error.message || 'Unable to delete location.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleRemoveLocationCode = async () => {
+        if (!selectedLocation) {
+            return;
+        }
+
+        setIsSubmitting(true);
+        setDialogErrorMessage('');
+
+        try {
+            const response = await fetch(`${API_BASE}/api/staging-locations/${selectedLocation.id}`, {
+                method: 'PATCH',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    name: locationNameDraft,
+                    locationCode: ''
+                })
+            });
+
+            if (!response.ok) {
+                const payload = await response.json().catch(() => ({}));
+                throw new Error(payload.message || 'Unable to remove location code.');
+            }
+
+            setLocationCodeDraft('');
+            await loadLocations();
+        } catch (error) {
+            setDialogErrorMessage(error.message || 'Unable to remove location code.');
         } finally {
             setIsSubmitting(false);
         }
@@ -469,6 +586,65 @@ const StagingLocationsPage = () => {
             }
         });
     };
+
+    useEffect(() => {
+        if (!isCodeScannerOpen || !codeScannerVideoRef.current || !codeScannerStreamRef.current || !codeScannerDetectorRef.current) {
+            return undefined;
+        }
+
+        const video = codeScannerVideoRef.current;
+        video.srcObject = codeScannerStreamRef.current;
+
+        const startScanning = async () => {
+            try {
+                await video.play();
+            } catch (error) {
+                console.error('Unable to start code scanner preview', error);
+                closeCodeScannerModal();
+                setCodeScannerMessage('Camera unavailable');
+                return;
+            }
+
+            const scan = async () => {
+                if (!codeScannerDetectorRef.current || !codeScannerVideoRef.current || codeScannerHandlingRef.current) {
+                    codeScannerFrameRef.current = window.requestAnimationFrame(scan);
+                    return;
+                }
+
+                try {
+                    const barcodes = await codeScannerDetectorRef.current.detect(codeScannerVideoRef.current);
+                    if (Array.isArray(barcodes) && barcodes.length > 0) {
+                        const rawValue = normalizeScannedCode(barcodes[0]?.rawValue);
+                        if (rawValue) {
+                            codeScannerHandlingRef.current = true;
+                            setLocationCodeDraft(rawValue);
+                            closeCodeScannerModal();
+                            codeScannerHandlingRef.current = false;
+                            return;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Location code scan failed', error);
+                }
+
+                codeScannerFrameRef.current = window.requestAnimationFrame(scan);
+            };
+
+            codeScannerFrameRef.current = window.requestAnimationFrame(scan);
+        };
+
+        startScanning();
+
+        return () => {
+            stopCodeScannerSession();
+        };
+    // Effect depends on camera open state and refs managed by scanner helpers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isCodeScannerOpen]);
+
+    useEffect(() => () => {
+        stopCodeScannerSession();
+    }, []);
 
     return (
         <div className="staging-locations-page">
@@ -657,6 +833,35 @@ const StagingLocationsPage = () => {
                             <label>Item Type</label>
                             <input type="text" value={ITEM_TYPE_LABELS[selectedLocation.itemType] || selectedLocation.itemType} disabled />
 
+                            <label htmlFor="location-code-input">Location Code</label>
+                            <input
+                                id="location-code-input"
+                                type="text"
+                                value={locationCodeDraft}
+                                onChange={(event) => setLocationCodeDraft(event.target.value)}
+                                maxLength={120}
+                                placeholder="Unlocked when blank"
+                            />
+                            <div className="staging-modal-actions">
+                                <button
+                                    type="button"
+                                    className="staging-modal-btn staging-modal-btn--ghost"
+                                    disabled={isSubmitting}
+                                    onClick={handleOpenCodeScanner}
+                                >
+                                    Scan Code
+                                </button>
+                                <button
+                                    type="button"
+                                    className="staging-modal-btn staging-modal-btn--danger"
+                                    disabled={isSubmitting || !locationCodeDraft.trim()}
+                                    onClick={handleRemoveLocationCode}
+                                >
+                                    Delete Code
+                                </button>
+                            </div>
+                            {codeScannerMessage ? <p className="staging-modal-error">{codeScannerMessage}</p> : null}
+
                             {dialogErrorMessage ? <p className="staging-modal-error">{dialogErrorMessage}</p> : null}
                             <div className="staging-modal-actions">
                                 <button
@@ -750,6 +955,20 @@ const StagingLocationsPage = () => {
                         <div className="staging-modal-actions">
                             <button type="button" className="staging-modal-btn staging-modal-btn--ghost" onClick={closeOrderTotesModal}>
                                 Close
+                            </button>
+                        </div>
+                    </section>
+                </div>
+            ) : null}
+
+            {isCodeScannerOpen ? (
+                <div className="staging-modal-backdrop" role="presentation" onClick={closeCodeScannerModal}>
+                    <section className="staging-modal-card" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+                        <h2>Scan Location Code</h2>
+                        <video ref={codeScannerVideoRef} className="staging-code-scanner-video" autoPlay playsInline muted />
+                        <div className="staging-modal-actions">
+                            <button type="button" className="staging-modal-btn staging-modal-btn--ghost" onClick={closeCodeScannerModal}>
+                                Cancel
                             </button>
                         </div>
                     </section>

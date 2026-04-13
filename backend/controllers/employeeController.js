@@ -345,14 +345,16 @@ const getStoreSettings = async (req, res) => {
     }
 
     const store = await Store.findByPk(storeId, {
-      attributes: ['id', 'storeNumber', 'name', 'backroomDoorLocation']
+      attributes: ['id', 'storeNumber', 'name', 'phone', 'backroomDoorLocation']
     });
 
     if (!store) {
       return res.status(404).json({ message: 'Store not found.' });
     }
 
-    const settings = getStoreSettingsFromStore(store);
+    const settings = getStoreSettingsFromStore(store, {
+      fallbackStorePhone: store.phone
+    });
 
     return res.json({
       success: true,
@@ -381,15 +383,19 @@ const updateStoreSettings = async (req, res) => {
     }
 
     const store = await Store.findByPk(storeId, {
-      attributes: ['id', 'storeNumber', 'name', 'backroomDoorLocation']
+      attributes: ['id', 'storeNumber', 'name', 'phone', 'backroomDoorLocation']
     });
 
     if (!store) {
       return res.status(404).json({ message: 'Store not found.' });
     }
 
-    const requestedSettings = normalizeStoreSettings(req.body?.settings);
-    const existingSettings = getStoreSettingsFromStore(store);
+    const requestedSettings = normalizeStoreSettings(req.body?.settings, {
+      fallbackStorePhone: store.phone
+    });
+    const existingSettings = getStoreSettingsFromStore(store, {
+      fallbackStorePhone: store.phone
+    });
     const currentDefaultLimit = toInteger(existingSettings?.timeslot?.defaultLimit, 20);
     const nextDefaultLimit = toInteger(requestedSettings?.timeslot?.defaultLimit, currentDefaultLimit);
 

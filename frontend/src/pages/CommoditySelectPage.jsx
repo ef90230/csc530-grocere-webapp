@@ -196,7 +196,7 @@ const CommoditySelectPage = () => {
 
                                 <div className="commodity-select-card-side">
                                     <span className="commodity-select-due-label">Due {formatDueTime(commodity.dueTime)}</span>
-                                    <span className="commodity-select-chevron" aria-hidden="true">â€º</span>
+                                    <span className="commodity-select-chevron" aria-hidden="true">&gt;</span>
                                 </div>
                             </button>
                         ))}

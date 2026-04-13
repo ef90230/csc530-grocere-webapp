@@ -84,6 +84,12 @@
   overflow-y: auto;
 }
 
+.order-summary-call-store-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.75rem;
+}
+
 .order-summary-hero {
   background: linear-gradient(135deg, #4d83db 0%, #356dce 100%);
   color: #fff;
@@ -174,11 +180,16 @@
   gap: 8px;
   font-family: inherit;
   box-shadow: 0 10px 18px rgba(0, 0, 0, 0.08);
+  outline: none;
 }
 
 .order-summary-item:hover {
   transform: translateY(-1px);
   box-shadow: 0 12px 20px rgba(0, 0, 0, 0.14);
+}
+
+.order-summary-item:focus-visible {
+  box-shadow: 0 0 0 3px rgba(31, 95, 203, 0.35), 0 12px 20px rgba(0, 0, 0, 0.14);
 }
 
 .order-summary-item__header {
@@ -203,6 +214,25 @@
 .order-summary-item__status-row {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.order-summary-call-store-btn {
+  min-height: 30px;
+  border-radius: 6px;
+  border: 1px solid #174a98;
+  background: #1f5fcb;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  padding: 0 0.65rem;
+  cursor: pointer;
+}
+
+.order-summary-call-store-btn:hover {
+  background: #184ea8;
 }
 
 .order-summary-status-pill {

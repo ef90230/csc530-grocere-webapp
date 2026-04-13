@@ -33,6 +33,19 @@ const parseLocationId = (value) => {
   return Number.isInteger(parsed) ? parsed : null;
 };
 
+const normalizeLocationCode = (value) => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  const trimmed = String(value).trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed;
+};
+
 const resolveDispensableItemQuantity = (orderItem) => {
   const normalizedStatus = String(orderItem?.status || '').trim().toLowerCase();
   if (NON_DISPENSABLE_ITEM_STATUSES.has(normalizedStatus)) {
@@ -400,6 +413,11 @@ const updateLocation = async (req, res) => {
     if (!name) {
       return res.status(400).json({ message: 'Location name is required.' });
     }
+    const locationCode = normalizeLocationCode(req.body?.locationCode);
+
+    if (locationCode && locationCode.length > 120) {
+      return res.status(400).json({ message: 'locationCode cannot exceed 120 characters.' });
+    }
 
     const location = await StagingLocation.findOne({
       where: {
@@ -426,7 +444,26 @@ const updateLocation = async (req, res) => {
       return res.status(409).json({ message: 'A staging location with this name already exists for your store.' });
     }
 
-    await location.update({ name });
+    if (locationCode) {
+      const duplicateCode = await StagingLocation.findOne({
+        where: {
+          storeId,
+          id: {
+            [Op.ne]: location.id
+          },
+          [Op.and]: [where(fn('lower', col('locationCode')), locationCode.toLowerCase())]
+        }
+      });
+
+      if (duplicateCode) {
+        return res.status(409).json({ message: 'That location code is already assigned to another location.' });
+      }
+    }
+
+    await location.update({
+      name,
+      locationCode
+    });
 
     return res.json({
       success: true,
