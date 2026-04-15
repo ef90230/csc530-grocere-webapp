@@ -14,6 +14,7 @@ const {
   closeWalk,
   closeLatestOpenWalk
 } = require('../utils/walkPerformanceStore');
+const { recordOrderWaitTime } = require('../utils/storeWaitTimeHistoryStore');
 
 const COMMODITY_DISPLAY_NAMES = {
   ambient: 'Ambient Regular',
@@ -326,7 +327,7 @@ const getOrders = async (req, res) => {
         {
           model: Store,
           as: 'store',
-          attributes: ['id', 'storeNumber', 'name', 'phone']
+          attributes: ['id', 'storeNumber', 'name', 'phone', 'backroomDoorLocation']
         },
         {
           model: Employee,
@@ -656,6 +657,22 @@ const updateOrderStatus = async (req, res) => {
 
     if (normalizedStatus === 'completed' && !order.actualPickupTime) {
       updateData.actualPickupTime = new Date();
+
+      try {
+        const parsedNotes = JSON.parse(order.notes || '{}');
+        const checkInTime = parsedNotes?.checkIn?.checkInTime;
+        if (checkInTime) {
+          const checkInDate = new Date(checkInTime);
+          if (!Number.isNaN(checkInDate.getTime())) {
+            const waitMinutes = (Date.now() - checkInDate.getTime()) / 60000;
+            if (waitMinutes > 0 && order.storeId) {
+              recordOrderWaitTime(order.storeId, waitMinutes);
+            }
+          }
+        }
+      } catch {
+        // notes may not be valid JSON; skip wait time recording
+      }
     }
 
     if (
