@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import TopBar from '../components/common/TopBar';
 import './PickingPage.css';
+import { BrowserMultiFormatReader } from '@zxing/browser';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
@@ -25,11 +26,11 @@ const deriveCommodityTitle = (label = '') => {
 
 const formatLocationLabel = (location) => {
     if (!location) {
-        return 'Location unavailable';
+        return 'No Location';
     }
 
-    const aisle = location.aisleNumber || '—';
-    const section = location.section ? ` • Section ${location.section}` : '';
+    const aisle = location.aisleNumber || '?';
+    const section = location.section ? ` \u00B7 Section ${location.section}` : '';
     return `Aisle ${aisle}${section}`;
 };
 
@@ -59,10 +60,14 @@ const PickingPage = () => {
     const [cameraMessage, setCameraMessage] = useState('');
 
     const videoRef = useRef(null);
-    const streamRef = useRef(null);
-    const detectorRef = useRef(null);
-    const scanFrameRef = useRef(null);
+    const zxingControlsRef = useRef(null);
     const isHandlingScanRef = useRef(false);
+    const expectedUpcRef = useRef('');
+    const currentItemRef = useRef(null);
+    const currentQuantityRef = useRef(0);
+    const handleCameraMatchRef = useRef(null);
+    const closeCameraModalRef = useRef(null);
+    const reportWalkMistakeRef = useRef(null);
 
     const selectedCommodity = location?.state?.commodity;
     const selectedCommodityLabel = location?.state?.commodityLabel;
@@ -71,7 +76,7 @@ const PickingPage = () => {
         const token = window.localStorage.getItem('authToken');
         const userType = window.localStorage.getItem('userType');
 
-        if (!token || userType !== 'employee') {
+        if (!token || (userType !== 'employee' && userType !== 'admin')) {
             navigate('/');
             return undefined;
         }
@@ -168,6 +173,8 @@ const PickingPage = () => {
 
     const currentItem = queue[0] || null;
     const currentQuantity = Number(currentItem?.quantityToPick || 0);
+    const onHandAisleCount = Object.keys(currentItem?.onHandByAisle || {}).length;
+    const shouldAllowMobileScroll = !substituteMode && onHandAisleCount > 5;
     const expectedUpc = substituteMode
         ? (substituteMode.originalEntry.substitute?.upc || '')
         : (currentItem?.item?.upc || '');
@@ -179,17 +186,8 @@ const PickingPage = () => {
     const normalizeUpc = (value = '') => String(value || '').replace(/\D/g, '');
 
     const stopCameraSession = () => {
-        if (scanFrameRef.current) {
-            window.cancelAnimationFrame(scanFrameRef.current);
-            scanFrameRef.current = null;
-        }
-
-        if (streamRef.current) {
-            streamRef.current.getTracks().forEach((track) => track.stop());
-            streamRef.current = null;
-        }
-
-        detectorRef.current = null;
+        zxingControlsRef.current?.stop();
+        zxingControlsRef.current = null;
         isHandlingScanRef.current = false;
 
         if (videoRef.current) {
@@ -417,40 +415,12 @@ const PickingPage = () => {
     const handleOpenCamera = async () => {
         setCameraMessage('');
 
-        const BarcodeDetectorApi = window.BarcodeDetector;
-        const mediaDevices = navigator?.mediaDevices;
-
-        if (!BarcodeDetectorApi || !mediaDevices?.getUserMedia) {
+        if (!navigator?.mediaDevices?.getUserMedia) {
             setCameraMessage('Camera unavailable');
             return;
         }
 
-        try {
-            if (typeof BarcodeDetectorApi.getSupportedFormats === 'function') {
-                const supportedFormats = await BarcodeDetectorApi.getSupportedFormats();
-                const hasUpcSupport = supportedFormats.includes('upc_a') || supportedFormats.includes('upc_e');
-                if (!hasUpcSupport) {
-                    setCameraMessage('Camera unavailable');
-                    return;
-                }
-            }
-
-            const stream = await mediaDevices.getUserMedia({
-                video: {
-                    facingMode: { ideal: 'environment' }
-                },
-                audio: false
-            });
-
-            streamRef.current = stream;
-            detectorRef.current = new BarcodeDetectorApi({ formats: ['upc_a', 'upc_e'] });
-            setIsCameraOpen(true);
-        } catch (error) {
-            console.error('Unable to open camera', error);
-            stopCameraSession();
-            setIsCameraOpen(false);
-            setCameraMessage('Camera unavailable');
-        }
+        setIsCameraOpen(true);
     };
 
     const handleCameraMatch = async () => {
@@ -467,70 +437,75 @@ const PickingPage = () => {
         setIsPickDialogOpen(true);
     };
 
+    // Keep refs current so the ZXing callback always has the latest values/functions.
+    expectedUpcRef.current = expectedUpc;
+    currentItemRef.current = currentItem;
+    currentQuantityRef.current = currentQuantity;
+    handleCameraMatchRef.current = handleCameraMatch;
+    closeCameraModalRef.current = closeCameraModal;
+    reportWalkMistakeRef.current = reportWalkMistake;
+
     useEffect(() => {
-        if (!isCameraOpen || !videoRef.current || !streamRef.current || !detectorRef.current) {
+        if (!isCameraOpen || !videoRef.current) {
             return undefined;
         }
 
-        const video = videoRef.current;
-        video.srcObject = streamRef.current;
+        const reader = new BrowserMultiFormatReader();
+        isHandlingScanRef.current = false;
 
-        const startScanning = async () => {
+        const startReader = async () => {
             try {
-                await video.play();
-            } catch (error) {
-                console.error('Unable to start camera preview', error);
-                closeCameraModal();
-                setCameraMessage('Camera unavailable');
-                return;
-            }
+                const controls = await reader.decodeFromConstraints(
+                    { video: { facingMode: { ideal: 'environment' } } },
+                    videoRef.current,
+                    (result) => {
+                        if (!result || isHandlingScanRef.current) return;
 
-            const scan = async () => {
-                if (!detectorRef.current || !videoRef.current || isHandlingScanRef.current) {
-                    scanFrameRef.current = window.requestAnimationFrame(scan);
-                    return;
-                }
-
-                try {
-                    const barcodes = await detectorRef.current.detect(videoRef.current);
-                    if (Array.isArray(barcodes) && barcodes.length > 0) {
-                        const scannedRaw = String(barcodes[0]?.rawValue || '').trim();
+                        const scannedRaw = String(result.getText() || '').trim();
                         const normalizedScanned = normalizeUpc(scannedRaw);
-                        const normalizedExpected = normalizeUpc(expectedUpc);
+                        const normalizedExpected = normalizeUpc(expectedUpcRef.current);
 
-                        if (normalizedScanned && normalizedExpected) {
-                            isHandlingScanRef.current = true;
+                        if (!normalizedScanned || !normalizedExpected) return;
 
-                            if (normalizedScanned === normalizedExpected) {
-                                await handleCameraMatch();
-                            } else {
-                                await reportWalkMistake(currentItem, 1, 'error');
-                                closeCameraModal();
+                        isHandlingScanRef.current = true;
+
+                        if (normalizedScanned === normalizedExpected) {
+                            handleCameraMatchRef.current?.();
+                        } else {
+                            const doMismatch = async () => {
+                                try {
+                                    await reportWalkMistakeRef.current?.(currentItemRef.current, 1, 'error');
+                                } catch {
+                                    // Continue regardless of reporting failure
+                                }
+                                closeCameraModalRef.current?.();
                                 setIsPickUpcMismatch(true);
-                            }
-
-                            isHandlingScanRef.current = false;
-                            return;
+                                isHandlingScanRef.current = false;
+                            };
+                            doMismatch();
                         }
                     }
-                } catch (error) {
-                    console.error('Barcode detection failed', error);
-                }
-
-                scanFrameRef.current = window.requestAnimationFrame(scan);
-            };
-
-            scanFrameRef.current = window.requestAnimationFrame(scan);
+                );
+                zxingControlsRef.current = controls;
+            } catch (error) {
+                console.error('Unable to start barcode scanner', error);
+                setIsCameraOpen(false);
+                setCameraMessage('Camera unavailable');
+            }
         };
 
-        startScanning();
+        startReader();
 
         return () => {
-            stopCameraSession();
+            zxingControlsRef.current?.stop();
+            zxingControlsRef.current = null;
+            isHandlingScanRef.current = false;
+            if (videoRef.current) {
+                videoRef.current.srcObject = null;
+            }
         };
-    // Effect intentionally depends on scan context, while helpers use refs/state setters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isCameraOpen, expectedUpc, currentQuantity]);
+    }, [isCameraOpen]);
 
     useEffect(() => () => {
         stopCameraSession();
@@ -552,7 +527,8 @@ const PickingPage = () => {
                 },
                 body: JSON.stringify({
                     status: 'out_of_stock',
-                    pickedQuantity: Number(entry?.pickedQuantity || 0)
+                    pickedQuantity: Number(entry?.pickedQuantity || 0),
+                    countAsNotFoundMetric: true
                 })
             });
 
@@ -684,7 +660,7 @@ const PickingPage = () => {
         <div className="picking-page">
             <TopBar
                 title={`${commodityTitle} Picking`}
-                leftActionLabel="×"
+                leftActionLabel="X"
                 leftActionAriaLabel="End pick walk"
                 onLeftAction={() => setIsEndPromptOpen(true)}
                 statMode="walk"
@@ -693,7 +669,7 @@ const PickingPage = () => {
                 walkStartedAt={walkStartedAt}
             />
 
-            <main className="picking-page-content">
+            <main className={`picking-page-content ${shouldAllowMobileScroll ? 'picking-page-content--allow-scroll' : ''}`}>
                 {errorMessage ? (
                     <section className="picking-empty-state picking-empty-state--error">
                         <h2>Unable to load this pick walk</h2>
@@ -703,7 +679,7 @@ const PickingPage = () => {
 
                 {!errorMessage && isLoading ? (
                     <section className="picking-empty-state">
-                        <h2>Preparing your pick walk…</h2>
+                        <h2>Preparing your pick walkâ€¦</h2>
                     </section>
                 ) : null}
 
@@ -794,7 +770,7 @@ const PickingPage = () => {
                         <div className="picking-info-grid">
                             <div className="picking-info-row">
                                 <span className="key">UPC/PLU</span>
-                                <strong>{(substituteMode ? substituteMode.originalEntry.substitute.upc : currentItem.item.upc) || '—'}</strong>
+                                <strong>{(substituteMode ? substituteMode.originalEntry.substitute.upc : currentItem.item.upc) || 'â€”'}</strong>
                             </div>
                             <div className="picking-info-row">
                                 <span className="key">Price</span>
@@ -861,7 +837,7 @@ const PickingPage = () => {
                                         key={aisle.id || aisleNumber}
                                         className={`picking-map-aisle ${isHighlighted ? 'picking-map-aisle--highlighted' : ''}`}
                                     >
-                                        Aisle {aisleNumber || '—'}
+                                        Aisle {aisleNumber || 'â€”'}
                                     </div>
                                 );
                             })}
@@ -1003,3 +979,4 @@ const PickingPage = () => {
 };
 
 export default PickingPage;
+

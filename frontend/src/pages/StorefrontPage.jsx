@@ -14,11 +14,14 @@ const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 const CLOSE_ANIMATION_MS = 280;
 const ACTIVE_PENDING_STATUSES = new Set(['pending', 'assigned', 'picking', 'picked', 'staging', 'staged', 'ready', 'dispensing']);
 
-const getOnHandTotal = (item) => (
-  Array.isArray(item?.locations)
+const getOnHandTotal = (item) => {
+  const assigned = Array.isArray(item?.locations)
     ? item.locations.reduce((sum, locationRow) => sum + Number(locationRow?.quantityOnHand || 0), 0)
-    : 0
-);
+    : 0;
+
+  const unassigned = Number(item?.unassignedQuantity || 0);
+  return assigned + Math.max(0, unassigned);
+};
 
 const formatCurrency = (value) => `$${Number(value || 0).toFixed(2)}`;
 

@@ -89,6 +89,18 @@ const parseFiniteNumber = (rawValue, fallback) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const sanitizePhoneInput = (value) => {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  return value
+    .replace(/[^0-9+()\-\s.]/g, '')
+    .replace(/\s+/g, ' ')
+    .trimStart()
+    .slice(0, 32);
+};
+
 const StoreSettingsPage = () => {
   const navigate = useNavigate();
   const [storeSummary, setStoreSummary] = useState({ name: 'Store', storeNumber: '' });
@@ -102,7 +114,7 @@ const StoreSettingsPage = () => {
     const token = window.localStorage.getItem('authToken');
     const userType = window.localStorage.getItem('userType');
 
-    if (!token || userType !== 'employee') {
+    if (!token || (userType !== 'employee' && userType !== 'admin')) {
       navigate('/');
       return;
     }
@@ -190,6 +202,17 @@ const StoreSettingsPage = () => {
           ...current.timeslot,
           defaultLimit: safeValue
         }
+      };
+    });
+  };
+
+  const handleStorePhoneChange = (nextValue) => {
+    setSettings((previousSettings) => {
+      const current = normalizeStoreSettings(previousSettings);
+
+      return {
+        ...current,
+        storePhone: sanitizePhoneInput(nextValue)
       };
     });
   };
@@ -303,6 +326,23 @@ const StoreSettingsPage = () => {
               </p>
             </section>
 
+            <section className="store-settings-section">
+              <h2>Store Contact</h2>
+              <div className="store-settings-timeslot-row">
+                <label htmlFor="store-phone-input">Store phone number</label>
+                <input
+                  id="store-phone-input"
+                  type="tel"
+                  value={normalizedSettings.storePhone}
+                  onChange={(event) => handleStorePhoneChange(event.target.value)}
+                  placeholder="(555) 123-4567"
+                />
+              </div>
+              <p className="store-settings-hint">
+                Customers use this number when selecting Call Store from their order summary.
+              </p>
+            </section>
+
             <div className="store-settings-actions">
               <button type="submit" className="store-settings-save-btn" disabled={isSaving}>
                 {isSaving ? 'Saving...' : 'Save Settings'}
@@ -318,3 +358,5 @@ const StoreSettingsPage = () => {
 };
 
 export default StoreSettingsPage;
+
+

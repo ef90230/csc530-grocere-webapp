@@ -15,6 +15,7 @@ const {
   closeLatestOpenWalk
 } = require('../utils/walkPerformanceStore');
 const { recordOrderWaitTime } = require('../utils/storeWaitTimeHistoryStore');
+const { resolveStorePhoneFromStore } = require('../utils/storeSettings');
 
 const COMMODITY_DISPLAY_NAMES = {
   ambient: 'Ambient Regular',
@@ -147,26 +148,29 @@ const buildPickQueue = (orders, pathIndexMap) => {
 
       const item = orderItem.item;
       const itemLocations = Array.isArray(item?.locations) ? item.locations : [];
+      const unassignedQuantity = Math.max(0, Number(item?.unassignedQuantity || 0));
 
-      const locations = itemLocations.map((locationRow) => {
-        const locationId = Number(locationRow.locationId);
-        const aisleNumber = String(locationRow?.location?.aisle?.aisleNumber || '—');
-        const section = locationRow?.location?.section || '';
-        const shelf = locationRow?.location?.shelf || '';
-        const locationPathIndex = pathIndexMap.has(locationId)
-          ? pathIndexMap.get(locationId)
-          : Number.MAX_SAFE_INTEGER;
+      const locations = itemLocations
+        .filter((locationRow) => Number(locationRow?.quantityOnHand || 0) > 0)
+        .map((locationRow) => {
+          const locationId = Number(locationRow.locationId);
+          const aisleNumber = String(locationRow?.location?.aisle?.aisleNumber || '—');
+          const section = locationRow?.location?.section || '';
+          const shelf = locationRow?.location?.shelf || '';
+          const locationPathIndex = pathIndexMap.has(locationId)
+            ? pathIndexMap.get(locationId)
+            : Number.MAX_SAFE_INTEGER;
 
-        return {
-          locationId,
-          aisleNumber,
-          section,
-          shelf,
-          quantityOnHand: Number(locationRow.quantityOnHand || 0),
-          pathIndex: locationPathIndex,
-          coordinates: locationRow?.location?.coordinates || null
-        };
-      });
+          return {
+            locationId,
+            aisleNumber,
+            section,
+            shelf,
+            quantityOnHand: Number(locationRow.quantityOnHand || 0),
+            pathIndex: locationPathIndex,
+            coordinates: locationRow?.location?.coordinates || null
+          };
+        });
 
       const sortedLocations = [...locations].sort((left, right) => {
         if (left.pathIndex !== right.pathIndex) {
@@ -190,6 +194,10 @@ const buildPickQueue = (orders, pathIndexMap) => {
         return accumulator;
       }, {});
 
+      if (unassignedQuantity > 0) {
+        onHandByAisle.Unassigned = unassignedQuantity;
+      }
+
       queue.push({
         orderId: order.id,
         orderNumber: order.orderNumber,
@@ -211,7 +219,7 @@ const buildPickQueue = (orders, pathIndexMap) => {
         location: primaryLocation,
         allLocations: sortedLocations,
         otherLocationsCount: Math.max(sortedLocations.length - 1, 0),
-        onHandTotal: sortedLocations.reduce((sum, loc) => sum + Number(loc.quantityOnHand || 0), 0),
+        onHandTotal: sortedLocations.reduce((sum, loc) => sum + Number(loc.quantityOnHand || 0), 0) + unassignedQuantity,
         substitute: orderItem.substitutedItem ? {
           id: orderItem.substitutedItem.id,
           name: orderItem.substitutedItem.name,
@@ -260,7 +268,7 @@ const walkOrdersInclude = (commodity) => ([
         where: {
           commodity
         },
-        attributes: ['id', 'name', 'upc', 'price', 'imageUrl', 'commodity'],
+        attributes: ['id', 'name', 'upc', 'price', 'imageUrl', 'commodity', 'unassignedQuantity'],
         include: [
           {
             model: ItemLocation,
@@ -285,6 +293,12 @@ const walkOrdersInclude = (commodity) => ([
             ]
           }
         ]
+      },
+      {
+        model: Item,
+        as: 'substitutedItem',
+        required: false,
+        attributes: ['id', 'name', 'upc', 'price', 'imageUrl']
       }
     ]
   }
@@ -386,8 +400,15 @@ const getOrders = async (req, res) => {
     const ordersWithStagingCounts = orders.map((order) => {
       const orderJson = order.toJSON();
       const checkIn = extractOrderCheckIn(orderJson.notes);
+      const resolvedStorePhone = resolveStorePhoneFromStore(orderJson.store);
       return {
         ...orderJson,
+        store: orderJson.store
+          ? {
+              ...orderJson.store,
+              storePhone: resolvedStorePhone
+            }
+          : null,
         isCheckedIn: checkIn.isCheckedIn,
         checkInTime: checkIn.checkInTime,
         parkingSpot: checkIn.parkingSpot,
@@ -736,7 +757,7 @@ const updateOrderStatus = async (req, res) => {
 const updateOrderItem = async (req, res) => {
   try {
     const { id, itemId } = req.params;
-    const { status, substitutedItemId, pickedQuantity, attemptCount } = req.body;
+    const { status, substitutedItemId, pickedQuantity, attemptCount, countAsNotFoundMetric } = req.body;
 
     const orderItem = await OrderItem.findOne({
       where: {
@@ -792,7 +813,7 @@ const updateOrderItem = async (req, res) => {
       });
     }
 
-    if (assignedPickerId && walkCommodity && walkStartedAt && ['out_of_stock', 'skipped'].includes(normalizedStatus)) {
+    if (assignedPickerId && walkCommodity && walkStartedAt && normalizedStatus === 'out_of_stock' && Boolean(countAsNotFoundMetric)) {
       const remainingQty = Math.max(0, Number(orderItem.quantity || 0) - previousPickedQuantity);
       const mistakeQty = Math.max(1, remainingQty);
 

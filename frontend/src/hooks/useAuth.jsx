@@ -23,6 +23,14 @@ const persistAuth = (payload, fallbackUserType) => {
   if (resolvedUserType) {
     localStorage.setItem('userType', resolvedUserType);
   }
+  if (resolvedUserType === 'employee' || resolvedUserType === 'admin') {
+    const employeeUserId = userRecord?.id || userRecord?.employeeId;
+    if (employeeUserId !== undefined && employeeUserId !== null) {
+      localStorage.setItem('employeeUserId', String(employeeUserId));
+    }
+  } else {
+    localStorage.removeItem('employeeUserId');
+  }
   if (displayName) {
     localStorage.setItem('userDisplayName', displayName);
   }
@@ -51,6 +59,8 @@ export const useAuth = () => {
     const url =
       formData.userType === 'employee'
         ? `${API_BASE}/api/auth/register/employee`
+        : formData.userType === 'admin'
+        ? `${API_BASE}/api/auth/register/admin`
         : `${API_BASE}/api/auth/register/customer`;
 
     const res = await fetch(url, {

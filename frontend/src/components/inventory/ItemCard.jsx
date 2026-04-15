@@ -11,36 +11,92 @@ const toCurrency = (value) => {
   return `$${numeric.toFixed(2)}`;
 };
 
+const toNonNegativeInteger = (value, fallback = 0) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  return Math.max(0, Math.round(parsed));
+};
+
 const getAisleLabel = (locationRow) => {
   const aisle = locationRow?.location?.aisle;
-  const aisleNumber = aisle?.aisleNumber ?? '—';
+  const aisleNumber = aisle?.aisleNumber ?? '?';
   const section = locationRow?.location?.section;
   if (!section) {
     return `Aisle ${aisleNumber}`;
   }
-  return `Aisle ${aisleNumber} • Section ${section}`;
+  return `Aisle ${aisleNumber} \u00B7 Section ${section}`;
 };
 
-const ItemCard = ({ item, aisles, onClose, onItemUpdated }) => {
+const buildLocationOptions = (aisles = []) => {
+  const options = [];
+
+  aisles.forEach((aisle) => {
+    const aisleNumber = String(aisle?.aisleNumber || '').trim();
+    (aisle?.locations || []).forEach((location) => {
+      if (!location?.id) {
+        return;
+      }
+
+      const section = String(location?.section || '').trim();
+      const label = section
+        ? `Aisle ${aisleNumber || '?'} \u00B7 Section ${section}`
+        : `Aisle ${aisleNumber || '?'} \u00B7 Unknown section`;
+
+      options.push({
+        locationId: Number(location.id),
+        label
+      });
+    });
+  });
+
+  return options.sort((left, right) => left.label.localeCompare(right.label));
+};
+
+const ItemCard = ({ item, aisles, storeId, isAdmin, onClose, onItemUpdated, onItemDeleted }) => {
   const [mode, setMode] = useState('view');
   const [copyFeedback, setCopyFeedback] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [editingLocationId, setEditingLocationId] = useState(null);
+  const [reassignLocationId, setReassignLocationId] = useState('');
+  const [isAddLocationOpen, setIsAddLocationOpen] = useState(false);
+  const [addLocationId, setAddLocationId] = useState('');
+
   const [editValues, setEditValues] = useState({
     name: item?.name || '',
     price: item?.price || '',
-    category: item?.category || ''
+    category: item?.category || '',
+    isRestricted: String(item?.commodity || '').trim().toLowerCase() === 'restricted'
   });
+
   const [quantityValues, setQuantityValues] = useState(() => {
-    const initial = {};
+    const initial = {
+      unassigned: toNonNegativeInteger(item?.unassignedQuantity, 0)
+    };
+
     (item?.locations || []).forEach((loc) => {
-      initial[loc.id] = Number(loc.quantityOnHand || 0);
+      initial[loc.id] = toNonNegativeInteger(loc.quantityOnHand, 0);
     });
     return initial;
   });
 
+  const resolvedStoreId = useMemo(() => {
+    if (Number.isInteger(Number(storeId)) && Number(storeId) > 0) {
+      return Number(storeId);
+    }
+
+    const firstStoreId = Number(item?.locations?.[0]?.storeId);
+    return Number.isInteger(firstStoreId) && firstStoreId > 0 ? firstStoreId : null;
+  }, [item, storeId]);
+
   const totalQuantity = useMemo(() => {
-    return (item?.locations || []).reduce((sum, loc) => sum + Number(loc.quantityOnHand || 0), 0);
+    const assigned = (item?.locations || []).reduce((sum, loc) => sum + Number(loc.quantityOnHand || 0), 0);
+    return assigned + toNonNegativeInteger(item?.unassignedQuantity, 0);
   }, [item]);
 
   const itemAisles = useMemo(() => {
@@ -49,6 +105,35 @@ const ItemCard = ({ item, aisles, onClose, onItemUpdated }) => {
       .filter(Boolean);
     return new Set(values);
   }, [item]);
+
+  const locationOptions = useMemo(() => buildLocationOptions(aisles || []), [aisles]);
+
+  const refreshItem = async () => {
+    if (!resolvedStoreId) {
+      return;
+    }
+
+    const token = localStorage.getItem('authToken');
+    const response = await fetch(`${API_BASE}/api/items/${item.id}?storeId=${resolvedStoreId}`, {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      }
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.success) {
+      throw new Error(payload.message || 'Unable to refresh item.');
+    }
+
+    onItemUpdated(payload.item);
+    setQuantityValues({
+      unassigned: toNonNegativeInteger(payload.item?.unassignedQuantity, 0),
+      ...(payload.item?.locations || []).reduce((accumulator, loc) => {
+        accumulator[loc.id] = toNonNegativeInteger(loc.quantityOnHand, 0);
+        return accumulator;
+      }, {})
+    });
+  };
 
   const copyUpc = async () => {
     if (!item?.upc) {
@@ -90,7 +175,8 @@ const ItemCard = ({ item, aisles, onClose, onItemUpdated }) => {
         body: JSON.stringify({
           name: editValues.name,
           price: Number(editValues.price),
-          category: editValues.category
+          category: editValues.category,
+          isRestricted: editValues.isRestricted
         })
       });
 
@@ -102,7 +188,8 @@ const ItemCard = ({ item, aisles, onClose, onItemUpdated }) => {
       const updatedItem = {
         ...item,
         ...payload.item,
-        locations: item.locations || []
+        locations: item.locations || [],
+        unassignedQuantity: toNonNegativeInteger(item?.unassignedQuantity, 0)
       };
 
       onItemUpdated(updatedItem);
@@ -116,47 +203,224 @@ const ItemCard = ({ item, aisles, onClose, onItemUpdated }) => {
 
   const saveQuantities = async (event) => {
     event.preventDefault();
+
+    if (!resolvedStoreId) {
+      setError('Store not found for this item.');
+      return;
+    }
+
     setSaving(true);
     setError('');
 
     try {
       const token = localStorage.getItem('authToken');
-      const updatedLocations = [...(item.locations || [])];
 
-      for (const locationRow of updatedLocations) {
-        const nextQuantity = Number(quantityValues[locationRow.id]);
-        const response = await fetch(
-          `${API_BASE}/api/items/${item.id}/location/${locationRow.locationId}`,
-          {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(token ? { Authorization: `Bearer ${token}` } : {})
-            },
-            body: JSON.stringify({
-              quantityOnHand: Number.isFinite(nextQuantity) ? Math.max(0, nextQuantity) : 0,
-              storeId: locationRow.storeId
-            })
-          }
-        );
+      const desiredUnassigned = toNonNegativeInteger(quantityValues.unassigned, 0);
+      const unassignedResponse = await fetch(`${API_BASE}/api/items/${item.id}/location/unassigned`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          quantityOnHand: desiredUnassigned,
+          storeId: resolvedStoreId
+        })
+      });
+
+      const unassignedPayload = await unassignedResponse.json().catch(() => ({}));
+      if (!unassignedResponse.ok || !unassignedPayload.success) {
+        throw new Error(unassignedPayload.message || 'Unable to update Unassigned quantity.');
+      }
+
+      for (const locationRow of item.locations || []) {
+        const nextQuantity = toNonNegativeInteger(quantityValues[locationRow.id], 0);
+        const response = await fetch(`${API_BASE}/api/items/${item.id}/location/${locationRow.locationId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            quantityOnHand: nextQuantity,
+            storeId: resolvedStoreId
+          })
+        });
 
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || !payload.success) {
           throw new Error(payload.message || 'Unable to update quantity.');
         }
-
-        locationRow.quantityOnHand = payload.itemLocation.quantityOnHand;
       }
 
-      onItemUpdated({
-        ...item,
-        locations: updatedLocations
-      });
+      await refreshItem();
       setMode('view');
     } catch (updateError) {
       setError(updateError.message || 'Unable to update quantity.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const openManageLocations = () => {
+    setError('');
+    setEditingLocationId(null);
+    setReassignLocationId('');
+    setIsAddLocationOpen(false);
+    setAddLocationId('');
+    setMode('manageLocations');
+  };
+
+  const addLocationAssignment = async () => {
+    if (!resolvedStoreId) {
+      setError('Store not found for this item.');
+      return;
+    }
+
+    const targetLocationId = Number(addLocationId);
+    if (!Number.isInteger(targetLocationId) || targetLocationId < 1) {
+      setError('Select a valid location to add.');
+      return;
+    }
+
+    setActionLoading(true);
+    setError('');
+
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${API_BASE}/api/items/${item.id}/locations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          storeId: resolvedStoreId,
+          locationId: targetLocationId
+        })
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.message || 'Unable to add location assignment.');
+      }
+
+      await refreshItem();
+      setIsAddLocationOpen(false);
+      setAddLocationId('');
+    } catch (updateError) {
+      setError(updateError.message || 'Unable to add location assignment.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const saveReassignedLocation = async (sourceLocationId) => {
+    if (!resolvedStoreId) {
+      setError('Store not found for this item.');
+      return;
+    }
+
+    const targetLocationId = Number(reassignLocationId);
+    if (!Number.isInteger(targetLocationId) || targetLocationId < 1) {
+      setError('Select a target location.');
+      return;
+    }
+
+    setActionLoading(true);
+    setError('');
+
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${API_BASE}/api/items/${item.id}/locations/${sourceLocationId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          storeId: resolvedStoreId,
+          targetLocationId
+        })
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.message || 'Unable to reassign location.');
+      }
+
+      await refreshItem();
+      setEditingLocationId(null);
+      setReassignLocationId('');
+    } catch (updateError) {
+      setError(updateError.message || 'Unable to reassign location.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const deleteLocationAssignment = async (locationId) => {
+    if (!resolvedStoreId) {
+      setError('Store not found for this item.');
+      return;
+    }
+
+    setActionLoading(true);
+    setError('');
+
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${API_BASE}/api/items/${item.id}/locations/${locationId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          storeId: resolvedStoreId
+        })
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.message || 'Unable to delete location assignment.');
+      }
+
+      await refreshItem();
+    } catch (updateError) {
+      setError(updateError.message || 'Unable to delete location assignment.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const deleteItemFromSystem = async () => {
+    setActionLoading(true);
+    setError('');
+
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${API_BASE}/api/items/${item.id}`, {
+        method: 'DELETE',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.message || 'Unable to delete item.');
+      }
+
+      setIsDeleteDialogOpen(false);
+      if (typeof onItemDeleted === 'function') {
+        onItemDeleted(item.id);
+      }
+      onClose();
+    } catch (updateError) {
+      setError(updateError.message || 'Unable to delete item.');
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -204,15 +468,15 @@ const ItemCard = ({ item, aisles, onClose, onItemUpdated }) => {
                 <span className="field-label">Location</span>
                 {(item.locations || []).length > 0 ? (
                   <ul className="location-list">
-                    {item.locations.map((loc) => (
-                      <li key={loc.id}>{getAisleLabel(loc)}</li>
+                    {(item.locations || []).map((loc) => (
+                      <li key={loc.id}>{getAisleLabel(loc)} ({toNonNegativeInteger(loc.quantityOnHand, 0)})</li>
                     ))}
                   </ul>
                 ) : (
-                  <strong>No location assigned</strong>
+                  <strong>No Location</strong>
                 )}
               </div>
-              <button type="button" className="action-button" onClick={() => {}}>Edit</button>
+              <button type="button" className="action-button" onClick={openManageLocations}>Edit</button>
             </div>
 
             <div className="item-card-map">
@@ -237,9 +501,20 @@ const ItemCard = ({ item, aisles, onClose, onItemUpdated }) => {
             </div>
 
             <div className="item-card-actions">
-              <button type="button" className="action-button full" onClick={() => setMode('editInfo')}>Edit Info</button>
+              {isAdmin ? (
+                <button type="button" className="action-button full" onClick={() => setMode('editInfo')}>Edit Info</button>
+              ) : null}
               <button type="button" className="action-button full" onClick={() => setMode('adjustQuantity')}>Adjust Quantity</button>
-              <button type="button" className="delete-button" onClick={() => {}}>Delete From System</button>
+              {isAdmin ? (
+                <button
+                  type="button"
+                  className="delete-button"
+                  onClick={() => setIsDeleteDialogOpen(true)}
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? 'Deleting...' : 'Delete Item From System'}
+                </button>
+              ) : null}
             </div>
           </>
         )}
@@ -276,6 +551,14 @@ const ItemCard = ({ item, aisles, onClose, onItemUpdated }) => {
                 required
               />
             </label>
+            <label className="item-form-checkbox">
+              <input
+                type="checkbox"
+                checked={editValues.isRestricted}
+                onChange={(event) => setEditValues((prev) => ({ ...prev, isRestricted: event.target.checked }))}
+              />
+              <span>Restricted</span>
+            </label>
             {error && <p className="item-card-error">{error}</p>}
             <div className="form-actions">
               <button type="button" className="action-button" onClick={() => setMode('view')} disabled={saving}>Cancel</button>
@@ -287,7 +570,18 @@ const ItemCard = ({ item, aisles, onClose, onItemUpdated }) => {
         {mode === 'adjustQuantity' && (
           <form className="item-form" onSubmit={saveQuantities}>
             <h3>Change Quantity</h3>
-            {(item.locations || []).length === 0 && <p>No locations available to update.</p>}
+            <label>
+              Unassigned (No Location)
+              <input
+                type="number"
+                min="0"
+                value={quantityValues.unassigned ?? 0}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setQuantityValues((prev) => ({ ...prev, unassigned: value === '' ? '' : Number(value) }));
+                }}
+              />
+            </label>
             {(item.locations || []).map((locationRow) => (
               <label key={locationRow.id}>
                 {getAisleLabel(locationRow)}
@@ -305,14 +599,185 @@ const ItemCard = ({ item, aisles, onClose, onItemUpdated }) => {
                 />
               </label>
             ))}
+            <p className="item-card-hint">
+              Decreasing a location increases Unassigned. Increasing a location uses Unassigned stock.
+            </p>
             {error && <p className="item-card-error">{error}</p>}
             <div className="form-actions">
               <button type="button" className="action-button" onClick={() => setMode('view')} disabled={saving}>Cancel</button>
-              <button type="submit" className="action-button" disabled={saving || (item.locations || []).length === 0}>{saving ? 'Saving...' : 'Save Quantity'}</button>
+              <button type="submit" className="action-button" disabled={saving}>{saving ? 'Saving...' : 'Save Quantity'}</button>
             </div>
           </form>
         )}
+
+        {mode === 'manageLocations' && (
+          <section className="item-form item-locations-form">
+            <h3>Edit Location Assignments</h3>
+
+            {(item.locations || []).length === 0 ? (
+              <p>No location assignments yet.</p>
+            ) : (
+              <ul className="item-location-edit-list">
+                {(item.locations || []).map((locationRow) => (
+                  <li key={locationRow.id} className="item-location-edit-row">
+                    <div>
+                      <p className="item-location-label">{getAisleLabel(locationRow)}</p>
+                      <p className="item-location-qty">Qty: {toNonNegativeInteger(locationRow.quantityOnHand, 0)}</p>
+                    </div>
+
+                    {editingLocationId === locationRow.locationId ? (
+                      <div className="item-location-edit-controls">
+                        <select
+                          value={reassignLocationId}
+                          onChange={(event) => setReassignLocationId(event.target.value)}
+                        >
+                          <option value="">Select a new location</option>
+                          {locationOptions.map((option) => (
+                            <option key={option.locationId} value={option.locationId}>{option.label}</option>
+                          ))}
+                        </select>
+                        <div className="item-location-button-row">
+                          <button
+                            type="button"
+                            className="action-button"
+                            onClick={() => saveReassignedLocation(locationRow.locationId)}
+                            disabled={actionLoading}
+                          >
+                            {actionLoading ? 'Saving...' : 'Save'}
+                          </button>
+                          <button
+                            type="button"
+                            className="action-button"
+                            onClick={() => {
+                              setEditingLocationId(null);
+                              setReassignLocationId('');
+                            }}
+                            disabled={actionLoading}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="item-location-button-row">
+                        <button
+                          type="button"
+                          className="action-button"
+                          onClick={() => {
+                            setEditingLocationId(locationRow.locationId);
+                            setReassignLocationId('');
+                          }}
+                          disabled={actionLoading}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="delete-button"
+                          onClick={() => deleteLocationAssignment(locationRow.locationId)}
+                          disabled={actionLoading}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {!isAddLocationOpen ? (
+              <button
+                type="button"
+                className="add-location-button"
+                onClick={() => setIsAddLocationOpen(true)}
+                disabled={actionLoading}
+              >
+                Add Location
+              </button>
+            ) : (
+              <div className="item-location-add-panel">
+                <select value={addLocationId} onChange={(event) => setAddLocationId(event.target.value)}>
+                  <option value="">Select a location</option>
+                  {locationOptions.map((option) => (
+                    <option key={option.locationId} value={option.locationId}>{option.label}</option>
+                  ))}
+                </select>
+                <div className="item-location-button-row">
+                  <button
+                    type="button"
+                    className="action-button"
+                    onClick={addLocationAssignment}
+                    disabled={actionLoading}
+                  >
+                    {actionLoading ? 'Adding...' : 'Confirm'}
+                  </button>
+                  <button
+                    type="button"
+                    className="action-button"
+                    onClick={() => {
+                      setIsAddLocationOpen(false);
+                      setAddLocationId('');
+                    }}
+                    disabled={actionLoading}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {error && <p className="item-card-error">{error}</p>}
+            <div className="form-actions">
+              <button type="button" className="action-button" onClick={() => setMode('view')} disabled={actionLoading}>Done</button>
+            </div>
+          </section>
+        )}
       </section>
+
+      {isDeleteDialogOpen ? (
+        <div
+          className="item-delete-modal-backdrop"
+          role="presentation"
+          onClick={(event) => {
+            event.stopPropagation();
+            if (!actionLoading) {
+              setIsDeleteDialogOpen(false);
+            }
+          }}
+        >
+          <section
+            className="item-delete-modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Delete Item Confirmation"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2>Delete Item From System</h2>
+            <p className="item-delete-warning-copy">
+              Are you sure you wish to delete this item? The item will be removed from all locations in the store, and any orders containing that item, picked or not, will have that item canceled. Final totals will be adjusted accordingly.
+            </p>
+            <div className="item-delete-modal-actions">
+              <button
+                type="button"
+                className="item-delete-modal-btn item-delete-modal-btn--ghost"
+                onClick={() => setIsDeleteDialogOpen(false)}
+                disabled={actionLoading}
+              >
+                Keep Item
+              </button>
+              <button
+                type="button"
+                className="item-delete-modal-btn item-delete-modal-btn--danger"
+                disabled={actionLoading}
+                onClick={deleteItemFromSystem}
+              >
+                {actionLoading ? 'Deleting...' : 'Delete Item'}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 };

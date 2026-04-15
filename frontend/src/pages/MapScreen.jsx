@@ -21,6 +21,8 @@ const DEFAULT_USER_ID = 1; // TODO: get from auth context
 
 const MapScreen = () => {
   const navigate = useNavigate();
+  const userType = window.localStorage.getItem('userType');
+  const isAdmin = userType === 'admin';
   const [aisles, setAisles] = useState([]);
   const [originalAisles, setOriginalAisles] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -65,6 +67,12 @@ const MapScreen = () => {
     fetchAisles();
     fetchPickPaths();
   }, []);
+
+  useEffect(() => {
+    if (!isAdmin && mode !== 'view') {
+      setMode('view');
+    }
+  }, [isAdmin, mode]);
 
   const getCanvasPoint = e => {
     const canvas = canvasRef.current;
@@ -716,78 +724,82 @@ const MapScreen = () => {
 
       {/* Bottom action bar above navbar */}
       <div className="map-action-bar">
-        <div className="action-section">
-          <button
-            className={`btn ${mode === 'view' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setMode(mode === 'view' ? 'editing' : 'view')}
-          >
-            {mode === 'view' ? 'Switch to Editing' : 'Switch to View'}
-          </button>
-        </div>
-
-        {mode === 'editing' && (
+        {isAdmin ? (
           <>
             <div className="action-section">
-              <span className="action-label">Aisles:</span>
-              <button className="btn btn-info" onClick={addAisle}>
-                Add Aisle
-              </button>
-              <button className="btn btn-secondary" onClick={deleteAisle}>
-                Delete Aisle
+              <button
+                className={`btn ${mode === 'view' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setMode(mode === 'view' ? 'editing' : 'view')}
+              >
+                {mode === 'view' ? 'Switch to Editing' : 'Switch to View'}
               </button>
             </div>
 
-            <div className="action-section">
-              <span className="action-label">Pick Paths:</span>
-              <button className="btn btn-info" onClick={addPickPath}>
-                Add Path
-              </button>
-              <button className="btn btn-info" onClick={editPickPath}>
-                Edit Path
-              </button>
-              <button className="btn btn-secondary" onClick={deletePickPath}>
-                Delete Path
-              </button>
-            </div>
+            {mode === 'editing' ? (
+              <>
+                <div className="action-section">
+                  <span className="action-label">Aisles:</span>
+                  <button className="btn btn-info" onClick={addAisle}>
+                    Add Aisle
+                  </button>
+                  <button className="btn btn-secondary" onClick={deleteAisle}>
+                    Delete Aisle
+                  </button>
+                </div>
 
-            <div className="action-section">
-              <select
-                value={proposalCommodity}
-                onChange={e => setProposalCommodity(e.target.value)}
-                className="commodity-select"
-              >
-                <option value="ambient">Ambient</option>
-                <option value="chilled">Chilled</option>
-                <option value="frozen">Frozen</option>
-                <option value="hot">Hot</option>
-              </select>
-              <button
-                className="btn btn-primary"
-                onClick={generateAIProposal}
-                disabled={generatingAI || loading}
-              >
-                {generatingAI ? 'Generating…' : 'AI Suggest Path'}
-              </button>
-            </div>
+                <div className="action-section">
+                  <span className="action-label">Pick Paths:</span>
+                  <button className="btn btn-info" onClick={addPickPath}>
+                    Add Path
+                  </button>
+                  <button className="btn btn-info" onClick={editPickPath}>
+                    Edit Path
+                  </button>
+                  <button className="btn btn-secondary" onClick={deletePickPath}>
+                    Delete Path
+                  </button>
+                </div>
 
-            <div className="action-section">
-              <button
-                className="btn btn-success"
-                onClick={saveChanges}
-                disabled={!hasChanges || loading}
-              >
-                Save Changes
-              </button>
-              <button
-                className="btn btn-warning"
-                onClick={revertChanges}
-                disabled={!hasChanges}
-              >
-                Revert Changes
-              </button>
-            </div>
+                <div className="action-section">
+                  <select
+                    value={proposalCommodity}
+                    onChange={e => setProposalCommodity(e.target.value)}
+                    className="commodity-select"
+                  >
+                    <option value="ambient">Ambient</option>
+                    <option value="chilled">Chilled</option>
+                    <option value="frozen">Frozen</option>
+                    <option value="hot">Hot</option>
+                  </select>
+                  <button
+                    className="btn btn-primary"
+                    onClick={generateAIProposal}
+                    disabled={generatingAI || loading}
+                  >
+                    {generatingAI ? 'Generating…' : 'AI Suggest Path'}
+                  </button>
+                </div>
+
+                <div className="action-section">
+                  <button
+                    className="btn btn-success"
+                    onClick={saveChanges}
+                    disabled={!hasChanges || loading}
+                  >
+                    Save Changes
+                  </button>
+                  <button
+                    className="btn btn-warning"
+                    onClick={revertChanges}
+                    disabled={!hasChanges}
+                  >
+                    Revert Changes
+                  </button>
+                </div>
+              </>
+            ) : null}
           </>
-        )}
+        ) : null}
       </div>
 
       {/* AI Proposal Modal */}

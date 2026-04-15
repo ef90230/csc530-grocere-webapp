@@ -13,7 +13,7 @@ const SignupPage = () => {
         try {
             await registerUser(formData);
             // Redirect based on user type
-            if (formData.userType === 'employee') {
+            if (formData.userType === 'employee' || formData.userType === 'admin') {
                 navigate('/home');
             } else {
                 navigate('/storefront');

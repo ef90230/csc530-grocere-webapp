@@ -1,0 +1,91 @@
+.employee-settings-page {
+  min-height: 100vh;
+  background: #f5f5f5;
+}
+
+.employee-settings-content {
+  padding: 1rem;
+  padding-bottom: 6.5rem;
+}
+
+.employee-settings-header {
+  background: #fff;
+  border: 1px solid #d7d7d7;
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.employee-settings-header h1 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: #1f1f1f;
+}
+
+.employee-settings-header p {
+  margin: 0.45rem 0 0;
+  font-size: 0.92rem;
+  color: #4a4a4a;
+  line-height: 1.4;
+}
+
+.employee-settings-message {
+  margin: 0;
+  padding: 1rem;
+  background: #fff;
+  border: 1px solid #d7d7d7;
+  border-radius: 12px;
+  color: #323232;
+}
+
+.employee-settings-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.employee-settings-item {
+  background: #fff;
+  border: 1px solid #d7d7d7;
+  border-radius: 12px;
+  padding: 1rem;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.employee-settings-item-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.employee-settings-item-copy strong {
+  font-size: 0.98rem;
+  color: #1f1f1f;
+}
+
+.employee-settings-item-copy small {
+  font-size: 0.85rem;
+  color: #585858;
+  line-height: 1.45;
+}
+
+.employee-settings-item input[type='checkbox'] {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin-top: 0.15rem;
+  accent-color: #4f8dff;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+  .employee-settings-item {
+    padding: 0.9rem;
+  }
+
+  .employee-settings-item-copy strong {
+    font-size: 0.94rem;
+  }
+}

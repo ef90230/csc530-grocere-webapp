@@ -19,6 +19,12 @@
   border-bottom-color: #c9a725;
 }
 
+.topbar--leaderboard {
+  background-color: #fbbf24;
+  border-bottom-color: #f59e0b;
+  color: #000;
+}
+
 .topbar--green {
   background-color: #9bc67d;
   border-bottom-color: #6f9454;

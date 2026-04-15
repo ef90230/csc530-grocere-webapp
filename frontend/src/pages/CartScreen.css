@@ -525,4 +525,13 @@
   .cart-substitution-item-card__controls {
     justify-items: stretch;
   }
+
+  .cart-substitution-item-card__quantity {
+    width: 100%;
+    grid-template-columns: 26px minmax(0, 1fr) 26px;
+  }
+
+  .cart-substitution-item-card__set {
+    width: 100%;
+  }
 }

@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import '@testing-library/jest-dom';
-import InventoryScreen from '../pages/InventoryScreen';
+import InventoryScreen, { isValidUpcCode, normalizeUpcDigits, toCanonicalUpc } from '../pages/InventoryScreen';
 
 // Mock fetch globally
 global.fetch = jest.fn();
@@ -387,6 +387,38 @@ describe('InventoryScreen', () => {
       await waitFor(() => {
         expect(screen.getByText('Database connection failed')).toBeInTheDocument();
       });
+    });
+  });
+
+  describe('UPC Helpers', () => {
+    test('normalizes scanned code to only digits', () => {
+      expect(normalizeUpcDigits(' 0-36000 29145 ')).toBe('03600029145');
+    });
+
+    test('accepts valid UPC-A values', () => {
+      expect(isValidUpcCode('036000291452')).toBe(true);
+    });
+
+    test('accepts valid UPC-E values', () => {
+      expect(isValidUpcCode('04252614')).toBe(true);
+    });
+
+    test('canonicalizes UPC-E to UPC-A', () => {
+      expect(toCanonicalUpc('04252614')).toBe('042100005264');
+    });
+
+    test('canonicalizes EAN-13 wrapped UPC-A', () => {
+      expect(toCanonicalUpc('0036000291452')).toBe('036000291452');
+    });
+
+    test('canonicalizes GTIN-14 wrapped UPC-A', () => {
+      expect(toCanonicalUpc('00036000291452')).toBe('036000291452');
+    });
+
+    test('rejects invalid UPC values', () => {
+      expect(isValidUpcCode('123456')).toBe(false);
+      expect(isValidUpcCode('036000291453')).toBe(false);
+      expect(isValidUpcCode('abcdefgh')).toBe(false);
     });
   });
 });

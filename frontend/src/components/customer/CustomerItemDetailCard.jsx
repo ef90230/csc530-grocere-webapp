@@ -9,11 +9,14 @@ const toCurrency = (value) => {
   return `$${numeric.toFixed(2)}`;
 };
 
-const getTotalOnHand = (item) => (
-  Array.isArray(item?.locations)
+const getTotalOnHand = (item) => {
+  const assigned = Array.isArray(item?.locations)
     ? item.locations.reduce((sum, locationRow) => sum + Number(locationRow?.quantityOnHand || 0), 0)
-    : 0
-);
+    : 0;
+
+  const unassigned = Number(item?.unassignedQuantity || 0);
+  return assigned + Math.max(0, unassigned);
+};
 
 const getLocationLabel = (item) => {
   if (!Array.isArray(item?.locations) || item.locations.length === 0) {

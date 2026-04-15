@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   login,
   registerEmployee,
+  registerAdmin,
   registerCustomer,
   getMe
 } = require('../controllers/authController');
@@ -26,6 +27,13 @@ router.post(
   employeeRegistrationValidation(),
   handleValidationErrors,
   registerEmployee
+);
+
+router.post(
+  '/register/admin',
+  employeeRegistrationValidation(),
+  handleValidationErrors,
+  registerAdmin
 );
 
 router.post(

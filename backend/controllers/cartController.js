@@ -14,6 +14,10 @@ const cartItemInclude = [
 ];
 
 const getItemOnHandTotal = async (itemId, storeId = null) => {
+  const item = await Item.findByPk(itemId, {
+    attributes: ['unassignedQuantity']
+  });
+
   const where = { itemId };
   if (storeId) {
     where.storeId = storeId;
@@ -24,7 +28,13 @@ const getItemOnHandTotal = async (itemId, storeId = null) => {
     attributes: ['quantityOnHand']
   });
 
-  return itemLocations.reduce((sum, locationRow) => sum + Number(locationRow.quantityOnHand || 0), 0);
+  const assignedQuantity = itemLocations.reduce(
+    (sum, locationRow) => sum + Number(locationRow.quantityOnHand || 0),
+    0
+  );
+  const unassignedQuantity = Number(item?.unassignedQuantity || 0);
+
+  return assignedQuantity + Math.max(0, unassignedQuantity);
 };
 
 const formatCartResponse = (cart) => {
