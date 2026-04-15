@@ -1,6 +1,5 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/db');
-const { generateEntityUpc } = require('../utils/barcodeService');
 
 const Cart = sequelize.define('Cart', {
   id: {
@@ -24,12 +23,6 @@ const Cart = sequelize.define('Cart', {
       key: 'id'
     },
     comment: 'Store where customer intends to fulfill this order'
-  },
-  upc: {
-    type: DataTypes.STRING,
-    allowNull: true,
-    unique: true,
-    comment: 'Generated barcode for tote/cart identification'
   }
 }, {
   tableName: 'carts',
@@ -40,12 +33,6 @@ const Cart = sequelize.define('Cart', {
       fields: ['customerId']
     }
   ]
-});
-
-Cart.beforeValidate((cart) => {
-  if (!cart.upc) {
-    cart.upc = generateEntityUpc('cart', cart.id);
-  }
 });
 
 module.exports = Cart;

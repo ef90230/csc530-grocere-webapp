@@ -12,7 +12,6 @@ import './StorefrontPage.css';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 const CLOSE_ANIMATION_MS = 280;
-const ACTIVE_PENDING_STATUSES = new Set(['pending', 'assigned', 'picking', 'picked', 'staging', 'staged', 'ready', 'dispensing']);
 
 const getOnHandTotal = (item) => {
   const assigned = Array.isArray(item?.locations)
@@ -39,11 +38,6 @@ const formatPickupTime = (value) => {
     hour: 'numeric',
     minute: '2-digit'
   });
-};
-
-const toDialLink = (phoneValue = '') => {
-  const digits = String(phoneValue || '').trim();
-  return digits ? `tel:${digits.replace(/[^0-9+]/g, '')}` : '';
 };
 
 const getLineItemFulfillmentStatus = (orderItem) => {
@@ -88,7 +82,6 @@ const StorefrontPage = () => {
   const [storeAisles, setStoreAisles] = useState([]);
   const [isMenuVisible, setIsMenuVisible] = useState(false);
   const [isMenuClosing, setIsMenuClosing] = useState(false);
-  const [hasPendingOrder, setHasPendingOrder] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('authToken');
@@ -181,17 +174,10 @@ const StorefrontPage = () => {
 
         if (ordersResponse.ok) {
           const ordersPayload = await ordersResponse.json();
-          const resolvedOrders = Array.isArray(ordersPayload?.orders) ? ordersPayload.orders : [];
-          const pendingOrderExists = resolvedOrders.some((order) => {
-            const normalizedStatus = String(order?.status || '').toLowerCase();
-            return ACTIVE_PENDING_STATUSES.has(normalizedStatus) && isCustomerOrderActive(order);
-          });
-
-          const matchingOrder = resolvedOrders
+          const matchingOrder = (ordersPayload?.orders || [])
             .filter((order) => isCustomerOrderActive(order))
             .sort((left, right) => new Date(left?.scheduledPickupTime) - new Date(right?.scheduledPickupTime))[0] || null;
 
-          setHasPendingOrder(pendingOrderExists);
           setActiveOrder(matchingOrder);
         }
       } catch {
@@ -458,7 +444,7 @@ const StorefrontPage = () => {
       </header>
       <div className="storefront-topbar-spacer" />
       <main className="storefront-content">
-        {activeOrder && hasPendingOrder && (
+        {activeOrder && (
           <section className={`storefront-order-card ${hasOrderShortage ? 'storefront-order-card--alert' : ''}`}>
             <div className="storefront-order-card__header">
               <p className="storefront-order-card__eyebrow">
@@ -477,23 +463,13 @@ const StorefrontPage = () => {
                 <p className="storefront-order-card__time">{formatPickupTime(activeOrder.scheduledPickupTime)}</p>
                 <p className="storefront-order-card__items">{activeOrderItemCount} items</p>
               </div>
-              <div className="storefront-order-card__actions">
-                {activeOrder?.store?.phone ? (
-                  <a
-                    className="storefront-order-card__call"
-                    href={toDialLink(activeOrder.store.phone)}
-                  >
-                    Call store
-                  </a>
-                ) : null}
-                <button
-                  type="button"
-                  className={`storefront-order-card__cta ${hasOrderShortage ? 'storefront-order-card__cta--alert' : ''}`}
-                  onClick={() => navigate('/order-summary')}
-                >
-                  Track order
-                </button>
-              </div>
+              <button
+                type="button"
+                className={`storefront-order-card__cta ${hasOrderShortage ? 'storefront-order-card__cta--alert' : ''}`}
+                onClick={() => navigate('/order-summary')}
+              >
+                Track order
+              </button>
             </div>
           </section>
         )}

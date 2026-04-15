@@ -314,23 +314,6 @@
   gap: 0.35rem;
 }
 
-.order-modal-call-link {
-  min-height: 34px;
-  border: 1px solid #1a4a8f;
-  border-radius: 6px;
-  background: #f0f7ff;
-  color: #0f376f;
-  text-decoration: none;
-  font-weight: 800;
-  padding: 0 0.7rem;
-  display: inline-flex;
-  align-items: center;
-}
-
-.order-modal-call-link:hover {
-  background: #dfedff;
-}
-
 .order-modal-actions {
   margin-top: 0.65rem;
   display: flex;

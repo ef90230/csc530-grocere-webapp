@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import BarcodeScannerModal from '../components/common/BarcodeScannerModal';
 import Navbar from '../components/common/Navbar';
 import TopBar from '../components/common/TopBar';
 import './StagingPage.css';
@@ -20,7 +19,6 @@ const STAGED_ORDER_STATUSES = new Set(['staged', 'ready', 'dispensing', 'complet
 const TYPE_SORT_ORDER = ['ambient', 'chilled', 'frozen', 'hot', 'oversized'];
 
 const buildGroupKey = (orderId, commodity) => `${orderId}:${commodity}`;
-const normalizeUpc = (value = '') => String(value || '').replace(/\D/g, '');
 
 const formatDueTime = (value) => {
     if (!value) {
@@ -36,65 +34,6 @@ const formatDueTime = (value) => {
         hour: 'numeric',
         minute: '2-digit'
     });
-};
-
-const toTimestampOrMax = (value) => {
-    if (!value) {
-        return Number.MAX_SAFE_INTEGER;
-    }
-
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? Number.MAX_SAFE_INTEGER : date.getTime();
-};
-
-const formatFulfillmentStatus = (statusValue) => {
-    const normalized = String(statusValue || '').trim().toLowerCase();
-
-    if (!normalized) {
-        return 'Order Placed';
-    }
-
-    return normalized
-        .split('_')
-        .join(' ')
-        .replace(/\b\w/g, (char) => char.toUpperCase());
-};
-
-const formatCheckInTime = (value) => {
-    if (!value) {
-        return 'Checked in';
-    }
-
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-        return 'Checked in';
-    }
-
-    return `Checked in ${date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
-};
-
-const getVerificationRowsForCommodity = (order, commodity) => {
-    const orderItems = Array.isArray(order?.items) ? order.items : [];
-
-    return orderItems
-        .filter((orderItem) => String(orderItem?.item?.commodity || '').toLowerCase() === String(commodity || '').toLowerCase())
-        .map((orderItem) => {
-            const quantity = Number(orderItem?.quantity || 0);
-            const pickedQuantity = Number(orderItem?.pickedQuantity || 0);
-            const rawStatus = String(orderItem?.status || '').toLowerCase();
-            const normalizedStatus = rawStatus || 'pending';
-
-            return {
-                id: orderItem?.id,
-                name: orderItem?.item?.name || 'Unknown Item',
-                quantity,
-                pickedQuantity,
-                verificationStatus: normalizedStatus
-                    .split('_')
-                    .join(' ')
-                    .replace(/\b\w/g, (char) => char.toUpperCase())
-            };
-        });
 };
 
 const getCustomerName = (order) => {
@@ -167,12 +106,6 @@ const StagingPage = () => {
     const [selectedLocationByGroup, setSelectedLocationByGroup] = useState({});
     const [updatingGroupKey, setUpdatingGroupKey] = useState('');
     const [highlightedGroupKey, setHighlightedGroupKey] = useState('');
-    const [isScannerOpen, setIsScannerOpen] = useState(false);
-    const [scannerStep, setScannerStep] = useState('cart');
-    const [scannerMessage, setScannerMessage] = useState('Scan the cart/tote UPC first.');
-    const [scannerTarget, setScannerTarget] = useState(null);
-    const [isProcessingScan, setIsProcessingScan] = useState(false);
-    const [pendingLocationOverride, setPendingLocationOverride] = useState(null);
     const [isLocationCodePromptOpen, setIsLocationCodePromptOpen] = useState(false);
     const [locationCodePromptContext, setLocationCodePromptContext] = useState(null);
     const [locationCodeEntry, setLocationCodeEntry] = useState('');
@@ -468,23 +401,7 @@ const StagingPage = () => {
                 };
             })
             .filter((entry) => entry.totalGroups > 0 && entry.hasUnstagedGroups)
-            .sort((left, right) => {
-                const leftCheckedIn = Boolean(left.order?.isCheckedIn);
-                const rightCheckedIn = Boolean(right.order?.isCheckedIn);
-
-                if (leftCheckedIn !== rightCheckedIn) {
-                    return leftCheckedIn ? -1 : 1;
-                }
-
-                if (leftCheckedIn && rightCheckedIn) {
-                    const checkInDelta = toTimestampOrMax(left.order?.checkInTime) - toTimestampOrMax(right.order?.checkInTime);
-                    if (checkInDelta !== 0) {
-                        return checkInDelta;
-                    }
-                }
-
-                return toTimestampOrMax(left.order?.scheduledPickupTime) - toTimestampOrMax(right.order?.scheduledPickupTime);
-            });
+            .sort((left, right) => new Date(left.order?.scheduledPickupTime) - new Date(right.order?.scheduledPickupTime));
             }, [orders, assignmentByGroup]);
 
     useEffect(() => {
@@ -528,89 +445,6 @@ const StagingPage = () => {
         navigate('/staging', { replace: true, state: {} });
     }, [navigate, routeLocation?.state, stagingOrders]);
 
-    useEffect(() => {
-        if (!isLocationCodePromptOpen) {
-            return undefined;
-        }
-
-        setLocationCodeBypassSeconds(5);
-        setIsLocationCodeBypassReady(false);
-
-        const intervalId = window.setInterval(() => {
-            setLocationCodeBypassSeconds((current) => {
-                if (current <= 1) {
-                    window.clearInterval(intervalId);
-                    setIsLocationCodeBypassReady(true);
-                    return 0;
-                }
-
-                return current - 1;
-            });
-        }, 1000);
-
-        return () => window.clearInterval(intervalId);
-    }, [isLocationCodePromptOpen]);
-
-    useEffect(() => {
-        if (!isLocationCodeScannerOpen || !locationCodeScannerVideoRef.current || !locationCodeScannerStreamRef.current || !locationCodeScannerDetectorRef.current) {
-            return undefined;
-        }
-
-        const video = locationCodeScannerVideoRef.current;
-        video.srcObject = locationCodeScannerStreamRef.current;
-
-        const startScanning = async () => {
-            try {
-                await video.play();
-            } catch (error) {
-                console.error('Unable to start location scanner preview', error);
-                closeLocationCodeScanner();
-                setLocationCodeScannerMessage('Camera unavailable');
-                return;
-            }
-
-            const scan = async () => {
-                if (!locationCodeScannerDetectorRef.current || !locationCodeScannerVideoRef.current || locationCodeScannerHandlingRef.current) {
-                    locationCodeScannerFrameRef.current = window.requestAnimationFrame(scan);
-                    return;
-                }
-
-                try {
-                    const barcodes = await locationCodeScannerDetectorRef.current.detect(locationCodeScannerVideoRef.current);
-                    if (Array.isArray(barcodes) && barcodes.length > 0) {
-                        const rawValue = normalizeCodeValue(barcodes[0]?.rawValue);
-                        if (rawValue) {
-                            locationCodeScannerHandlingRef.current = true;
-                            setLocationCodeEntry(rawValue);
-                            closeLocationCodeScanner();
-                            locationCodeScannerHandlingRef.current = false;
-                            return;
-                        }
-                    }
-                } catch (error) {
-                    console.error('Location code scan failed', error);
-                }
-
-                locationCodeScannerFrameRef.current = window.requestAnimationFrame(scan);
-            };
-
-            locationCodeScannerFrameRef.current = window.requestAnimationFrame(scan);
-        };
-
-        startScanning();
-
-        return () => {
-            stopLocationCodeScannerSession();
-        };
-    // Effect depends on scanner modal state and refs controlled by helper methods.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isLocationCodeScannerOpen]);
-
-    useEffect(() => () => {
-        stopLocationCodeScannerSession();
-    }, []);
-    
-
     const toggleOrderExpanded = (orderId) => {
         setExpandedOrderId((current) => (current === orderId ? null : orderId));
     };
@@ -632,9 +466,9 @@ const StagingPage = () => {
         await loadLocationData(token);
     };
 
-    const assignGroupToLocation = async (orderId, commodity, explicitLocationId) => {
+    const assignGroupToLocation = async (orderId, commodity) => {
         const key = buildGroupKey(orderId, commodity);
-        const selectedLocationId = Number(explicitLocationId || selectedLocationByGroup[key]);
+        const selectedLocationId = Number(selectedLocationByGroup[key]);
 
         if (!Number.isInteger(selectedLocationId)) {
             setErrorMessage('Please select a valid location before staging this item group.');
@@ -660,156 +494,7 @@ const StagingPage = () => {
             return;
         }
 
-        setUpdatingGroupKey(key);
-        setErrorMessage('');
-
-        try {
-            const token = window.localStorage.getItem('authToken');
-            if (!token) {
-                navigate('/');
-                return;
-            }
-
-            const response = await fetch(`${API_BASE}/api/staging-locations/assignments`, {
-                method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    orderId,
-                    commodity,
-                    stagingLocationId: selectedLocationId
-                })
-            });
-
-            if (!response.ok) {
-                const payload = await response.json().catch(() => ({}));
-                throw new Error(payload.message || 'Unable to stage this item group.');
-            }
-
-            await refreshStagingMeta();
-        } catch (error) {
-            console.error('Unable to assign item group to location', error);
-            setErrorMessage(error.message || 'Unable to stage this item group.');
-            throw error;
-        } finally {
-            setUpdatingGroupKey('');
-        }
-    };
-
-    const closeScanner = () => {
-        setIsScannerOpen(false);
-        setScannerStep('cart');
-        setScannerMessage('Scan the cart/tote UPC first.');
-        setScannerTarget(null);
-        setIsProcessingScan(false);
-        setPendingLocationOverride(null);
-    };
-
-    const openScannerForGroup = (order, group) => {
-        setScannerTarget({ order, group });
-        setScannerStep('cart');
-        setScannerMessage('Scan the cart/tote UPC first.');
-        setPendingLocationOverride(null);
-        setIsScannerOpen(true);
-    };
-
-    const handleScannerDetected = async (scannedValue) => {
-        if (!scannerTarget || isProcessingScan) {
-            return;
-        }
-
-        const resolvedValue = String(scannedValue || '').trim();
-        const normalizedValue = normalizeUpc(resolvedValue);
-        if (!normalizedValue) {
-            return;
-        }
-
-        const orderId = scannerTarget?.order?.id;
-        const commodity = scannerTarget?.group?.commodity;
-        const cartUpc = scannerTarget?.order?.customer?.cart?.upc || '';
-        const groupKey = buildGroupKey(orderId, commodity);
-
-        if (scannerStep === 'cart') {
-            if (!cartUpc) {
-                setScannerMessage('No cart/tote UPC is available for this customer.');
-                return;
-            }
-
-            if (normalizeUpc(cartUpc) !== normalizedValue) {
-                setScannerMessage('Cart/tote UPC mismatch. Scan the assigned cart/tote barcode.');
-                return;
-            }
-
-            setScannerStep('location');
-            setScannerMessage('Cart confirmed. Scan the tote location UPC next.');
-            setPendingLocationOverride(null);
-            return;
-        }
-
-        const orderItems = Array.isArray(scannerTarget?.order?.items) ? scannerTarget.order.items : [];
-        const matchedItemForScan = orderItems.find((orderItem) => (
-            normalizeUpc(orderItem?.item?.upc) === normalizedValue
-        ));
-
-        if (matchedItemForScan) {
-            setScannerMessage('Scanned UPC belongs to an item, not a tote location. Scan a tote location UPC.');
-            return;
-        }
-
-        const matchingLocation = locations.find((location) => (
-            String(location?.itemType || '').toLowerCase() === String(commodity || '').toLowerCase()
-            && normalizeUpc(location?.upc) === normalizedValue
-        ));
-
-        if (!matchingLocation) {
-            setScannerMessage('Location UPC not found for this tote type. Try again.');
-            return;
-        }
-
-        const currentAssignment = assignmentByGroup[groupKey] || null;
-        const currentLocationId = Number(
-            currentAssignment?.stagingLocationId
-            || currentAssignment?.stagingLocation?.id
-            || 0
-        );
-        const nextLocationId = Number(matchingLocation.id || 0);
-        const isDifferentLocation = Number.isInteger(currentLocationId)
-            && currentLocationId > 0
-            && Number.isInteger(nextLocationId)
-            && nextLocationId > 0
-            && currentLocationId !== nextLocationId;
-
-        if (isDifferentLocation) {
-            const hasConfirmedOverride = Boolean(
-                pendingLocationOverride
-                && pendingLocationOverride.groupKey === groupKey
-                && pendingLocationOverride.locationId === nextLocationId
-            );
-
-            if (!hasConfirmedOverride) {
-                setPendingLocationOverride({ groupKey, locationId: nextLocationId });
-                setScannerMessage('Warning: this order is already staged in another location. Scan this new location UPC again to confirm reassignment.');
-                return;
-            }
-        }
-
-        setIsProcessingScan(true);
-        setPendingLocationOverride(null);
-        setSelectedLocationByGroup((current) => ({
-            ...current,
-            [groupKey]: matchingLocation.id
-        }));
-
-        try {
-            await assignGroupToLocation(orderId, commodity, matchingLocation.id);
-            closeScanner();
-        } catch {
-            setScannerMessage('Unable to stage this tote. Please retry.');
-        } finally {
-            setIsProcessingScan(false);
-        }
+        await assignGroupToLocationInternal(orderId, commodity, selectedLocationId);
     };
 
     const unassignGroup = async (orderId, commodity) => {
@@ -861,88 +546,6 @@ const StagingPage = () => {
 
         return 'Unstaged';
     };
-
-    useEffect(() => {
-        if (!isLocationCodePromptOpen) {
-            return undefined;
-        }
-
-        setLocationCodeBypassSeconds(5);
-        setIsLocationCodeBypassReady(false);
-
-        const intervalId = window.setInterval(() => {
-            setLocationCodeBypassSeconds((current) => {
-                if (current <= 1) {
-                    window.clearInterval(intervalId);
-                    setIsLocationCodeBypassReady(true);
-                    return 0;
-                }
-
-                return current - 1;
-            });
-        }, 1000);
-
-        return () => window.clearInterval(intervalId);
-    }, [isLocationCodePromptOpen]);
-
-    useEffect(() => {
-        if (!isLocationCodeScannerOpen || !locationCodeScannerVideoRef.current || !locationCodeScannerStreamRef.current || !locationCodeScannerDetectorRef.current) {
-            return undefined;
-        }
-
-        const video = locationCodeScannerVideoRef.current;
-        video.srcObject = locationCodeScannerStreamRef.current;
-
-        const startScanning = async () => {
-            try {
-                await video.play();
-            } catch (error) {
-                console.error('Unable to start location scanner preview', error);
-                closeLocationCodeScanner();
-                setLocationCodeScannerMessage('Camera unavailable');
-                return;
-            }
-
-            const scan = async () => {
-                if (!locationCodeScannerDetectorRef.current || !locationCodeScannerVideoRef.current || locationCodeScannerHandlingRef.current) {
-                    locationCodeScannerFrameRef.current = window.requestAnimationFrame(scan);
-                    return;
-                }
-
-                try {
-                    const barcodes = await locationCodeScannerDetectorRef.current.detect(locationCodeScannerVideoRef.current);
-                    if (Array.isArray(barcodes) && barcodes.length > 0) {
-                        const rawValue = normalizeCodeValue(barcodes[0]?.rawValue);
-                        if (rawValue) {
-                            locationCodeScannerHandlingRef.current = true;
-                            setLocationCodeEntry(rawValue);
-                            closeLocationCodeScanner();
-                            locationCodeScannerHandlingRef.current = false;
-                            return;
-                        }
-                    }
-                } catch (error) {
-                    console.error('Location code scan failed', error);
-                }
-
-                locationCodeScannerFrameRef.current = window.requestAnimationFrame(scan);
-            };
-
-            locationCodeScannerFrameRef.current = window.requestAnimationFrame(scan);
-        };
-
-        startScanning();
-
-        return () => {
-            stopLocationCodeScannerSession();
-        };
-    // Effect depends on scanner modal state and refs controlled by helper methods.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isLocationCodeScannerOpen]);
-
-    useEffect(() => () => {
-        stopLocationCodeScannerSession();
-    }, []);
 
     useEffect(() => {
         if (!isLocationCodePromptOpen) {
@@ -1083,18 +686,10 @@ const StagingPage = () => {
                                             <p className="staging-order-meta">
                                                 Order {entry.order.orderNumber || `#${orderId}`} {'\u00B7'} Due {formatDueTime(entry.order.scheduledPickupTime)}
                                             </p>
-                                            <p className="staging-order-meta staging-order-meta--secondary">
-                                                Fulfillment: {formatFulfillmentStatus(entry.order?.status)}
-                                            </p>
                                         </div>
-                                        <div className="staging-order-right">
-                                            {entry.order?.isCheckedIn ? (
-                                                <span className="staging-checkin-badge">{formatCheckInTime(entry.order?.checkInTime)}</span>
-                                            ) : null}
-                                            <span className="staging-order-progress">
-                                                {entry.stagedGroups}/{entry.totalGroups}
-                                            </span>
-                                        </div>
+                                        <span className="staging-order-progress">
+                                            {entry.stagedGroups}/{entry.totalGroups}
+                                        </span>
                                     </button>
 
                                     {isExpanded ? (
@@ -1115,44 +710,20 @@ const StagingPage = () => {
                                                                 Location: {group.assignment.stagingLocation.name}
                                                             </p>
                                                         ) : null}
-                                                        <div className="staging-verify-list" aria-label="Item verification list">
-                                                            {getVerificationRowsForCommodity(entry.order, group.commodity).map((verificationRow) => (
-                                                                <p key={verificationRow.id} className="staging-verify-item">
-                                                                    <span>{verificationRow.name}</span>
-                                                                    <span>Qty {verificationRow.pickedQuantity}/{verificationRow.quantity} • {verificationRow.verificationStatus}</span>
-                                                                </p>
-                                                            ))}
-                                                        </div>
                                                     </div>
 
                                                     <div className="staging-group-actions">
                                                         {group.status === 'staged' ? (
-                                                            <>
-                                                                <button
-                                                                    type="button"
-                                                                    className="staging-action-btn"
-                                                                    onClick={() => openScannerForGroup(entry.order, group)}
-                                                                >
-                                                                    Rescan
-                                                                </button>
-                                                                <button
-                                                                    type="button"
-                                                                    className="staging-action-btn staging-action-btn--danger"
-                                                                    onClick={() => unassignGroup(orderId, group.commodity)}
-                                                                    disabled={updatingGroupKey === buildGroupKey(orderId, group.commodity)}
-                                                                >
-                                                                    {updatingGroupKey === buildGroupKey(orderId, group.commodity) ? 'Working...' : 'Unstage'}
-                                                                </button>
-                                                            </>
+                                                            <button
+                                                                type="button"
+                                                                className="staging-action-btn staging-action-btn--danger"
+                                                                onClick={() => unassignGroup(orderId, group.commodity)}
+                                                                disabled={updatingGroupKey === buildGroupKey(orderId, group.commodity)}
+                                                            >
+                                                                {updatingGroupKey === buildGroupKey(orderId, group.commodity) ? 'Working...' : 'Unstage'}
+                                                            </button>
                                                         ) : group.status === 'unstaged' ? (
                                                             <>
-                                                                <button
-                                                                    type="button"
-                                                                    className="staging-action-btn"
-                                                                    onClick={() => openScannerForGroup(entry.order, group)}
-                                                                >
-                                                                    Scan
-                                                                </button>
                                                                 <select
                                                                     className="staging-location-select"
                                                                     value={selectedLocationByGroup[buildGroupKey(orderId, group.commodity)] || ''}
@@ -1200,20 +771,6 @@ const StagingPage = () => {
                     </section>
                 ) : null}
             </main>
-
-            <BarcodeScannerModal
-                isOpen={isScannerOpen}
-                title={scannerStep === 'cart' ? 'Scan Cart / Tote' : 'Scan Tote Location'}
-                description={scannerStep === 'cart'
-                    ? 'Step 1 of 2: verify the cart or tote for this order.'
-                    : 'Step 2 of 2: scan the tote location UPC.'}
-                instructions={scannerStep === 'cart'
-                    ? 'Align the cart/tote barcode in the frame.'
-                    : 'Align the staging location barcode in the frame.'}
-                statusMessage={scannerMessage}
-                onClose={closeScanner}
-                onDetected={handleScannerDetected}
-            />
 
             {isLocationCodePromptOpen && locationCodePromptContext?.location ? (
                 <div className="staging-code-modal-backdrop" role="presentation" onClick={closeLocationCodePrompt}>
@@ -1273,6 +830,4 @@ const StagingPage = () => {
 };
 
 export default StagingPage;
-
-
 
