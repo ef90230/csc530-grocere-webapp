@@ -11,8 +11,15 @@
   display: flex;
   flex-direction: column;
   padding: 2rem;
-  padding-bottom: 180px; /* Increased to make room for action bar */
   overflow-y: auto;
+}
+
+.map-screen-admin .page-content {
+  padding-bottom: 180px; /* Leave room for the admin action bar and navbar */
+}
+
+.map-screen-employee .page-content {
+  padding-bottom: 90px; /* Leave room only for the navbar */
 }
 
 .map-screen h1 {
@@ -145,7 +152,7 @@
 /* Action Bar Styles */
 .map-action-bar {
   position: fixed;
-  bottom: 80px; /* Above the navbar */
+  bottom: 70px; /* Flush with the top of the navbar */
   left: 0;
   right: 0;
   background-color: #f8f9fa;

@@ -269,6 +269,46 @@
       "extraMistakes": 0,
       "pickedQuantity": 1,
       "totalQuantity": 1
+    },
+    "6::2026-04-15T18:56:17.429Z::restricted": {
+      "key": "6::2026-04-15T18:56:17.429Z::restricted",
+      "employeeId": 6,
+      "storeId": 1,
+      "commodity": "restricted",
+      "startedAt": "2026-04-15T18:56:17.429Z",
+      "endedAt": "2026-04-15T18:56:38.751Z",
+      "closed": true,
+      "orderIds": [
+        30
+      ],
+      "itemTotals": {
+        "96": 4
+      },
+      "itemMistakes": {},
+      "itemMistakeFlags": {},
+      "extraMistakes": 0,
+      "pickedQuantity": 4,
+      "totalQuantity": 4
+    },
+    "3::2026-04-15T19:16:50.464Z::ambient": {
+      "key": "3::2026-04-15T19:16:50.464Z::ambient",
+      "employeeId": 3,
+      "storeId": 1,
+      "commodity": "ambient",
+      "startedAt": "2026-04-15T19:16:50.464Z",
+      "endedAt": "2026-04-15T19:17:17.456Z",
+      "closed": true,
+      "orderIds": [
+        29
+      ],
+      "itemTotals": {
+        "95": 10
+      },
+      "itemMistakes": {},
+      "itemMistakeFlags": {},
+      "extraMistakes": 0,
+      "pickedQuantity": 10,
+      "totalQuantity": 10
     }
   }
 }

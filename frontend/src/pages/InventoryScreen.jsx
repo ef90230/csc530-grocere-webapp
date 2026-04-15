@@ -471,7 +471,7 @@ const InventoryScreen = () => {
 
   return (
     <div className="inventory-screen">
-      <TopBar />
+      <TopBar title="Store Inventory" />
       <div className="page-content">
         <div className="inventory-title-row">
           <h1>Inventory</h1>

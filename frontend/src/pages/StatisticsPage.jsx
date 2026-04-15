@@ -376,7 +376,7 @@ const StatisticsPage = () => {
 
     return (
         <div className="statistics-page">
-            <TopBar userName={userFullName} pickRate={pickRateForTopBar} />
+            <TopBar title="My Stats" userName={userFullName} pickRate={pickRateForTopBar} />
             <div className="statistics-content">
                 <div className="statistics-header-row">
                     <h1>{activeScope === 'store' ? 'Store Stats' : userFullName}</h1>

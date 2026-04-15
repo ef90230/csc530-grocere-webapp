@@ -13,20 +13,33 @@ const {
 const { applyTotesDelta } = require('../utils/employeeTotesHistoryStore');
 const { applyItemsStagedDelta } = require('../utils/employeeStagedItemsHistoryStore');
 
-const ALLOWED_ITEM_TYPES = ['ambient', 'chilled', 'frozen', 'hot', 'oversized'];
+const ALLOWED_ITEM_TYPES = ['ambient', 'chilled', 'frozen', 'hot'];
 const INACTIVE_ORDER_STATUSES = ['dispensing', 'completed', 'cancelled'];
 
 const COMMODITY_DISPLAY_NAMES = {
   ambient: 'Ambient',
   chilled: 'Chilled',
   frozen: 'Frozen',
-  hot: 'Hot',
-  oversized: 'Oversized'
+  hot: 'Hot'
 };
 
 const NON_DISPENSABLE_ITEM_STATUSES = new Set(['out_of_stock', 'skipped', 'not_found', 'cancelled', 'canceled']);
 
 const normalizeItemType = (value) => String(value || '').trim().toLowerCase();
+
+const getStagingTypeForItem = (item) => {
+  const normalizedTemperature = normalizeItemType(item?.temperature);
+  if (ALLOWED_ITEM_TYPES.includes(normalizedTemperature)) {
+    return normalizedTemperature;
+  }
+
+  const normalizedCommodity = normalizeItemType(item?.commodity);
+  if (ALLOWED_ITEM_TYPES.includes(normalizedCommodity)) {
+    return normalizedCommodity;
+  }
+
+  return null;
+};
 
 const parseLocationId = (value) => {
   const parsed = Number(value);
@@ -81,8 +94,8 @@ const getStagedItemCountForCommodity = async (orderId, commodity, transaction) =
         model: Item,
         as: 'item',
         required: true,
-        where: { commodity: normalizedCommodity },
-        attributes: ['id']
+        where: { temperature: normalizedCommodity },
+        attributes: ['id', 'temperature']
       }
     ],
     transaction
@@ -283,7 +296,7 @@ const createLocation = async (req, res) => {
     }
 
     if (!ALLOWED_ITEM_TYPES.includes(itemType)) {
-      return res.status(400).json({ message: 'itemType must be one of ambient, chilled, frozen, hot, or oversized.' });
+      return res.status(400).json({ message: 'itemType must be one of ambient, chilled, frozen, or hot.' });
     }
 
     const existing = await StagingLocation.findOne({
@@ -552,7 +565,7 @@ const assignGroup = async (req, res) => {
 
     if (!ALLOWED_ITEM_TYPES.includes(commodity)) {
       await transaction.rollback();
-      return res.status(400).json({ message: 'commodity must be one of ambient, chilled, frozen, hot, or oversized.' });
+      return res.status(400).json({ message: 'commodity must be one of ambient, chilled, frozen, or hot.' });
     }
 
     const location = await StagingLocation.findOne({
@@ -594,7 +607,7 @@ const assignGroup = async (req, res) => {
           as: 'item',
           required: true,
           where: {
-            commodity
+            temperature: commodity
           }
         }
       ],
@@ -681,7 +694,7 @@ const unassignGroup = async (req, res) => {
 
     if (!ALLOWED_ITEM_TYPES.includes(commodity)) {
       await transaction.rollback();
-      return res.status(400).json({ message: 'commodity must be one of ambient, chilled, frozen, hot, or oversized.' });
+      return res.status(400).json({ message: 'commodity must be one of ambient, chilled, frozen, or hot.' });
     }
 
     const stagedItemCount = await getStagedItemCountForCommodity(orderId, commodity, transaction);
@@ -800,7 +813,7 @@ const getOrderTotesSummary = async (req, res) => {
             {
               model: Item,
               as: 'item',
-              attributes: ['commodity']
+              attributes: ['commodity', 'temperature']
             }
           ]
         }
@@ -813,7 +826,7 @@ const getOrderTotesSummary = async (req, res) => {
 
     const groupedOrderItems = new Map();
     (order.items || []).forEach((orderItem) => {
-      const commodity = normalizeItemType(orderItem?.item?.commodity);
+      const commodity = getStagingTypeForItem(orderItem?.item);
       if (!commodity) {
         return;
       }

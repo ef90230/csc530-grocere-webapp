@@ -95,7 +95,7 @@ const HomePage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [orders, setOrders] = useState([]);
   const [stagingAssignments, setStagingAssignments] = useState([]);
-  const [pickRate, setPickRate] = useState(0);
+  const [storePickRate, setStorePickRate] = useState(0);
 
   useEffect(() => {
     const token = window.localStorage.getItem('authToken');
@@ -113,10 +113,10 @@ const HomePage = () => {
           Authorization: `Bearer ${token}`
         };
 
-        const [ordersResponse, assignmentsResponse, profileResponse] = await Promise.all([
+        const [ordersResponse, assignmentsResponse, statsResponse] = await Promise.all([
           fetch(`${API_BASE}/api/orders`, { headers }),
           fetch(`${API_BASE}/api/staging-locations/assignments`, { headers }),
-          fetch(`${API_BASE}/api/auth/me`, { headers })
+          fetch(`${API_BASE}/api/employees/stats/summary`, { headers })
         ]);
 
         if (ordersResponse.ok) {
@@ -133,16 +133,16 @@ const HomePage = () => {
           setStagingAssignments([]);
         }
 
-        if (profileResponse.ok) {
-          const profilePayload = await profileResponse.json();
-          setPickRate(toNumber(profilePayload?.user?.pickRate));
+        if (statsResponse.ok) {
+          const statsPayload = await statsResponse.json();
+          setStorePickRate(toNumber(statsPayload?.store?.statsToday?.pickRate ?? statsPayload?.store?.stats?.pickRate));
         } else {
-          setPickRate(0);
+          setStorePickRate(0);
         }
       } catch {
         setOrders([]);
         setStagingAssignments([]);
-        setPickRate(0);
+        setStorePickRate(0);
       } finally {
         setIsLoading(false);
       }
@@ -211,9 +211,9 @@ const HomePage = () => {
       longWaits,
       completedOrders,
       totalTrackableOrders: nonCancelledOrders.length,
-      storePickRate: pickRate
+      storePickRate
     };
-  }, [orders, pickRate, stagingAssignments]);
+  }, [orders, stagingAssignments, storePickRate]);
 
   const timeOfDayLabel = useMemo(() => getTimeOfDayLabel(), []);
 

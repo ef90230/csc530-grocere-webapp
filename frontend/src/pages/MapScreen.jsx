@@ -643,17 +643,16 @@ const MapScreen = () => {
   };
 
   return (
-    <div className="map-screen">
-      <TopBar />
+    <div className={`map-screen ${isAdmin ? 'map-screen-admin' : 'map-screen-employee'}`}>
+      <TopBar
+        title="Store Map"
+        leftActionLabel="<"
+        leftActionAriaLabel="Back to inventory"
+        onLeftAction={() => navigate('/inventory')}
+      />
       <div className="page-content">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
           <h1>Store Layout & Path</h1>
-          <button
-            className="btn btn-secondary"
-            onClick={() => navigate('/inventory')}
-          >
-            Back to Inventory
-          </button>
         </div>
 
         <div className="map-toolbar">
@@ -723,8 +722,8 @@ const MapScreen = () => {
       </div>
 
       {/* Bottom action bar above navbar */}
-      <div className="map-action-bar">
-        {isAdmin ? (
+      {isAdmin ? (
+        <div className="map-action-bar">
           <>
             <div className="action-section">
               <button
@@ -799,8 +798,8 @@ const MapScreen = () => {
               </>
             ) : null}
           </>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       {/* AI Proposal Modal */}
       {showProposalModal && aiProposal && (

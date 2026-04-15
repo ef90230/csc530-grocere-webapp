@@ -22,8 +22,8 @@ const COMMODITY_DISPLAY_NAMES = {
   chilled: 'Chilled Regular',
   frozen: 'Frozen Regular',
   hot: 'Hot Regular',
-  oversized: 'Oversized',
-  restricted: 'Team Lift'
+  oversized: 'Team Lift',
+  restricted: 'Restricted'
 };
 
 const WALK_LOOKAHEAD_HOURS = 3;
