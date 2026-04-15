@@ -22,6 +22,7 @@
   animation-duration: 280ms;
   animation-fill-mode: forwards;
   animation-timing-function: ease;
+  overflow-y: auto;
 }
 
 .popup-menu-panel.open {

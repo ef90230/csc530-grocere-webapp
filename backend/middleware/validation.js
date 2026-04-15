@@ -67,7 +67,7 @@ const employeeRegistrationValidation = () => {
     ...passwordValidation(),
     body('role')
       .optional()
-      .isIn(['manager', 'picker', 'stager', 'dispenser'])
+      .isIn(['manager', 'picker', 'stager', 'dispenser', 'admin'])
       .withMessage('Invalid role'),
     body('storeId')
       .isInt({ min: 1 })
@@ -165,7 +165,11 @@ const itemValidation = () => {
     body('commodity')
       .optional()
       .isIn(['ambient', 'chilled', 'frozen', 'hot', 'oversized', 'restricted'])
-      .withMessage('Invalid commodity type')
+      .withMessage('Invalid commodity type'),
+    body('isRestricted')
+      .optional()
+      .isBoolean()
+      .withMessage('Restricted flag must be true or false')
   ];
 };
 

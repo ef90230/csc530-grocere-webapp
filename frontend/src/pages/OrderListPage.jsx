@@ -13,6 +13,7 @@ import './OrderListPage.css';
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 const WAIT_THRESHOLD_STORAGE_KEY = 'grocereWaitThresholdMinutes';
 const CANCEL_STATUS_TOAST_MESSAGE = 'Cannot cancel order in current status';
+const CALL_APP_FAILURE_MESSAGE = 'Failed to reach phone app';
 const TOAST_DURATION_MS = 5000;
 
 const DEFAULT_WAIT_THRESHOLD_MINUTES = 5;
@@ -42,7 +43,7 @@ const STATUS_LABELS = {
 };
 
 const STATUS_SORT_WEIGHT = {
-    [ORDER_PHASE.CANCELLED]: 0,
+    [ORDER_PHASE.CANCELLED]: 9,
     [ORDER_PHASE.DISPENSING_IN_PROGRESS]: 1,
     [ORDER_PHASE.READY_FOR_PICKUP]: 2,
     [ORDER_PHASE.STAGING_COMPLETE]: 3,
@@ -57,6 +58,8 @@ const toNumber = (value) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : 0;
 };
+
+const getDialablePhone = (value) => String(value || '').replace(/[^0-9+]/g, '');
 
 const getStoredThreshold = () => {
     const storedValue = Number(window.localStorage.getItem(WAIT_THRESHOLD_STORAGE_KEY));
@@ -94,6 +97,35 @@ const formatTimer = (seconds) => {
     }
 
     return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
+};
+
+const getTopOfCurrentHour = (dateInput = Date.now()) => {
+    const date = new Date(dateInput);
+    if (Number.isNaN(date.getTime())) {
+        return null;
+    }
+
+    date.setMinutes(0, 0, 0);
+    return date;
+};
+
+const isExpiredTerminalOrder = (order, currentTime) => {
+    const phase = order?.phase;
+    if (phase !== ORDER_PHASE.COMPLETED && phase !== ORDER_PHASE.CANCELLED) {
+        return false;
+    }
+
+    const topOfCurrentHour = getTopOfCurrentHour(currentTime);
+    if (!topOfCurrentHour) {
+        return false;
+    }
+
+    const updatedAt = new Date(order?.updatedAt || 0);
+    if (Number.isNaN(updatedAt.getTime())) {
+        return false;
+    }
+
+    return updatedAt < topOfCurrentHour;
 };
 
 const getCustomerName = (order) => {
@@ -181,7 +213,7 @@ const deriveOrderPhase = (order, stagedToteCountByOrderId) => {
     return ORDER_PHASE.PICKING_NOT_STARTED;
 };
 
-const isCardInteractive = (order) => order?.phase !== ORDER_PHASE.COMPLETED;
+const isCardInteractive = (order) => order?.phase !== ORDER_PHASE.COMPLETED && order?.phase !== ORDER_PHASE.CANCELLED;
 
 const OrderListPage = () => {
     const navigate = useNavigate();
@@ -207,10 +239,12 @@ const OrderListPage = () => {
     const [bottomToastMessage, setBottomToastMessage] = useState('');
 
     const token = window.localStorage.getItem('authToken');
+    const userType = window.localStorage.getItem('userType');
+    const isAdmin = userType === 'admin';
 
     useEffect(() => {
         const userType = window.localStorage.getItem('userType');
-        if (!token || userType !== 'employee') {
+        if (!token || (userType !== 'employee' && userType !== 'admin')) {
             navigate('/');
         }
     }, [navigate, token]);
@@ -344,7 +378,7 @@ const OrderListPage = () => {
     }, [currentTimeTick, orders, stagedToteCountByOrderId, waitThresholdMinutes]);
 
     const sortedOrders = useMemo(() => {
-        const rows = [...mappedOrders];
+        const rows = mappedOrders.filter((order) => !isExpiredTerminalOrder(order, currentTimeTick));
 
         if (sortMode === 'order-id') {
             return rows.sort((left, right) => getOrderIdSortValue(left) - getOrderIdSortValue(right));
@@ -371,7 +405,7 @@ const OrderListPage = () => {
 
             return left.customerName.localeCompare(right.customerName);
         });
-    }, [mappedOrders, sortMode]);
+    }, [currentTimeTick, mappedOrders, sortMode]);
 
     useEffect(() => {
         const focusOrderId = Number(routeLocation?.state?.focusOrderId);
@@ -577,6 +611,20 @@ const OrderListPage = () => {
         }
     };
 
+    const handleCallCustomer = (order) => {
+        const phoneNumber = getDialablePhone(order?.customer?.phone);
+        if (!phoneNumber) {
+            setErrorMessage(CALL_APP_FAILURE_MESSAGE);
+            return;
+        }
+
+        try {
+            window.location.href = `tel:${phoneNumber}`;
+        } catch {
+            setErrorMessage(CALL_APP_FAILURE_MESSAGE);
+        }
+    };
+
     const handleSaveThreshold = (event) => {
         event.preventDefault();
         const parsedValue = Number(waitThresholdDraft);
@@ -672,17 +720,19 @@ const OrderListPage = () => {
                     <button type="button" className="order-list-control-btn" onClick={() => navigate('/parking-lot')}>
                         Lot Info
                     </button>
-                    <button
-                        type="button"
-                        className="order-list-control-btn"
-                        onClick={() => {
-                            setErrorMessage('');
-                            setWaitThresholdDraft(String(waitThresholdMinutes));
-                            setIsThresholdModalOpen(true);
-                        }}
-                    >
-                        Options
-                    </button>
+                    {isAdmin ? (
+                        <button
+                            type="button"
+                            className="order-list-control-btn"
+                            onClick={() => {
+                                setErrorMessage('');
+                                setWaitThresholdDraft(String(waitThresholdMinutes));
+                                setIsThresholdModalOpen(true);
+                            }}
+                        >
+                            Options
+                        </button>
+                    ) : null}
                     <select className="order-list-sort-select" value={sortMode} onChange={(event) => setSortMode(event.target.value)}>
                         <option value="status">Status</option>
                         <option value="order-id">Order ID</option>
@@ -744,14 +794,14 @@ const OrderListPage = () => {
                                         ) : null}
                                     </div>
 
-                                    {order.phase !== ORDER_PHASE.COMPLETED ? (
+                                    {order.phase !== ORDER_PHASE.COMPLETED && order.phase !== ORDER_PHASE.CANCELLED ? (
                                         <button
                                             type="button"
                                             className="order-shortcut-btn"
                                             onClick={(event) => handleShortcutClick(event, order)}
                                         >
                                             <span>{getShortcutLabel(order)}</span>
-                                            <span className="order-shortcut-arrow">›</span>
+                                            <span className="order-shortcut-arrow">&gt;</span>
                                         </button>
                                     ) : null}
                                 </div>
@@ -826,6 +876,15 @@ const OrderListPage = () => {
 
                             <button
                                 type="button"
+                                className="order-modal-btn order-modal-btn--primary"
+                                disabled={isSubmitting}
+                                onClick={() => handleCallCustomer(activeOrder)}
+                            >
+                                Call Customer
+                            </button>
+
+                            <button
+                                type="button"
                                 className="order-modal-btn order-modal-btn--danger"
                                 disabled={isSubmitting}
                                 onClick={() => setIsCancelDialogOpen(true)}
@@ -889,3 +948,4 @@ const OrderListPage = () => {
 };
 
 export default OrderListPage;
+

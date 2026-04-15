@@ -265,6 +265,15 @@
   gap: 0.35rem;
 }
 
+.staging-code-scanner-video {
+  width: 100%;
+  max-height: 280px;
+  border-radius: 8px;
+  border: 1px solid #7c7c7c;
+  background: #111;
+  object-fit: cover;
+}
+
 .staging-group-status {
   display: inline-flex;
   align-items: center;

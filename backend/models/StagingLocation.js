@@ -23,6 +23,13 @@ const StagingLocation = sequelize.define('StagingLocation', {
     type: DataTypes.ENUM('ambient', 'chilled', 'frozen', 'hot', 'oversized'),
     allowNull: false
   },
+  locationCode: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    validate: {
+      len: [1, 120]
+    }
+  },
   stagingLimit: {
     type: DataTypes.INTEGER,
     allowNull: false,

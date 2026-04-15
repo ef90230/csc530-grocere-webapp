@@ -24,6 +24,8 @@ const DEFAULT_GOALS = {
 };
 
 const DEFAULT_TIMESLOT_ORDER_LIMIT = 20;
+const DEFAULT_WAIT_TIME_WARNING_MINUTES = 5;
+const MAX_STORE_PHONE_LENGTH = 32;
 
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 const isUnsafeObjectKey = (key) => key === '__proto__' || key === 'prototype' || key === 'constructor';
@@ -34,6 +36,20 @@ const toNumber = (value, fallback = 0) => {
 };
 
 const clamp = (value, minValue, maxValue) => Math.min(maxValue, Math.max(minValue, value));
+
+const normalizeStorePhone = (value, fallback = '') => {
+  const source = value === undefined || value === null || value === '' ? fallback : value;
+  if (typeof source !== 'string' && typeof source !== 'number') {
+    return '';
+  }
+
+  const cleaned = String(source)
+    .replace(/[^0-9+()\-\s.]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return cleaned.slice(0, MAX_STORE_PHONE_LENGTH);
+};
 
 const normalizeToggleGoal = (inputGoal, defaultGoal, bounds = {}) => {
   const minValue = Number.isFinite(bounds.min) ? bounds.min : 0;
@@ -69,16 +85,18 @@ const normalizeOverrides = (inputOverrides) => {
   }, {});
 };
 
-const normalizeStoreSettings = (inputSettings) => {
+const normalizeStoreSettings = (inputSettings, options = {}) => {
   const source = inputSettings && typeof inputSettings === 'object' && !Array.isArray(inputSettings)
     ? inputSettings
     : {};
+  const fallbackStorePhone = options && typeof options === 'object' ? options.fallbackStorePhone : '';
 
   const goals = source.goals && typeof source.goals === 'object' ? source.goals : {};
   const timeslot = source.timeslot && typeof source.timeslot === 'object' ? source.timeslot : {};
   const hasGoal = (goalKey) => hasOwn(goals, goalKey) && goals[goalKey] && typeof goals[goalKey] === 'object';
 
   const defaultLimit = Math.round(clamp(toNumber(timeslot.defaultLimit, DEFAULT_TIMESLOT_ORDER_LIMIT), 1, 500));
+  const waitTimeWarningMinutes = Math.max(1, Math.round(clamp(toNumber(source.waitTimeWarningMinutes, DEFAULT_WAIT_TIME_WARNING_MINUTES), 1, 1440)));
 
   return {
     goals: {
@@ -91,17 +109,29 @@ const normalizeStoreSettings = (inputSettings) => {
     timeslot: {
       defaultLimit,
       overrides: normalizeOverrides(timeslot.overrides)
-    }
+    },
+    waitTimeWarningMinutes,
+    storePhone: normalizeStorePhone(source.storePhone, fallbackStorePhone)
   };
 };
 
-const getStoreSettingsFromStore = (store) => {
+const getStoreSettingsFromStore = (store, options = {}) => {
   const rawPayload = store?.backroomDoorLocation;
   const payload = rawPayload && typeof rawPayload === 'object' && !Array.isArray(rawPayload)
     ? rawPayload
     : {};
 
-  return normalizeStoreSettings(payload[STORE_SETTINGS_KEY]);
+  return normalizeStoreSettings(payload[STORE_SETTINGS_KEY], {
+    fallbackStorePhone: options?.fallbackStorePhone || store?.phone || ''
+  });
+};
+
+const resolveStorePhoneFromStore = (store) => {
+  const settings = getStoreSettingsFromStore(store, {
+    fallbackStorePhone: store?.phone || ''
+  });
+
+  return normalizeStorePhone(settings.storePhone, store?.phone || '');
 };
 
 const buildBackroomDoorLocationWithStoreSettings = (existingBackroomDoorLocation, nextStoreSettings) => {
@@ -145,9 +175,12 @@ const getTimeslotCapacityForDate = (storeSettings, dateValue) => {
 module.exports = {
   DEFAULT_GOALS,
   DEFAULT_TIMESLOT_ORDER_LIMIT,
+  DEFAULT_WAIT_TIME_WARNING_MINUTES,
   STORE_SETTINGS_KEY,
   normalizeStoreSettings,
+  normalizeStorePhone,
   getStoreSettingsFromStore,
+  resolveStorePhoneFromStore,
   buildBackroomDoorLocationWithStoreSettings,
   getTimeslotKeyFromDate,
   getTimeslotCapacityForDate

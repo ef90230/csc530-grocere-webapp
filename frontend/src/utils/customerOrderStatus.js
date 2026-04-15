@@ -88,7 +88,7 @@ const getLineItemState = (orderItem) => {
     return 'resolved';
   }
 
-  if (normalizedStatus === 'substituted' || normalizedStatus === 'out_of_stock' || normalizedStatus === 'skipped' || normalizedStatus === 'not_found') {
+  if (normalizedStatus === 'substituted' || normalizedStatus === 'out_of_stock' || normalizedStatus === 'skipped' || normalizedStatus === 'not_found' || normalizedStatus === 'canceled' || normalizedStatus === 'cancelled') {
     return 'resolved';
   }
 

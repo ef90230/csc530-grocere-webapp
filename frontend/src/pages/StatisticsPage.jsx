@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/common/Navbar';
 import TopBar from '../components/common/TopBar';
 import {
@@ -68,8 +69,93 @@ const METRIC_CARDS = [
     label: 'Efficiency score',
     size: 'small',
     section: 'picking'
-  }
+    },
+    {
+        key: 'totesStaged',
+        label: 'Totes staged',
+        size: 'small',
+        section: 'staging'
+    },
+    {
+        key: 'itemsStaged',
+        label: 'Items staged',
+        size: 'small',
+        section: 'staging'
+    },
+    {
+        key: 'ordersDispensed',
+        label: 'Orders dispensed',
+        size: 'small',
+        section: 'dispensing'
+    },
+    {
+        key: 'totesDispensed',
+        label: 'Totes dispensed',
+        size: 'small',
+        section: 'dispensing'
+    },
+    {
+        key: 'itemsDispensed',
+        label: 'Items dispensed',
+        size: 'small',
+        section: 'dispensing'
+    },
+    {
+        key: 'avgWaitTimeMinutes',
+        label: 'Avg wait time',
+        size: 'small',
+        section: 'dispensing',
+        storeOnly: true,
+        lowerIsBetter: true,
+        goalKey: 'waitTimeWarningMinutes'
+    },
+    {
+        key: 'cumulativeWaitTimeMinutes',
+        label: 'Cumulative wait',
+        size: 'small',
+        section: 'dispensing',
+        storeOnly: true
+    }
 ];
+
+const METRIC_INFO_CONTENT = {
+    pickRate: {
+        title: 'Pick Rate',
+        body: 'The rate of items picked during pick walks over the time spent picking. It is measured in items per hour. A low pick rate in a majority of employees is a sign the pick path is not very efficient, or they are having trouble finding common items.'
+    },
+    firstTimePickPercent: {
+        title: 'First-time Pick',
+        body: 'The percentage of items found without making a mistake over all items in pick walks. A mistake is defined as skipping, pressing Item Not Found, or scanning or entering the wrong UPC or PLU code. A low First-time Pick may imply that items may be in stock, but they are stocked in the wrong location.'
+    },
+    preSubstitutionPercent: {
+        title: 'Pre-substitution',
+        body: 'The percentage of originally ordered items found over total original items ordered. A low pre-substitution may mean that items popular with customers are running out of stock.'
+    },
+    postSubstitutionPercent: {
+        title: 'Post-substitution',
+        body: 'The combined percentage of originally ordered and substituted items found over total original items ordered.'
+    },
+    onTimePercent: {
+        title: 'On-time',
+        body: 'The percentage of items picked without going overdue over all items ordered. If picks begin running overdue, it is a sign that order volume may be too high for the store to handle. Consider adding more staff, or restricting the number of orders that may be scheduled at certain times.'
+    },
+    percentNotFound: {
+        title: 'Percent Not Found',
+        body: 'The combined quantity of original items and substitutes marked as not found over all items ordered.'
+    },
+    weightedEfficiency: {
+        title: 'Efficiency Score',
+        body: 'A weighted score that combines the total picks, first-time pick, pre-substitution, and % not found stats.'
+    },
+    avgWaitTimeMinutes: {
+        title: 'Avg Wait Time',
+        body: 'Average time spent checked in by customers without the order being completed. High wait times may occur as a natural consequence of many cars checked in at the same time.'
+    },
+    cumulativeWaitTimeMinutes: {
+        title: 'Cumulative Wait',
+        body: 'Total time spent checked in by all customers without their orders being completed.'
+    }
+};
 
 const toNumber = (value) => {
   const numeric = Number(value);
@@ -91,12 +177,33 @@ const formatWalkStartedAt = (value) => {
     });
 };
 
+const formatWaitTime = (totalMinutes) => {
+    const mins = toNumber(totalMinutes);
+    if (mins <= 0) return '0m';
+    const h = Math.floor(mins / 60);
+    const m = Math.round(mins % 60);
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+};
+
 const formatValue = (metric, value) => {
   const safeValue = toNumber(value);
+
+    if (metric.key === 'avgWaitTimeMinutes') {
+        return formatWaitTime(safeValue);
+    }
+
+    if (metric.key === 'cumulativeWaitTimeMinutes') {
+        return formatWaitTime(safeValue);
+    }
 
   if (metric.key === 'itemsPicked') {
     return Math.round(safeValue).toLocaleString();
   }
+
+    if (metric.section === 'staging' || metric.section === 'dispensing') {
+        return Math.round(safeValue).toLocaleString();
+    }
 
   if (metric.key === 'pickRate') {
     return safeValue.toFixed(2);
@@ -110,13 +217,27 @@ const getMetricTone = (metric, value, storeSettings) => {
         return 'neutral';
     }
 
+    const safeValue = toNumber(value);
+
+    // waitTimeWarningMinutes is a top-level store setting, not inside goals
+    if (metric.key === 'avgWaitTimeMinutes') {
+        const warningMinutes = toNumber(storeSettings?.waitTimeWarningMinutes) || 5;
+        if (safeValue <= 0) return 'neutral';
+        return safeValue < warningMinutes ? 'success' : 'danger';
+    }
+
     const goalSetting = storeSettings?.goals?.[metric.goalKey];
     if (!goalSetting || goalSetting.enabled === false) {
     return 'neutral';
   }
 
-  const safeValue = toNumber(value);
     const goalValue = toNumber(goalSetting.value);
+
+    if (metric.lowerIsBetter) {
+        if (safeValue < goalValue) return 'success';
+        if (safeValue > goalValue) return 'danger';
+        return 'neutral';
+    }
 
     if (safeValue > goalValue) {
     return 'success';
@@ -134,6 +255,11 @@ const formatGoalLabel = (metric, storeSettings) => {
         return '';
     }
 
+    if (metric.key === 'avgWaitTimeMinutes') {
+        const warningMinutes = toNumber(storeSettings?.waitTimeWarningMinutes) || 5;
+        return `Goal: < ${warningMinutes} min`;
+    }
+
     const goalSetting = storeSettings?.goals?.[metric.goalKey];
     if (!goalSetting || goalSetting.enabled === false) {
         return 'Goal disabled';
@@ -148,11 +274,13 @@ const formatGoalLabel = (metric, storeSettings) => {
 };
 
 const StatisticsPage = () => {
+    const navigate = useNavigate();
     const [summary, setSummary] = useState(null);
     const [activeScope, setActiveScope] = useState('you');
     const [activeRange, setActiveRange] = useState('today');
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
+    const [activeInfoMetricKey, setActiveInfoMetricKey] = useState('');
 
     useEffect(() => {
         const token = localStorage.getItem('authToken');
@@ -233,7 +361,17 @@ const StatisticsPage = () => {
     const storeSettings = useMemo(() => {
         const settings = normalizeStoreSettings(summary?.store?.settings);
         saveStoreSettingsToCache(settings);
-        return settings;
+
+        // Prefer the threshold the employee configured in the Order List options menu
+        // (stored in localStorage) over the backend default.
+        const storedThreshold = Number(window.localStorage.getItem('grocereWaitThresholdMinutes'));
+        const localThreshold = Number.isInteger(storedThreshold) && storedThreshold >= 1 && storedThreshold <= 1440
+            ? storedThreshold
+            : null;
+
+        return localThreshold !== null
+            ? { ...settings, waitTimeWarningMinutes: localThreshold }
+            : settings;
     }, [summary?.store?.settings]);
 
     return (
@@ -242,7 +380,7 @@ const StatisticsPage = () => {
             <div className="statistics-content">
                 <div className="statistics-header-row">
                     <h1>{activeScope === 'store' ? 'Store Stats' : userFullName}</h1>
-                    <button type="button" className="leaderboard-button" disabled>
+                    <button type="button" className="leaderboard-button" onClick={() => navigate('/leaderboard')}>
                         Leaderboard
                     </button>
                 </div>
@@ -304,6 +442,16 @@ const StatisticsPage = () => {
 
                                     return (
                                         <article key={metric.key} className={`metric-card metric-card--${tone} metric-card--large`}>
+                                            {METRIC_INFO_CONTENT[metric.key] ? (
+                                                <button
+                                                    type="button"
+                                                    className="metric-card-info-button"
+                                                    aria-label={`${metric.label} information`}
+                                                    onClick={() => setActiveInfoMetricKey(metric.key)}
+                                                >
+                                                    i
+                                                </button>
+                                            ) : null}
                                             <div className="metric-card-value">
                                                 {formatValue(metric, value)}
                                                 {metric.unit ? <span className="metric-card-unit">{metric.unit}</span> : null}
@@ -323,6 +471,16 @@ const StatisticsPage = () => {
 
                                     return (
                                         <article key={metric.key} className={`metric-card metric-card--${tone} metric-card--small`}>
+                                            {METRIC_INFO_CONTENT[metric.key] ? (
+                                                <button
+                                                    type="button"
+                                                    className="metric-card-info-button"
+                                                    aria-label={`${metric.label} information`}
+                                                    onClick={() => setActiveInfoMetricKey(metric.key)}
+                                                >
+                                                    i
+                                                </button>
+                                            ) : null}
                                             <div className="metric-card-value">
                                                 {formatValue(metric, value)}
                                                 {metric.unit ? <span className="metric-card-unit">{metric.unit}</span> : null}
@@ -382,22 +540,60 @@ const StatisticsPage = () => {
 
                         <section className="stats-section" aria-label="Staging">
                             <h2>Staging</h2>
-                            <article className="metric-card metric-card--neutral metric-card--single">
-                                <div className="metric-card-value">{Math.round(toNumber(activeStats.totesStaged))}</div>
-                                <p className="metric-card-label">Totes staged</p>
-                            </article>
+                            <div className="metrics-grid metrics-grid--small">
+                                {METRIC_CARDS.filter((card) => card.section === 'staging').map((metric) => {
+                                    const value = activeStats[metric.key];
+
+                                    return (
+                                        <article key={metric.key} className="metric-card metric-card--neutral metric-card--small">
+                                            <div className="metric-card-value">{formatValue(metric, value)}</div>
+                                            <p className="metric-card-label">{metric.label}</p>
+                                        </article>
+                                    );
+                                })}
+                            </div>
                         </section>
 
                         <section className="stats-section" aria-label="Dispensing">
                             <h2>Dispensing</h2>
-                            <article className="metric-card metric-card--neutral metric-card--single">
-                                <div className="metric-card-value">{Math.round(toNumber(activeStats.ordersDispensed))}</div>
-                                <p className="metric-card-label">Orders dispensed</p>
-                            </article>
+                            <div className="metrics-grid metrics-grid--small">
+                                {METRIC_CARDS.filter((card) => card.section === 'dispensing' && (!card.storeOnly || activeScope === 'store')).map((metric) => {
+                                    const value = activeStats[metric.key];
+                                    const tone = getMetricTone(metric, value, storeSettings);
+                                    const goalLabel = formatGoalLabel(metric, storeSettings);
+
+                                    return (
+                                        <article key={metric.key} className={`metric-card metric-card--${tone} metric-card--small`}>
+                                            {METRIC_INFO_CONTENT[metric.key] ? (
+                                                <button
+                                                    type="button"
+                                                    className="metric-card-info-button"
+                                                    aria-label={`${metric.label} information`}
+                                                    onClick={() => setActiveInfoMetricKey(metric.key)}
+                                                >
+                                                    i
+                                                </button>
+                                            ) : null}
+                                            <div className="metric-card-value">{formatValue(metric, value)}</div>
+                                            <p className="metric-card-label">{metric.label}</p>
+                                            {goalLabel ? <p className="metric-card-goal">{goalLabel}</p> : null}
+                                        </article>
+                                    );
+                                })}
+                            </div>
                         </section>
                     </>
                 )}
             </div>
+            {activeInfoMetricKey && METRIC_INFO_CONTENT[activeInfoMetricKey] ? (
+                <div className="stats-info-overlay" onClick={() => setActiveInfoMetricKey('')}>
+                    <div className="stats-info-overlay-hint">Click anywhere outside this card to close this menu</div>
+                    <section className="stats-info-card" onClick={(event) => event.stopPropagation()}>
+                        <h2>{METRIC_INFO_CONTENT[activeInfoMetricKey].title}</h2>
+                        <p>{METRIC_INFO_CONTENT[activeInfoMetricKey].body}</p>
+                    </section>
+                </div>
+            ) : null}
             <Navbar />
         </div>
     );

@@ -1,6 +1,8 @@
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'integration-test-secret';
 
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const request = require('supertest');
 
@@ -17,6 +19,10 @@ const {
   StagingLocation,
   StagingAssignment
 } = require('../../models');
+const {
+  getEmployeeDayTotals: getEmployeeItemsStagedDayTotals,
+  getLocalDayKey: getItemsStagedDayKey
+} = require('../../utils/employeeStagedItemsHistoryStore');
 
 const buildApp = () => {
   const app = express();
@@ -155,6 +161,17 @@ describe('staging locations routes integration', () => {
   const app = buildApp();
 
   beforeEach(async () => {
+    const historyFiles = [
+      path.join(__dirname, '..', '..', 'database', 'employee-totes-history.json'),
+      path.join(__dirname, '..', '..', 'database', 'employee-staged-items-history.json')
+    ];
+
+    historyFiles.forEach((historyFilePath) => {
+      if (fs.existsSync(historyFilePath)) {
+        fs.unlinkSync(historyFilePath);
+      }
+    });
+
     await sequelize.sync({ force: true });
   });
 
@@ -403,11 +420,26 @@ describe('staging locations routes integration', () => {
     expect(remainingAssignments).toBe(0);
   });
 
-  test('staging assignments update employee totesStaged metric', async () => {
+  test('staging assignments update employee totesStaged and items staged metrics', async () => {
     const { employeeToken, ambientOrder1 } = await seedBaseData();
 
     const actingEmployee = await Employee.findOne({ where: { employeeId: 'STAGER-1' } });
     expect(Number(actingEmployee.totesStaged || 0)).toBe(0);
+
+    await OrderItem.update(
+      {
+        quantity: 13,
+        status: 'found',
+        pickedQuantity: 13
+      },
+      {
+        where: { orderId: ambientOrder1.id }
+      }
+    );
+
+    const todayDayKey = getItemsStagedDayKey(new Date());
+    const beforeItemsStagedHistory = getEmployeeItemsStagedDayTotals(actingEmployee.id);
+    expect(Number(beforeItemsStagedHistory[todayDayKey] || 0)).toBe(0);
 
     const locationCreate = await request(app)
       .post('/api/staging-locations')
@@ -432,6 +464,8 @@ describe('staging locations routes integration', () => {
 
     const afterStageEmployee = await Employee.findByPk(actingEmployee.id);
     expect(Number(afterStageEmployee.totesStaged || 0)).toBe(1);
+    const afterStageItemsStagedHistory = getEmployeeItemsStagedDayTotals(actingEmployee.id);
+    expect(Number(afterStageItemsStagedHistory[todayDayKey] || 0)).toBe(13);
 
     const unstageResponse = await request(app)
       .delete('/api/staging-locations/assignments')
@@ -445,5 +479,7 @@ describe('staging locations routes integration', () => {
 
     const afterUnstageEmployee = await Employee.findByPk(actingEmployee.id);
     expect(Number(afterUnstageEmployee.totesStaged || 0)).toBe(0);
+    const afterUnstageItemsStagedHistory = getEmployeeItemsStagedDayTotals(actingEmployee.id);
+    expect(Number(afterUnstageItemsStagedHistory[todayDayKey] || 0)).toBe(0);
   });
 });

@@ -14,11 +14,12 @@ const protect = async (req, res, next) => {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       console.log(`[Auth] Token decoded - type: ${decoded.type}, id: ${decoded.id}`);
 
-      if (decoded.type === 'employee') {
+      if (decoded.type === 'employee' || decoded.type === 'admin') {
         req.user = await Employee.findByPk(decoded.id, {
           attributes: { exclude: ['password'] }
         });
         req.userType = 'employee';
+        req.authType = decoded.type;
         console.log(`[Auth] Employee access - userId: ${req.user?.id}`);
       } else if (decoded.type === 'customer') {
         req.user = await Customer.findByPk(decoded.id, {
@@ -57,6 +58,10 @@ const restrictTo = (...roles) => {
     }
 
     if (!roles.includes(req.user.role)) {
+      if (req.authType === 'admin') {
+        return next();
+      }
+
       return res.status(403).json({
         message: 'You do not have permission to perform this action'
       });

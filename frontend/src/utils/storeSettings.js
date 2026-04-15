@@ -1,5 +1,7 @@
 export const STORE_SETTINGS_CACHE_KEY = 'grocereStoreSettingsCache';
 
+export const DEFAULT_WAIT_TIME_WARNING_MINUTES = 5;
+
 export const DEFAULT_STORE_SETTINGS = {
   goals: {
     pickRateGoal: {
@@ -26,8 +28,11 @@ export const DEFAULT_STORE_SETTINGS = {
   timeslot: {
     defaultLimit: 20,
     overrides: {}
-  }
+  },
+  storePhone: ''
 };
+
+const MAX_STORE_PHONE_LENGTH = 32;
 
 const toNumber = (value, fallback = 0) => {
   const parsed = Number(value);
@@ -37,6 +42,19 @@ const toNumber = (value, fallback = 0) => {
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
 const isUnsafeObjectKey = (key) => key === '__proto__' || key === 'prototype' || key === 'constructor';
+
+const normalizeStorePhone = (value) => {
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    return '';
+  }
+
+  const cleaned = String(value)
+    .replace(/[^0-9+()\-\s.]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return cleaned.slice(0, MAX_STORE_PHONE_LENGTH);
+};
 
 const normalizeOverrides = (inputOverrides) => {
   if (!inputOverrides || typeof inputOverrides !== 'object' || Array.isArray(inputOverrides)) {
@@ -79,6 +97,8 @@ export const normalizeStoreSettings = (inputSettings) => {
 
   const hasGoal = (goalKey) => hasOwn(goals, goalKey) && goals[goalKey] && typeof goals[goalKey] === 'object';
 
+  const waitTimeWarningMinutes = Math.max(1, Math.round(Math.min(1440, toNumber(source.waitTimeWarningMinutes, DEFAULT_WAIT_TIME_WARNING_MINUTES))));
+
   return {
     goals: {
       pickRateGoal: normalizeGoal(hasGoal('pickRateGoal') ? goals.pickRateGoal : undefined, DEFAULT_STORE_SETTINGS.goals.pickRateGoal, { min: 0.01 }),
@@ -90,7 +110,9 @@ export const normalizeStoreSettings = (inputSettings) => {
     timeslot: {
       defaultLimit: Math.round(Math.max(1, toNumber(timeslot.defaultLimit, DEFAULT_STORE_SETTINGS.timeslot.defaultLimit))),
       overrides: normalizeOverrides(timeslot.overrides)
-    }
+    },
+    waitTimeWarningMinutes,
+    storePhone: normalizeStorePhone(source.storePhone)
   };
 };
 

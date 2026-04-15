@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '../components/common/Navbar';
 import TopBar from '../components/common/TopBar';
@@ -106,6 +106,20 @@ const StagingPage = () => {
     const [selectedLocationByGroup, setSelectedLocationByGroup] = useState({});
     const [updatingGroupKey, setUpdatingGroupKey] = useState('');
     const [highlightedGroupKey, setHighlightedGroupKey] = useState('');
+    const [isLocationCodePromptOpen, setIsLocationCodePromptOpen] = useState(false);
+    const [locationCodePromptContext, setLocationCodePromptContext] = useState(null);
+    const [locationCodeEntry, setLocationCodeEntry] = useState('');
+    const [locationCodePromptError, setLocationCodePromptError] = useState('');
+    const [locationCodeBypassSeconds, setLocationCodeBypassSeconds] = useState(5);
+    const [isLocationCodeBypassReady, setIsLocationCodeBypassReady] = useState(false);
+    const [isLocationCodeScannerOpen, setIsLocationCodeScannerOpen] = useState(false);
+    const [locationCodeScannerMessage, setLocationCodeScannerMessage] = useState('');
+
+    const locationCodeScannerVideoRef = useRef(null);
+    const locationCodeScannerStreamRef = useRef(null);
+    const locationCodeScannerDetectorRef = useRef(null);
+    const locationCodeScannerFrameRef = useRef(null);
+    const locationCodeScannerHandlingRef = useRef(false);
 
     const loadLocationData = async (token, signal) => {
         const [locationsResponse, assignmentsResponse] = await Promise.all([
@@ -147,11 +161,162 @@ const StagingPage = () => {
         setAssignmentByGroup(nextAssignmentByGroup);
     };
 
+    const normalizeCodeValue = (value = '') => String(value || '').trim();
+
+    const stopLocationCodeScannerSession = () => {
+        if (locationCodeScannerFrameRef.current) {
+            window.cancelAnimationFrame(locationCodeScannerFrameRef.current);
+            locationCodeScannerFrameRef.current = null;
+        }
+
+        if (locationCodeScannerStreamRef.current) {
+            locationCodeScannerStreamRef.current.getTracks().forEach((track) => track.stop());
+            locationCodeScannerStreamRef.current = null;
+        }
+
+        locationCodeScannerDetectorRef.current = null;
+        locationCodeScannerHandlingRef.current = false;
+
+        if (locationCodeScannerVideoRef.current) {
+            locationCodeScannerVideoRef.current.srcObject = null;
+        }
+    };
+
+    const closeLocationCodeScanner = () => {
+        stopLocationCodeScannerSession();
+        setIsLocationCodeScannerOpen(false);
+    };
+
+    const closeLocationCodePrompt = () => {
+        setIsLocationCodePromptOpen(false);
+        setLocationCodePromptContext(null);
+        setLocationCodeEntry('');
+        setLocationCodePromptError('');
+        setLocationCodeBypassSeconds(5);
+        setIsLocationCodeBypassReady(false);
+        closeLocationCodeScanner();
+    };
+
+    const assignGroupToLocationInternal = async (orderId, commodity, selectedLocationId) => {
+        const key = buildGroupKey(orderId, commodity);
+        const token = window.localStorage.getItem('authToken');
+        if (!token) {
+            navigate('/');
+            return;
+        }
+
+        setUpdatingGroupKey(key);
+        setErrorMessage('');
+
+        try {
+            const response = await fetch(`${API_BASE}/api/staging-locations/assignments`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    orderId,
+                    commodity,
+                    stagingLocationId: selectedLocationId
+                })
+            });
+
+            if (!response.ok) {
+                const payload = await response.json().catch(() => ({}));
+                throw new Error(payload.message || 'Unable to stage this item group.');
+            }
+
+            await refreshStagingMeta();
+        } catch (error) {
+            console.error('Unable to assign item group to location', error);
+            setErrorMessage(error.message || 'Unable to stage this item group.');
+        } finally {
+            setUpdatingGroupKey('');
+        }
+    };
+
+    const handleLocationCodeSubmit = async () => {
+        if (!locationCodePromptContext) {
+            return;
+        }
+
+        const enteredCode = normalizeCodeValue(locationCodeEntry);
+        const expectedCode = normalizeCodeValue(locationCodePromptContext?.location?.locationCode);
+
+        if (!enteredCode) {
+            setLocationCodePromptError('Please scan or enter the location code.');
+            return;
+        }
+
+        if (enteredCode !== expectedCode) {
+            setLocationCodePromptError('Location code does not match.');
+            return;
+        }
+
+        const { orderId, commodity, selectedLocationId } = locationCodePromptContext;
+        closeLocationCodePrompt();
+        await assignGroupToLocationInternal(orderId, commodity, selectedLocationId);
+    };
+
+    const handleLocationCodeBypass = async () => {
+        if (!isLocationCodeBypassReady || !locationCodePromptContext) {
+            return;
+        }
+
+        const { orderId, commodity, selectedLocationId } = locationCodePromptContext;
+        closeLocationCodePrompt();
+        await assignGroupToLocationInternal(orderId, commodity, selectedLocationId);
+    };
+
+    const handleOpenLocationCodeScanner = async () => {
+        setLocationCodeScannerMessage('');
+
+        const BarcodeDetectorApi = window.BarcodeDetector;
+        const mediaDevices = navigator?.mediaDevices;
+
+        if (!BarcodeDetectorApi || !mediaDevices?.getUserMedia) {
+            setLocationCodeScannerMessage('Camera unavailable');
+            return;
+        }
+
+        try {
+            const supportedFormats = typeof BarcodeDetectorApi.getSupportedFormats === 'function'
+                ? await BarcodeDetectorApi.getSupportedFormats()
+                : [];
+            const requestedFormats = ['code_128', 'code_39', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'qr_code'];
+            const detectorFormats = supportedFormats.length > 0
+                ? requestedFormats.filter((format) => supportedFormats.includes(format))
+                : requestedFormats;
+
+            if (supportedFormats.length > 0 && detectorFormats.length === 0) {
+                setLocationCodeScannerMessage('No supported barcode formats found on this device.');
+                return;
+            }
+
+            const stream = await mediaDevices.getUserMedia({
+                video: {
+                    facingMode: { ideal: 'environment' }
+                },
+                audio: false
+            });
+
+            locationCodeScannerStreamRef.current = stream;
+            locationCodeScannerDetectorRef.current = new BarcodeDetectorApi({ formats: detectorFormats });
+            setIsLocationCodeScannerOpen(true);
+        } catch (error) {
+            console.error('Unable to open location code scanner', error);
+            stopLocationCodeScannerSession();
+            setIsLocationCodeScannerOpen(false);
+            setLocationCodeScannerMessage('Camera unavailable');
+        }
+    };
+
     useEffect(() => {
         const token = window.localStorage.getItem('authToken');
         const userType = window.localStorage.getItem('userType');
 
-        if (!token || userType !== 'employee') {
+        if (!token || (userType !== 'employee' && userType !== 'admin')) {
             navigate('/');
             return undefined;
         }
@@ -310,41 +475,26 @@ const StagingPage = () => {
             return;
         }
 
-        const token = window.localStorage.getItem('authToken');
-        if (!token) {
-            navigate('/');
+        const selectedLocation = locations.find((location) => Number(location.id) === selectedLocationId);
+        const normalizedLocationCode = normalizeCodeValue(selectedLocation?.locationCode);
+
+        if (normalizedLocationCode) {
+            setLocationCodePromptContext({
+                orderId,
+                commodity,
+                selectedLocationId,
+                location: selectedLocation
+            });
+            setLocationCodeEntry('');
+            setLocationCodePromptError('');
+            setLocationCodeBypassSeconds(5);
+            setIsLocationCodeBypassReady(false);
+            setLocationCodeScannerMessage('');
+            setIsLocationCodePromptOpen(true);
             return;
         }
 
-        setUpdatingGroupKey(key);
-        setErrorMessage('');
-
-        try {
-            const response = await fetch(`${API_BASE}/api/staging-locations/assignments`, {
-                method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    orderId,
-                    commodity,
-                    stagingLocationId: selectedLocationId
-                })
-            });
-
-            if (!response.ok) {
-                const payload = await response.json().catch(() => ({}));
-                throw new Error(payload.message || 'Unable to stage this item group.');
-            }
-
-            await refreshStagingMeta();
-        } catch (error) {
-            console.error('Unable to assign item group to location', error);
-            setErrorMessage(error.message || 'Unable to stage this item group.');
-        } finally {
-            setUpdatingGroupKey('');
-        }
+        await assignGroupToLocationInternal(orderId, commodity, selectedLocationId);
     };
 
     const unassignGroup = async (orderId, commodity) => {
@@ -396,6 +546,88 @@ const StagingPage = () => {
 
         return 'Unstaged';
     };
+
+    useEffect(() => {
+        if (!isLocationCodePromptOpen) {
+            return undefined;
+        }
+
+        setLocationCodeBypassSeconds(5);
+        setIsLocationCodeBypassReady(false);
+
+        const intervalId = window.setInterval(() => {
+            setLocationCodeBypassSeconds((current) => {
+                if (current <= 1) {
+                    window.clearInterval(intervalId);
+                    setIsLocationCodeBypassReady(true);
+                    return 0;
+                }
+
+                return current - 1;
+            });
+        }, 1000);
+
+        return () => window.clearInterval(intervalId);
+    }, [isLocationCodePromptOpen]);
+
+    useEffect(() => {
+        if (!isLocationCodeScannerOpen || !locationCodeScannerVideoRef.current || !locationCodeScannerStreamRef.current || !locationCodeScannerDetectorRef.current) {
+            return undefined;
+        }
+
+        const video = locationCodeScannerVideoRef.current;
+        video.srcObject = locationCodeScannerStreamRef.current;
+
+        const startScanning = async () => {
+            try {
+                await video.play();
+            } catch (error) {
+                console.error('Unable to start location scanner preview', error);
+                closeLocationCodeScanner();
+                setLocationCodeScannerMessage('Camera unavailable');
+                return;
+            }
+
+            const scan = async () => {
+                if (!locationCodeScannerDetectorRef.current || !locationCodeScannerVideoRef.current || locationCodeScannerHandlingRef.current) {
+                    locationCodeScannerFrameRef.current = window.requestAnimationFrame(scan);
+                    return;
+                }
+
+                try {
+                    const barcodes = await locationCodeScannerDetectorRef.current.detect(locationCodeScannerVideoRef.current);
+                    if (Array.isArray(barcodes) && barcodes.length > 0) {
+                        const rawValue = normalizeCodeValue(barcodes[0]?.rawValue);
+                        if (rawValue) {
+                            locationCodeScannerHandlingRef.current = true;
+                            setLocationCodeEntry(rawValue);
+                            closeLocationCodeScanner();
+                            locationCodeScannerHandlingRef.current = false;
+                            return;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Location code scan failed', error);
+                }
+
+                locationCodeScannerFrameRef.current = window.requestAnimationFrame(scan);
+            };
+
+            locationCodeScannerFrameRef.current = window.requestAnimationFrame(scan);
+        };
+
+        startScanning();
+
+        return () => {
+            stopLocationCodeScannerSession();
+        };
+    // Effect depends on scanner modal state and refs controlled by helper methods.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isLocationCodeScannerOpen]);
+
+    useEffect(() => () => {
+        stopLocationCodeScannerSession();
+    }, []);
 
     return (
         <div className="staging-page">
@@ -452,7 +684,7 @@ const StagingPage = () => {
                                         <div>
                                             <p className="staging-order-customer">{getCustomerName(entry.order)}</p>
                                             <p className="staging-order-meta">
-                                                Order {entry.order.orderNumber || `#${orderId}`} • Due {formatDueTime(entry.order.scheduledPickupTime)}
+                                                Order {entry.order.orderNumber || `#${orderId}`} {'\u00B7'} Due {formatDueTime(entry.order.scheduledPickupTime)}
                                             </p>
                                         </div>
                                         <span className="staging-order-progress">
@@ -503,7 +735,7 @@ const StagingPage = () => {
                                                                         .sort((left, right) => left.name.localeCompare(right.name))
                                                                         .map((location) => (
                                                                             <option key={location.id} value={location.id}>
-                                                                                {location.name} ({Number(location.toteCount || 0)}/{Number(location.stagingLimit || 10)})
+                                                                                {location.name}{location.locationCode ? ' [Locked]' : ''} ({Number(location.toteCount || 0)}/{Number(location.stagingLimit || 10)})
                                                                             </option>
                                                                         ))}
                                                                 </select>
@@ -540,9 +772,62 @@ const StagingPage = () => {
                 ) : null}
             </main>
 
+            {isLocationCodePromptOpen && locationCodePromptContext?.location ? (
+                <div className="staging-code-modal-backdrop" role="presentation" onClick={closeLocationCodePrompt}>
+                    <section className="staging-code-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+                        <h2>Locked Location</h2>
+                        <p>
+                            {locationCodePromptContext.location.name} requires a location code before staging.
+                        </p>
+                        <input
+                            type="text"
+                            value={locationCodeEntry}
+                            onChange={(event) => setLocationCodeEntry(event.target.value)}
+                            placeholder="Scan or enter location code"
+                            autoFocus
+                        />
+                        <div className="staging-code-modal-actions">
+                            <button type="button" className="staging-action-btn" onClick={handleOpenLocationCodeScanner}>
+                                Scan Code
+                            </button>
+                            <button type="button" className="staging-action-btn" onClick={handleLocationCodeSubmit}>
+                                Verify
+                            </button>
+                            <button type="button" className="staging-action-btn staging-action-btn--danger" onClick={closeLocationCodePrompt}>
+                                Cancel
+                            </button>
+                        </div>
+                        {locationCodePromptError ? <p className="staging-code-modal-error">{locationCodePromptError}</p> : null}
+                        {locationCodeScannerMessage ? <p className="staging-code-modal-error">{locationCodeScannerMessage}</p> : null}
+                        {!isLocationCodeBypassReady ? (
+                            <p className="staging-code-modal-help">Bypass available in {locationCodeBypassSeconds}s</p>
+                        ) : (
+                            <button type="button" className="staging-action-btn staging-action-btn--muted" onClick={handleLocationCodeBypass}>
+                                Bypass Lock
+                            </button>
+                        )}
+                    </section>
+                </div>
+            ) : null}
+
+            {isLocationCodeScannerOpen ? (
+                <div className="staging-code-modal-backdrop" role="presentation" onClick={closeLocationCodeScanner}>
+                    <section className="staging-code-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+                        <h2>Scan Location Code</h2>
+                        <video ref={locationCodeScannerVideoRef} className="staging-code-scanner-video" autoPlay playsInline muted />
+                        <div className="staging-code-modal-actions">
+                            <button type="button" className="staging-action-btn staging-action-btn--danger" onClick={closeLocationCodeScanner}>
+                                Close
+                            </button>
+                        </div>
+                    </section>
+                </div>
+            ) : null}
+
             <Navbar />
         </div>
     );
 };
 
 export default StagingPage;
+

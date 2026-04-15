@@ -39,7 +39,7 @@ const CommoditySelectPage = () => {
         const token = window.localStorage.getItem('authToken');
         const userType = window.localStorage.getItem('userType');
 
-        if (!token || userType !== 'employee') {
+        if (!token || (userType !== 'employee' && userType !== 'admin')) {
             navigate('/');
             return undefined;
         }
@@ -196,7 +196,7 @@ const CommoditySelectPage = () => {
 
                                 <div className="commodity-select-card-side">
                                     <span className="commodity-select-due-label">Due {formatDueTime(commodity.dueTime)}</span>
-                                    <span className="commodity-select-chevron" aria-hidden="true">›</span>
+                                    <span className="commodity-select-chevron" aria-hidden="true">&gt;</span>
                                 </div>
                             </button>
                         ))}
@@ -209,3 +209,4 @@ const CommoditySelectPage = () => {
 };
 
 export default CommoditySelectPage;
+

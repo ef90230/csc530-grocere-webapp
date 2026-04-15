@@ -33,7 +33,7 @@ const OrderItem = sequelize.define('OrderItem', {
     allowNull: false
   },
   status: {
-    type: DataTypes.ENUM('pending', 'found', 'substituted', 'out_of_stock', 'skipped'),
+    type: DataTypes.ENUM('pending', 'found', 'substituted', 'out_of_stock', 'skipped', 'canceled'),
     defaultValue: 'pending'
   },
   substitutedItemId: {
