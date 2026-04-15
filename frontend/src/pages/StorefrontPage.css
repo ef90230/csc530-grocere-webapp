@@ -253,6 +253,30 @@
   background: rgba(98, 6, 20, 0.55);
 }
 
+.storefront-order-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.storefront-order-card__call {
+  border-radius: 999px;
+  min-height: 40px;
+  padding: 0 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.storefront-order-card__call:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
 .storefront-item-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

@@ -1,5 +1,6 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/db');
+const { generateEntityUpc } = require('../utils/barcodeService');
 
 const StagingLocation = sequelize.define('StagingLocation', {
   id: {
@@ -39,6 +40,12 @@ const StagingLocation = sequelize.define('StagingLocation', {
       max: 50,
       isInt: true
     }
+  },
+  upc: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    unique: true,
+    comment: 'Generated barcode for tote location identification'
   }
 }, {
   tableName: 'staging_locations',
@@ -55,6 +62,12 @@ const StagingLocation = sequelize.define('StagingLocation', {
       fields: ['itemType']
     }
   ]
+});
+
+StagingLocation.beforeValidate((location) => {
+  if (!location.upc) {
+    location.upc = generateEntityUpc('stagingLocation', location.id);
+  }
 });
 
 module.exports = StagingLocation;

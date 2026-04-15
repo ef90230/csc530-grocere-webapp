@@ -1,4 +1,4 @@
-const { Order, OrderItem, Customer, Store, Employee, Item, ItemLocation, PickPath, Location, Aisle, StagingAssignment } = require('../models');
+const { Order, OrderItem, Customer, Store, Employee, Item, ItemLocation, PickPath, Location, Aisle, StagingAssignment, Cart, Timeslot } = require('../models');
 const { Op, fn, col } = require('sequelize');
 const {
   validateScheduleTime,
@@ -328,7 +328,15 @@ const getOrders = async (req, res) => {
         {
           model: Customer,
           as: 'customer',
-          attributes: ['id', 'customerId', 'firstName', 'lastName', 'phone', 'isCheckedIn', 'checkInTime', 'parkingSpot', 'vehicleInfo']
+          attributes: ['id', 'customerId', 'firstName', 'lastName', 'phone', 'isCheckedIn', 'checkInTime', 'parkingSpot', 'vehicleInfo'],
+          include: [
+            {
+              model: Cart,
+              as: 'cart',
+              attributes: ['id', 'upc', 'storeId'],
+              required: false
+            }
+          ]
         },
         {
           model: Store,
@@ -427,12 +435,20 @@ const getOrder = async (req, res) => {
         {
           model: Customer,
           as: 'customer',
-          attributes: ['id', 'customerId', 'firstName', 'lastName', 'phone', 'email', 'vehicleInfo', 'parkingSpot']
+          attributes: ['id', 'customerId', 'firstName', 'lastName', 'phone', 'email', 'vehicleInfo', 'parkingSpot'],
+          include: [
+            {
+              model: Cart,
+              as: 'cart',
+              attributes: ['id', 'upc', 'storeId'],
+              required: false
+            }
+          ]
         },
         {
           model: Store,
           as: 'store',
-          attributes: ['id', 'storeNumber', 'name', 'address', 'city', 'state']
+          attributes: ['id', 'storeNumber', 'name', 'address', 'city', 'state', 'phone']
         },
         {
           model: Employee,
@@ -486,6 +502,38 @@ const getOrder = async (req, res) => {
   } catch (error) {
     console.error('Get order error:', error);
     res.status(500).json({ message: 'Server error retrieving order' });
+  }
+};
+
+const getOrderTableJson = async (req, res) => {
+  try {
+    const { storeId, customerId, status, limit } = req.query;
+
+    const where = {};
+    if (storeId) where.storeId = storeId;
+    if (customerId) where.customerId = customerId;
+    if (status) where.status = status;
+
+    const parsedLimit = Number(limit);
+    const resolvedLimit = Number.isFinite(parsedLimit)
+      ? Math.min(1000, Math.max(1, Math.floor(parsedLimit)))
+      : 250;
+
+    const orders = await Order.findAll({
+      where,
+      order: [['createdAt', 'DESC']],
+      limit: resolvedLimit,
+      raw: true
+    });
+
+    res.json({
+      success: true,
+      count: orders.length,
+      orders
+    });
+  } catch (error) {
+    console.error('Get order table JSON error:', error);
+    res.status(500).json({ message: 'Server error retrieving order table JSON' });
   }
 };
 
@@ -615,19 +663,20 @@ const updateOrderStatus = async (req, res) => {
     }
 
     const { status, assignedPickerId, assignedDispenserId } = req.body;
+    const normalizedStatus = String(status || '').toLowerCase();
     const currentEmployeeId = Number(req?.user?.id);
 
     const updateData = { status };
     
-    if (status === 'picking' && !order.pickingStartTime) {
+    if (normalizedStatus === 'picking' && !order.pickingStartTime) {
       updateData.pickingStartTime = new Date();
     }
     
-    if (status === 'picked' && !order.pickingEndTime) {
+    if (normalizedStatus === 'picked' && !order.pickingEndTime) {
       updateData.pickingEndTime = new Date();
     }
 
-    if (status === 'completed' && !order.actualPickupTime) {
+    if (normalizedStatus === 'completed' && !order.actualPickupTime) {
       updateData.actualPickupTime = new Date();
 
       try {
@@ -648,7 +697,7 @@ const updateOrderStatus = async (req, res) => {
     }
 
     if (
-      ['dispensing', 'completed'].includes(String(status || '').toLowerCase())
+      ['dispensing', 'completed'].includes(normalizedStatus)
       && !assignedDispenserId
       && !order.assignedDispenserId
       && Number.isInteger(currentEmployeeId)
@@ -659,6 +708,39 @@ const updateOrderStatus = async (req, res) => {
 
     if (assignedPickerId) updateData.assignedPickerId = assignedPickerId;
     if (assignedDispenserId) updateData.assignedDispenserId = assignedDispenserId;
+
+    if (normalizedStatus === 'completed') {
+      const transaction = await Order.sequelize.transaction();
+
+      try {
+        await order.update(updateData, { transaction });
+        await StagingAssignment.destroy({
+          where: { orderId: order.id },
+          transaction
+        });
+        await Timeslot.destroy({
+          where: { orderNumber: order.orderNumber },
+          transaction
+        });
+        await OrderItem.destroy({
+          where: { orderId: order.id },
+          transaction
+        });
+        await order.destroy({ transaction });
+
+        await transaction.commit();
+
+        return res.json({
+          success: true,
+          deleted: true,
+          orderId: order.id,
+          status: 'completed'
+        });
+      } catch (error) {
+        await transaction.rollback();
+        throw error;
+      }
+    }
 
     await order.update(updateData);
 
@@ -1549,6 +1631,7 @@ const triggerSchedulePurge = async (req, res) => {
 module.exports = {
   getOrders,
   getOrder,
+  getOrderTableJson,
   createOrder,
   updateOrderStatus,
   updateOrderItem,

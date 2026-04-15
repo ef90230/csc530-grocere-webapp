@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   getOrders,
   getOrder,
+  getOrderTableJson,
   createOrder,
   updateOrderStatus,
   updateOrderItem,
@@ -31,6 +32,7 @@ router.post('/scheduling/validate/:storeId', validateOrderScheduleTime);
 router.post('/scheduling/purge', restrictTo('manager'), triggerSchedulePurge);
 
 router.get('/', getOrders);
+router.get('/table/json', getOrderTableJson);
 
 router.get('/commodities/:storeId', restrictTo('manager', 'picker'), getCommodityQueueForPicking);
 router.get('/picking/walk/current/:storeId', restrictTo('manager', 'picker'), getCurrentPickWalk);

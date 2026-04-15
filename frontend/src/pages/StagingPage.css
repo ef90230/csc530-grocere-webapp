@@ -1,3 +1,64 @@
+
+.staging-code-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  z-index: 50;
+}
+
+.staging-code-modal {
+  width: min(460px, 100%);
+  border: 1px solid #4e4e4e;
+  border-radius: 10px;
+  background: #e2e2e2;
+  padding: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.staging-code-modal h2,
+.staging-code-modal p {
+  margin: 0;
+}
+
+.staging-code-modal input {
+  min-height: 36px;
+  border-radius: 7px;
+  border: 1px solid #7f7f7f;
+  padding: 0 0.55rem;
+}
+
+.staging-code-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.staging-code-modal-error {
+  margin: 0;
+  color: #8a2020;
+  font-weight: 700;
+}
+
+.staging-code-modal-help {
+  margin: 0;
+  color: #3a3a3a;
+  font-size: 0.92rem;
+}
+
+.staging-code-scanner-video {
+  width: 100%;
+  max-height: 280px;
+  border-radius: 8px;
+  border: 1px solid #7c7c7c;
+  background: #111;
+  object-fit: cover;
+}
 .staging-page {
   min-height: 100vh;
   background: #f2f2f2;
@@ -92,6 +153,34 @@
   font-size: 0.95rem;
 }
 
+.staging-order-meta--secondary {
+  font-size: 0.84rem;
+  color: #333;
+}
+
+.staging-order-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.3rem;
+}
+
+.staging-checkin-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  border-radius: 999px;
+  border: 1px solid #0d6d3d;
+  background: #c9f0dd;
+  color: #0f4f31;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 0 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
 .staging-order-progress {
   min-width: 86px;
   min-height: 38px;
@@ -154,6 +243,27 @@
   margin: 0.22rem 0 0;
   font-size: 0.83rem;
   color: #2d2d2d;
+}
+
+.staging-verify-list {
+  margin-top: 0.3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.staging-verify-item {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  color: #2a2a2a;
+}
+
+.staging-verify-item span:first-child {
+  font-weight: 700;
 }
 
 .staging-group-status {

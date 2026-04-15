@@ -174,7 +174,7 @@ const getActiveAssignmentRows = async (storeId, extraWhere = {}) => {
         model: StagingLocation,
         as: 'stagingLocation',
         required: false,
-        attributes: ['id', 'name', 'itemType', 'stagingLimit']
+        attributes: ['id', 'name', 'itemType', 'stagingLimit', 'upc']
       }
     ],
     order: [[{ model: Order, as: 'order' }, 'scheduledPickupTime', 'ASC']]
@@ -257,7 +257,8 @@ const getAssignments = async (req, res) => {
             id: assignment.stagingLocation.id,
             name: assignment.stagingLocation.name,
             itemType: assignment.stagingLocation.itemType,
-            stagingLimit: assignment.stagingLocation.stagingLimit
+            stagingLimit: assignment.stagingLocation.stagingLimit,
+            upc: assignment.stagingLocation.upc
           }
           : null
       }))
