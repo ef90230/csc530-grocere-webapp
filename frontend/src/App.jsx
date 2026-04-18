@@ -23,6 +23,7 @@ import StatisticsPage from './pages/StatisticsPage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import StoreSettingsPage from './pages/StoreSettingsPage';
 import EmployeeSettingsPage from './pages/EmployeeSettingsPage';
+import AlertManagementPage from './pages/AlertManagementPage';
 
 const getAuthState = () => {
     const token = localStorage.getItem('authToken');
@@ -175,6 +176,14 @@ function App() {
                             element={
                                 <ProtectedRoute allowedRole="employee">
                                     <StoreSettingsPage />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="/alerts"
+                            element={
+                                <ProtectedRoute allowedRole="admin">
+                                    <AlertManagementPage />
                                 </ProtectedRoute>
                             }
                         />

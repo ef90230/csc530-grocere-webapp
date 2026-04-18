@@ -1,0 +1,45 @@
+.popup-comment-panel {
+  gap: 1rem;
+}
+
+.popup-comment-copy h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+}
+
+.popup-comment-copy p {
+  margin: 0;
+  color: #555;
+  font-size: 0.92rem;
+}
+
+.popup-comment-input {
+  width: 100%;
+  min-height: 12rem;
+  border: 1px solid #c6c6c6;
+  border-radius: 10px;
+  padding: 0.8rem 0.9rem;
+  font: inherit;
+  resize: vertical;
+}
+
+.popup-comment-input:focus {
+  outline: none;
+  border-color: #c9a725;
+  box-shadow: 0 0 0 3px rgba(242, 207, 74, 0.22);
+}
+
+.popup-comment-error {
+  margin: -0.35rem 0 0;
+  color: #b42318;
+  font-size: 0.88rem;
+}
+
+.popup-comment-send {
+  text-align: center;
+}
+
+.popup-comment-send:disabled {
+  cursor: default;
+  opacity: 0.65;
+}

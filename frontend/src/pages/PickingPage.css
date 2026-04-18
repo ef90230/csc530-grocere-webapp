@@ -75,6 +75,15 @@
   line-height: 1;
 }
 
+.picking-report-menu-button {
+  min-height: 30px;
+  border: 1px solid #1b1b1b;
+  background: #fff;
+  color: #111;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .picking-location-pill-group {
   flex: 1;
   display: grid;
@@ -515,6 +524,83 @@
   background: #426d95;
   color: #fff;
   font-weight: 700;
+}
+
+.picking-report-modal {
+  width: min(360px, calc(100vw - 2rem));
+  border-radius: 12px;
+  background: #d3d3d3;
+  border: 1px solid #6d6d6d;
+  padding: 0.75rem;
+}
+
+.picking-report-modal h3,
+.picking-report-subtitle,
+.picking-report-error {
+  margin: 0;
+}
+
+.picking-report-subtitle {
+  margin-top: 0.12rem;
+  font-size: 0.9rem;
+}
+
+.picking-report-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  margin-top: 0.55rem;
+}
+
+.picking-report-option {
+  min-height: 28px;
+  border: 1px solid #b6b6b6;
+  background: #fff;
+  color: #111;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.picking-report-option--selected {
+  background: #f2c538;
+}
+
+.picking-report-error {
+  margin-top: 0.45rem;
+  color: #9a1f1f;
+  font-size: 0.88rem;
+}
+
+.picking-report-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.7rem;
+}
+
+.picking-report-back,
+.picking-report-send {
+  min-width: 110px;
+  min-height: 32px;
+  border: none;
+  border-radius: 4px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.picking-report-back {
+  background: #fff;
+  color: #111;
+}
+
+.picking-report-send {
+  background: #1565d8;
+  color: #fff;
+}
+
+.picking-report-send:disabled {
+  background: #7ea7e5;
+  cursor: default;
 }
 
 .picking-confirm-actions {

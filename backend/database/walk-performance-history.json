@@ -309,6 +309,105 @@
       "extraMistakes": 0,
       "pickedQuantity": 10,
       "totalQuantity": 10
+    },
+    "6::2026-04-17T18:24:24.972Z::ambient": {
+      "key": "6::2026-04-17T18:24:24.972Z::ambient",
+      "employeeId": 6,
+      "storeId": 1,
+      "commodity": "ambient",
+      "startedAt": "2026-04-17T18:24:24.972Z",
+      "endedAt": "2026-04-17T18:25:13.240Z",
+      "closed": true,
+      "orderIds": [
+        31
+      ],
+      "itemTotals": {
+        "97": 3
+      },
+      "itemMistakes": {
+        "97": 1
+      },
+      "itemMistakeFlags": {
+        "97": true
+      },
+      "extraMistakes": 0,
+      "pickedQuantity": 3,
+      "totalQuantity": 3
+    },
+    "6::2026-04-18T18:00:53.524Z::chilled": {
+      "key": "6::2026-04-18T18:00:53.524Z::chilled",
+      "employeeId": 6,
+      "storeId": 1,
+      "commodity": "chilled",
+      "startedAt": "2026-04-18T18:00:53.524Z",
+      "endedAt": "2026-04-18T18:01:18.537Z",
+      "closed": true,
+      "orderIds": [
+        32
+      ],
+      "itemTotals": {
+        "102": 1
+      },
+      "itemMistakes": {},
+      "itemMistakeFlags": {
+        "98": true,
+        "99": true,
+        "100": true,
+        "101": true,
+        "103": true
+      },
+      "extraMistakes": 1,
+      "pickedQuantity": 1,
+      "totalQuantity": 1
+    },
+    "6::2026-04-18T18:30:07.274Z::frozen": {
+      "key": "6::2026-04-18T18:30:07.274Z::frozen",
+      "employeeId": 6,
+      "storeId": 1,
+      "commodity": "frozen",
+      "startedAt": "2026-04-18T18:30:07.274Z",
+      "endedAt": "2026-04-18T18:30:37.008Z",
+      "closed": true,
+      "orderIds": [
+        32
+      ],
+      "itemTotals": {
+        "101": 4,
+        "103": 3
+      },
+      "itemMistakes": {},
+      "itemMistakeFlags": {
+        "98": true,
+        "99": true,
+        "100": true
+      },
+      "extraMistakes": 7,
+      "pickedQuantity": 7,
+      "totalQuantity": 7
+    },
+    "6::2026-04-18T18:30:38.321Z::ambient": {
+      "key": "6::2026-04-18T18:30:38.321Z::ambient",
+      "employeeId": 6,
+      "storeId": 1,
+      "commodity": "ambient",
+      "startedAt": "2026-04-18T18:30:38.321Z",
+      "endedAt": "2026-04-18T18:31:19.402Z",
+      "closed": true,
+      "orderIds": [
+        32,
+        33
+      ],
+      "itemTotals": {
+        "98": 5,
+        "99": 3,
+        "100": 1,
+        "104": 4
+      },
+      "itemMistakes": {},
+      "itemMistakeFlags": {},
+      "extraMistakes": 0,
+      "pickedQuantity": 13,
+      "totalQuantity": 13
     }
   }
 }

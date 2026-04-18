@@ -16,6 +16,12 @@ const {
 } = require('../utils/walkPerformanceStore');
 const { recordOrderWaitTime } = require('../utils/storeWaitTimeHistoryStore');
 const { resolveStorePhoneFromStore } = require('../utils/storeSettings');
+const {
+  createOrderCanceledAlert,
+  createPickerExitedWalkAlert,
+  syncItemOutOfStockAlerts,
+  upsertSystemAlert
+} = require('./alertController');
 
 const COMMODITY_DISPLAY_NAMES = {
   ambient: 'Ambient Regular',
@@ -881,6 +887,7 @@ const getCommodityQueueForPicking = async (req, res) => {
           commodity: commodityKey,
           displayName: COMMODITY_DISPLAY_NAMES[commodityKey] || commodityKey,
           itemCount: 0,
+          dueItemCount: 0,
           dueTime: order.scheduledPickupTime,
           isOverdue: false,
           orderNumbers: []
@@ -888,8 +895,16 @@ const getCommodityQueueForPicking = async (req, res) => {
 
         currentEntry.itemCount += remainingQuantity;
 
-        if (new Date(order.scheduledPickupTime) < new Date(currentEntry.dueTime)) {
+        const scheduledPickupTime = new Date(order.scheduledPickupTime);
+        const currentDueTime = new Date(currentEntry.dueTime);
+
+        if (scheduledPickupTime < currentDueTime) {
           currentEntry.dueTime = order.scheduledPickupTime;
+          currentEntry.dueItemCount = remainingQuantity;
+        } else if (scheduledPickupTime.getTime() === currentDueTime.getTime()) {
+          currentEntry.dueItemCount += remainingQuantity;
+        } else if (!currentEntry.dueItemCount) {
+          currentEntry.dueItemCount = remainingQuantity;
         }
 
         if (!currentEntry.orderNumbers.includes(order.orderNumber)) {
@@ -906,6 +921,28 @@ const getCommodityQueueForPicking = async (req, res) => {
         isOverdue: new Date(commodity.dueTime) < now
       }))
       .sort((left, right) => new Date(left.dueTime) - new Date(right.dueTime));
+
+    commodities.forEach((commodity) => {
+      if (!commodity.isOverdue) {
+        return;
+      }
+
+      upsertSystemAlert({
+        type: 'picks_overdue',
+        subtype: commodity.commodity,
+        title: 'Picks went overdue',
+        subject: commodity.commodity,
+        message: commodity.commodity,
+        actionLabel: 'Pick List',
+        actionTarget: {
+          path: '/commodityselect'
+        },
+        icon: 'warning',
+        severity: 'critical',
+        storeId: Number(storeId),
+        sourceKey: `picks_overdue:${storeId}:${commodity.commodity}`
+      });
+    });
 
     res.json({
       success: true,
@@ -1203,6 +1240,12 @@ const recordPick = async (req, res) => {
       if (itemLocation) {
         const newQty = Math.max(0, Number(itemLocation.quantityOnHand) - qtyPicked);
         await itemLocation.update({ quantityOnHand: newQty });
+        await syncItemOutOfStockAlerts({
+          itemId: orderItem.itemId,
+          storeId: orderItem?.order?.storeId,
+          locationLabel: String(locationId),
+          locationQuantity: newQty
+        });
       }
     }
 
@@ -1227,7 +1270,7 @@ const recordPick = async (req, res) => {
 const endPickWalk = async (req, res) => {
   try {
     const employeeId = req.user?.id;
-    const { storeId, commodity } = req.body;
+    const { storeId, commodity, endedEarly } = req.body;
 
     if (!employeeId) {
       return res.status(401).json({ message: 'Employee authentication is required' });
@@ -1299,6 +1342,15 @@ const endPickWalk = async (req, res) => {
         }
       }
     );
+
+    if (endedEarly) {
+      const employeeName = `${req.user?.firstName || ''} ${req.user?.lastName || ''}`.trim() || 'Employee Name';
+      await createPickerExitedWalkAlert({
+        employeeId,
+        employeeName,
+        storeId
+      });
+    }
 
     const releasedItems = claimedOrders.reduce((sum, order) => (
       sum + order.items.reduce((itemSum, orderItem) => {
@@ -1410,24 +1462,78 @@ const recordWalkMistake = async (req, res) => {
 };
 
 const cancelOrder = async (req, res) => {
+  let transaction;
   try {
-    const order = await Order.findByPk(req.params.id);
+    transaction = await Order.sequelize.transaction();
+
+    const order = await Order.findByPk(req.params.id, { transaction });
 
     if (!order) {
+      await transaction.rollback();
       return res.status(404).json({ message: 'Order not found' });
     }
 
     if (['dispensing', 'completed'].includes(order.status)) {
+      await transaction.rollback();
       return res.status(400).json({ message: 'Cannot cancel order in current status' });
     }
 
-    await order.update({ status: 'cancelled' });
+    await order.update({ status: 'cancelled' }, { transaction });
+
+    await OrderItem.update(
+      { status: 'canceled' },
+      {
+        where: {
+          orderId: order.id,
+          status: 'pending'
+        },
+        transaction
+      }
+    );
+
+    const relatedOrders = await Order.findAll({
+      where: {
+        storeId: order.storeId,
+        orderNumber: order.orderNumber
+      },
+      attributes: ['id'],
+      transaction
+    });
+
+    const relatedOrderIds = relatedOrders
+      .map((relatedOrder) => Number(relatedOrder?.id))
+      .filter(Number.isInteger);
+
+    const orderIdsToClear = relatedOrderIds.length > 0
+      ? relatedOrderIds
+      : [Number(order.id)].filter(Number.isInteger);
+
+    if (orderIdsToClear.length > 0) {
+      await StagingAssignment.destroy({
+        where: {
+          storeId: order.storeId,
+          orderId: orderIdsToClear
+        },
+        transaction
+      });
+    }
+
+    await transaction.commit();
+
+    await createOrderCanceledAlert({
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      storeId: order.storeId
+    });
 
     res.json({
       success: true,
       message: 'Order cancelled successfully'
     });
   } catch (error) {
+    if (transaction) {
+      await transaction.rollback();
+    }
     console.error('Cancel order error:', error);
     res.status(500).json({ message: 'Server error cancelling order' });
   }

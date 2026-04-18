@@ -1,10 +1,15 @@
 jest.mock('../../../models', () => ({
   sequelize: {},
-  StagingLocation: {},
+  StagingLocation: {
+    findOne: jest.fn(),
+    create: jest.fn()
+  },
   StagingAssignment: {
     findAll: jest.fn()
   },
-  StagingLocationSetting: {},
+  StagingLocationSetting: {
+    findOrCreate: jest.fn()
+  },
   Order: {
     findOne: jest.fn()
   },
@@ -22,8 +27,8 @@ jest.mock('../../../utils/employeeStagedItemsHistoryStore', () => ({
   applyItemsStagedDelta: jest.fn()
 }));
 
-const { Order, StagingAssignment } = require('../../../models');
-const { getOrderTotesSummary } = require('../../../controllers/stagingLocationController');
+const { Order, StagingAssignment, StagingLocation, StagingLocationSetting } = require('../../../models');
+const { createLocation, getOrderTotesSummary } = require('../../../controllers/stagingLocationController');
 
 const createMockRes = () => {
   const res = {};
@@ -67,7 +72,8 @@ describe('stagingLocationController temperature-based staging groups', () => {
           status: 'found',
           item: {
             commodity: 'oversized',
-            temperature: 'ambient'
+            temperature: 'ambient',
+            weight: 25
           }
         },
         {
@@ -75,7 +81,8 @@ describe('stagingLocationController temperature-based staging groups', () => {
           status: 'pending',
           item: {
             commodity: 'restricted',
-            temperature: 'ambient'
+            temperature: 'ambient',
+            weight: 10
           }
         }
       ]
@@ -95,7 +102,7 @@ describe('stagingLocationController temperature-based staging groups', () => {
 
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
       success: true,
-      count: 2,
+      count: 3,
       totes: [
         expect.objectContaining({
           commodity: 'ambient',
@@ -106,8 +113,40 @@ describe('stagingLocationController temperature-based staging groups', () => {
           commodity: 'chilled',
           commodityLabel: 'Chilled',
           status: 'unstaged'
+        }),
+        expect.objectContaining({
+          commodity: 'oversized',
+          commodityLabel: 'Oversized',
+          status: 'unstaged'
         })
       ]
     }));
+  });
+
+  test('allows admins to create oversized staging locations', async () => {
+    const req = {
+      user: { storeId: 1 },
+      body: {
+        name: 'Oversized Bay 1',
+        itemType: 'oversized'
+      }
+    };
+    const res = createMockRes();
+
+    StagingLocation.findOne.mockResolvedValue(null);
+    StagingLocationSetting.findOrCreate.mockResolvedValue([{ stagingLimit: 10 }]);
+    StagingLocation.create.mockResolvedValue({
+      id: 20,
+      name: 'Oversized Bay 1',
+      itemType: 'oversized',
+      stagingLimit: 10
+    });
+
+    await createLocation(req, res);
+
+    expect(StagingLocation.create).toHaveBeenCalledWith(expect.objectContaining({
+      itemType: 'oversized'
+    }));
+    expect(res.status).toHaveBeenCalledWith(201);
   });
 });

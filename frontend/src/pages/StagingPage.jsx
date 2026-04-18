@@ -14,6 +14,7 @@ const COMMODITY_DISPLAY_NAMES = {
 };
 
 const STAGED_ORDER_STATUSES = new Set(['staged', 'ready', 'dispensing', 'completed']);
+const CANCELED_ORDER_STATUSES = new Set(['cancelled', 'canceled']);
 const TYPE_SORT_ORDER = ['ambient', 'chilled', 'frozen', 'hot'];
 
 const buildGroupKey = (orderId, commodity) => `${orderId}:${commodity}`;
@@ -385,6 +386,7 @@ const StagingPage = () => {
 
     const stagingOrders = useMemo(() => {
         return orders
+            .filter((order) => !CANCELED_ORDER_STATUSES.has(String(order?.status || '').toLowerCase()))
             .map((order) => {
                 const commodityGroups = getCommodityGroupStatuses(order, assignmentByGroup);
                 const stagedGroups = commodityGroups.filter((group) => group.status === 'staged').length;

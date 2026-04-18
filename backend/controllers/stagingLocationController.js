@@ -13,32 +13,45 @@ const {
 const { applyTotesDelta } = require('../utils/employeeTotesHistoryStore');
 const { applyItemsStagedDelta } = require('../utils/employeeStagedItemsHistoryStore');
 
-const ALLOWED_ITEM_TYPES = ['ambient', 'chilled', 'frozen', 'hot'];
+const ALLOWED_ITEM_TYPES = ['ambient', 'chilled', 'frozen', 'hot', 'oversized'];
 const INACTIVE_ORDER_STATUSES = ['dispensing', 'completed', 'cancelled'];
+const OVERSIZED_WEIGHT_THRESHOLD = 20;
 
 const COMMODITY_DISPLAY_NAMES = {
   ambient: 'Ambient',
   chilled: 'Chilled',
   frozen: 'Frozen',
-  hot: 'Hot'
+  hot: 'Hot',
+  oversized: 'Oversized'
 };
 
 const NON_DISPENSABLE_ITEM_STATUSES = new Set(['out_of_stock', 'skipped', 'not_found', 'cancelled', 'canceled']);
 
 const normalizeItemType = (value) => String(value || '').trim().toLowerCase();
 
+const toNullableDecimal = (value) => {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 const getStagingTypeForItem = (item) => {
   const normalizedTemperature = normalizeItemType(item?.temperature);
-  if (ALLOWED_ITEM_TYPES.includes(normalizedTemperature)) {
+  if (normalizedTemperature === 'chilled' || normalizedTemperature === 'frozen' || normalizedTemperature === 'hot') {
     return normalizedTemperature;
   }
 
-  const normalizedCommodity = normalizeItemType(item?.commodity);
-  if (ALLOWED_ITEM_TYPES.includes(normalizedCommodity)) {
-    return normalizedCommodity;
+  const resolvedWeight = toNullableDecimal(item?.weight);
+  if ((normalizedTemperature === 'ambient' || !normalizedTemperature)
+    && resolvedWeight !== null
+    && resolvedWeight >= OVERSIZED_WEIGHT_THRESHOLD) {
+    return 'oversized';
   }
 
-  return null;
+  return 'ambient';
 };
 
 const parseLocationId = (value) => {
@@ -94,14 +107,19 @@ const getStagedItemCountForCommodity = async (orderId, commodity, transaction) =
         model: Item,
         as: 'item',
         required: true,
-        where: { temperature: normalizedCommodity },
-        attributes: ['id', 'temperature']
+        attributes: ['id', 'temperature', 'weight']
       }
     ],
     transaction
   });
 
-  return orderItems.reduce((sum, orderItem) => sum + resolveDispensableItemQuantity(orderItem), 0);
+  return orderItems.reduce((sum, orderItem) => {
+    if (getStagingTypeForItem(orderItem?.item) !== normalizedCommodity) {
+      return sum;
+    }
+
+    return sum + resolveDispensableItemQuantity(orderItem);
+  }, 0);
 };
 
 const getStoreIdFromRequest = (req) => {
@@ -296,7 +314,7 @@ const createLocation = async (req, res) => {
     }
 
     if (!ALLOWED_ITEM_TYPES.includes(itemType)) {
-      return res.status(400).json({ message: 'itemType must be one of ambient, chilled, frozen, or hot.' });
+      return res.status(400).json({ message: 'itemType must be one of ambient, chilled, frozen, hot, or oversized.' });
     }
 
     const existing = await StagingLocation.findOne({
@@ -565,7 +583,7 @@ const assignGroup = async (req, res) => {
 
     if (!ALLOWED_ITEM_TYPES.includes(commodity)) {
       await transaction.rollback();
-      return res.status(400).json({ message: 'commodity must be one of ambient, chilled, frozen, or hot.' });
+      return res.status(400).json({ message: 'commodity must be one of ambient, chilled, frozen, hot, or oversized.' });
     }
 
     const location = await StagingLocation.findOne({
@@ -599,20 +617,21 @@ const assignGroup = async (req, res) => {
       return res.status(404).json({ message: 'Order not found.' });
     }
 
-    const hasCommodityItems = await OrderItem.findOne({
+    const orderItems = await OrderItem.findAll({
       where: { orderId },
+      attributes: ['id'],
       include: [
         {
           model: Item,
           as: 'item',
           required: true,
-          where: {
-            temperature: commodity
-          }
+          attributes: ['temperature', 'weight']
         }
       ],
       transaction
     });
+
+    const hasCommodityItems = orderItems.some((orderItem) => getStagingTypeForItem(orderItem?.item) === commodity);
 
     if (!hasCommodityItems) {
       await transaction.rollback();
@@ -694,7 +713,7 @@ const unassignGroup = async (req, res) => {
 
     if (!ALLOWED_ITEM_TYPES.includes(commodity)) {
       await transaction.rollback();
-      return res.status(400).json({ message: 'commodity must be one of ambient, chilled, frozen, or hot.' });
+      return res.status(400).json({ message: 'commodity must be one of ambient, chilled, frozen, hot, or oversized.' });
     }
 
     const stagedItemCount = await getStagedItemCountForCommodity(orderId, commodity, transaction);
@@ -813,7 +832,7 @@ const getOrderTotesSummary = async (req, res) => {
             {
               model: Item,
               as: 'item',
-              attributes: ['commodity', 'temperature']
+              attributes: ['commodity', 'temperature', 'weight']
             }
           ]
         }

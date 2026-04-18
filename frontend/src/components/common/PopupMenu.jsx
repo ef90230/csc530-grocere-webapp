@@ -8,12 +8,14 @@ const PopupMenu = ({
   onInventory,
   onStoreMap,
   onParkingLot,
+  onCommentsAndAlerts,
   onMyStats,
   onMySettings,
   onStoreSettings,
   onLogout,
   showBackroomLocations = false,
   showParkingLot = false,
+  showCommentsAndAlerts = false,
   showMySettings = false,
   showStoreSettings = false
 }) => {
@@ -63,6 +65,15 @@ const PopupMenu = ({
             onClick={onParkingLot}
           >
             Parking Lot
+          </button>
+        ) : null}
+        {showCommentsAndAlerts ? (
+          <button
+            type="button"
+            className="popup-action-button"
+            onClick={onCommentsAndAlerts}
+          >
+            Comments and Alerts
           </button>
         ) : null}
         <button

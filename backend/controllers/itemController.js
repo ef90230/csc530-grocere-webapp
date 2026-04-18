@@ -1,5 +1,6 @@
 const { Item, ItemLocation, Location, Aisle, Store, Order, OrderItem, sequelize } = require('../models');
 const { Op } = require('sequelize');
+const { syncItemOutOfStockAlerts } = require('./alertController');
 
 const TERMINAL_ORDER_STATUSES = new Set(['completed', 'complete', 'cancelled', 'canceled', 'deleted']);
 const CANCELED_ORDER_ITEM_STATUSES = new Set(['canceled', 'cancelled', 'out_of_stock', 'skipped', 'not_found']);
@@ -496,6 +497,13 @@ const updateItemInventory = async (req, res) => {
       await item.update({ unassignedQuantity: nextQuantity }, { transaction });
       await transaction.commit();
 
+      await syncItemOutOfStockAlerts({
+        itemId,
+        storeId,
+        locationLabel: '',
+        locationQuantity: null
+      });
+
       return res.json({
         success: true,
         unassignedQuantity: toNonNegativeInteger(item.unassignedQuantity, 0)
@@ -556,6 +564,16 @@ const updateItemInventory = async (req, res) => {
     }, { transaction });
 
     await transaction.commit();
+
+    const locationLabel = [location?.aisleId, location?.section]
+      .filter((value) => value !== undefined && value !== null && String(value).trim() !== '')
+      .join('-');
+    await syncItemOutOfStockAlerts({
+      itemId,
+      storeId,
+      locationLabel,
+      locationQuantity: nextQuantity
+    });
 
     return res.json({
       success: true,

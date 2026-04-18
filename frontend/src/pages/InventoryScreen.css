@@ -1,3 +1,12 @@
+.inventory-screen {
+  min-height: 100vh;
+}
+
+.inventory-screen .page-content {
+  min-height: calc(100vh - 56px);
+  padding: 0 1rem calc(86px + env(safe-area-inset-bottom));
+}
+
 .inventory-screen .toolbar {
   display: flex;
   align-items: center;
