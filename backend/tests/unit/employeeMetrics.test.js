@@ -97,7 +97,7 @@ describe('employeeMetricsService', () => {
     expect(walkHistory).toEqual([
       {
         commodity: 'ambient',
-        commodityLabel: 'Ambient Regular',
+        commodityLabel: 'Ambient',
         startedAt: '2026-03-30T10:00:00.000Z',
         endedAt: '2026-03-30T11:15:00.000Z',
         initialTotal: 6,
@@ -108,7 +108,7 @@ describe('employeeMetricsService', () => {
       },
       {
         commodity: 'frozen',
-        commodityLabel: 'Frozen Regular',
+        commodityLabel: 'Frozen',
         startedAt: '2026-03-29T08:00:00.000Z',
         endedAt: '2026-03-29T10:00:00.000Z',
         initialTotal: 4,

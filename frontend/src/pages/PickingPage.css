@@ -477,42 +477,8 @@
   object-fit: cover;
 }
 
-.picking-map-grid {
+.picking-map-preview {
   margin-top: 0.8rem;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.45rem;
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.picking-map-aisle {
-  border: 1px solid #7f8b98;
-  border-radius: 8px;
-  min-height: 42px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #e7edf4;
-  color: #334b63;
-  font-weight: 600;
-}
-
-.picking-map-aisle--highlighted {
-  background: #2066b5;
-  border-color: #164785;
-  color: #fff;
-}
-
-.picking-map-empty {
-  grid-column: 1 / -1;
-  border: 1px dashed #8f99a7;
-  border-radius: 8px;
-  min-height: 70px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #536879;
 }
 
 .picking-modal-close {

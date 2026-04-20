@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/common/Navbar';
 import TopBar from '../components/common/TopBar';
@@ -15,9 +15,69 @@ const COMMODITY_COLORS = {
   hot: '#FF6B35',
 };
 const COMMODITY_LABELS = { ambient: 'Ambient', chilled: 'Chilled', frozen: 'Frozen', hot: 'Hot' };
+const TEMPERATURE_OPTIONS = ['ambient', 'chilled', 'frozen', 'hot'];
 
 const DEFAULT_STORE_ID = 1; // TODO: get from auth context or URL param
 const DEFAULT_USER_ID = 1; // TODO: get from auth context
+
+const compareAisleNumbers = (left, right) => String(left || '').localeCompare(String(right || ''), undefined, { numeric: true, sensitivity: 'base' });
+
+const parseSectionOrdinal = (value) => {
+  const match = String(value || '').match(/(\d+)/);
+  return match ? Number(match[1]) : null;
+};
+
+const formatSectionLabel = (sectionValue) => {
+  const ordinal = parseSectionOrdinal(sectionValue);
+  return ordinal ? `Section ${ordinal}` : `Section ${String(sectionValue || '?').trim() || '?'}`;
+};
+
+const normalizeTemperature = (value, fallback = 'ambient') => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return TEMPERATURE_OPTIONS.includes(normalized) ? normalized : fallback;
+};
+
+const sortLocationsBySection = (locations = []) => {
+  return [...locations].sort((left, right) => {
+    const leftOrdinal = parseSectionOrdinal(left?.section);
+    const rightOrdinal = parseSectionOrdinal(right?.section);
+    if (leftOrdinal !== null && rightOrdinal !== null) {
+      return leftOrdinal - rightOrdinal;
+    }
+    return String(left?.section || '').localeCompare(String(right?.section || ''), undefined, { numeric: true, sensitivity: 'base' });
+  });
+};
+
+const normalizeAislesPayload = (aisles = []) => {
+  return [...aisles]
+    .map((aisle, index) => ({
+      ...aisle,
+      aisleName: String(aisle?.aisleName || ''),
+      coordinates: aisle.coordinates || {
+        x: index * 2,
+        y: Math.floor(index / 5) * 2
+      },
+      locations: sortLocationsBySection(aisle.locations || [])
+    }))
+    .sort((left, right) => compareAisleNumbers(left?.aisleNumber, right?.aisleNumber));
+};
+
+const createDialogState = () => ({
+  isOpen: false,
+  title: '',
+  message: '',
+  confirmLabel: 'OK',
+  cancelLabel: '',
+  confirmVariant: 'primary',
+  onConfirm: null,
+  closeOnBackdrop: true
+});
+
+const formatAisleDescriptor = (aisle) => {
+  const aisleNumber = String(aisle?.aisleNumber || '').trim();
+  const aisleName = String(aisle?.aisleName || '').trim();
+  return aisleName ? `${aisleNumber} — ${aisleName}` : aisleNumber;
+};
 
 const MapScreen = () => {
   const navigate = useNavigate();
@@ -40,12 +100,16 @@ const MapScreen = () => {
   // Mode state
   const [mode, setMode] = useState('view'); // 'view' or 'editing'
 
-  // AI Proposal state
-  const [showProposalModal, setShowProposalModal] = useState(false);
-  const [aiProposal, setAiProposal] = useState(null);
-  const [generatingAI, setGeneratingAI] = useState(false);
-  const [proposalError, setProposalError] = useState(null);
-  const [proposalCommodity, setProposalCommodity] = useState('ambient');
+  const [showAisleEditorModal, setShowAisleEditorModal] = useState(false);
+  const [aisleEditorBusy, setAisleEditorBusy] = useState(false);
+  const [appDialog, setAppDialog] = useState(createDialogState);
+  const [sectionItemsModal, setSectionItemsModal] = useState({
+    isOpen: false,
+    loading: false,
+    location: null,
+    items: [],
+    error: ''
+  });
 
   // Pick paths
   const [pickPaths, setPickPaths] = useState([]);
@@ -101,15 +165,8 @@ const MapScreen = () => {
         throw new Error(data.message || 'Unexpected response');
       }
       
-      // Ensure all aisles have coordinates
-      const aislesWithCoords = (data.aisles || []).map((aisle, index) => ({
-        ...aisle,
-        coordinates: aisle.coordinates || { 
-          x: index * 2, 
-          y: Math.floor(index / 5) * 2 
-        }
-      }));
-      
+      const aislesWithCoords = normalizeAislesPayload(data.aisles || []);
+
       setAisles(aislesWithCoords);
       setOriginalAisles(JSON.parse(JSON.stringify(aislesWithCoords)));
     } catch (err) {
@@ -141,6 +198,15 @@ const MapScreen = () => {
     return map;
   };
 
+  const getLocationsForAisleTemperature = useCallback((aisle, commodity) => {
+    const temperature = normalizeTemperature(commodity);
+    return sortLocationsBySection((aisle?.locations || []).filter((location) => normalizeTemperature(location?.temperature) === temperature));
+  }, []);
+
+  const hasEligibleSectionForCommodity = useCallback((aisle, commodity) => {
+    return getLocationsForAisleTemperature(aisle, commodity).length > 0;
+  }, [getLocationsForAisleTemperature]);
+
   const pathToAisleIds = path => {
     const map = buildLocationToAisleId();
     const seen = new Set();
@@ -152,14 +218,22 @@ const MapScreen = () => {
     return ids;
   };
 
-  const aisleIdsToPathSequence = aisleIds => {
+  const aisleIdsToPathSequence = (aisleIds, commodity) => {
     const locationIds = [];
     aisleIds.forEach(aisleId => {
       const aisle = aisles.find(a => a.id === aisleId);
-      if (aisle && aisle.locations) aisle.locations.forEach(loc => locationIds.push(loc.id));
+      getLocationsForAisleTemperature(aisle, commodity).forEach(loc => locationIds.push(loc.id));
     });
     return locationIds;
   };
+
+  const getAvailableAislesForCommodity = useCallback((commodity, excludedAisleIds = []) => {
+    return aisles
+      .filter((aisle) => typeof aisle.id === 'number' && !excludedAisleIds.includes(aisle.id) && hasEligibleSectionForCommodity(aisle, commodity))
+      .sort((left, right) => compareAisleNumbers(left?.aisleNumber, right?.aisleNumber));
+  }, [aisles, hasEligibleSectionForCommodity]);
+
+  const editingPath = useMemo(() => pickPaths.find((path) => path.id === editingPathId) || null, [editingPathId, pickPaths]);
 
   const getAisleCoordinates = aisle => {
     if (aisle.coordinates) {
@@ -273,33 +347,284 @@ const MapScreen = () => {
   };
 
   // Aisle management functions
-  const addAisle = () => {
-    const newAisleNumber = Math.max(...aisles.map(a => parseInt(a.aisleNumber) || 0), 0) + 1;
-    const newAisle = {
-      id: `temp-${Date.now()}`, // Temporary ID until saved
-      aisleNumber: newAisleNumber.toString(),
-      aisleName: `Aisle ${newAisleNumber}`,
-      category: 'General',
-      coordinates: { x: Math.floor(Math.random() * 10), y: Math.floor(Math.random() * 8) }
-    };
-    setAisles(prev => [...prev, newAisle]);
-    setHasChanges(true);
+  const addAisle = async () => {
+    setAisleEditorBusy(true);
+    setError(null);
+
+    try {
+      const nextIndex = aisles.length;
+      const coordinates = {
+        x: (nextIndex % 10) * 2,
+        y: Math.floor(nextIndex / 10) * 2
+      };
+
+      const response = await fetch(`${API_BASE}/api/aisles`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storeId: DEFAULT_STORE_ID,
+          coordinates
+        })
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.message || 'Failed to create aisle.');
+      }
+
+      await fetchAisles();
+    } catch (err) {
+      console.error('Add aisle error:', err);
+      setError(err.message || 'Failed to create aisle.');
+    } finally {
+      setAisleEditorBusy(false);
+    }
   };
 
-  const deleteAisle = () => {
-    const aisleNumber = prompt('Enter aisle number to delete:');
-    if (aisleNumber) {
-      setAisles(prev => prev.filter(aisle => aisle.aisleNumber !== aisleNumber));
-      setHasChanges(true);
+  const deleteAisleById = async (aisle) => {
+    if (!aisle?.id) {
+      return;
     }
+
+    setAppDialog({
+      isOpen: true,
+      title: 'Delete Aisle',
+      message: `Are you sure you wish to delete aisle ${aisle.aisleNumber}? All sections and item assignments in that aisle will be removed.`,
+      confirmLabel: 'Yes, Delete',
+      cancelLabel: 'Cancel',
+      confirmVariant: 'secondary',
+      closeOnBackdrop: true,
+      onConfirm: async () => {
+        setAisleEditorBusy(true);
+        setError(null);
+        try {
+          const response = await fetch(`${API_BASE}/api/aisles/${aisle.id}`, { method: 'DELETE' });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || !payload.success) {
+            throw new Error(payload.message || 'Failed to delete aisle.');
+          }
+
+          closeAppDialog();
+          await Promise.all([fetchAisles(), fetchPickPaths()]);
+        } catch (err) {
+          console.error('Delete aisle error:', err);
+          setError(err.message || 'Failed to delete aisle.');
+        } finally {
+          setAisleEditorBusy(false);
+        }
+      }
+    });
+  };
+
+  const addSectionToAisle = async (aisleId) => {
+    setAisleEditorBusy(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/api/aisles/${aisleId}/sections`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ temperature: 'ambient' })
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.message || 'Failed to add section.');
+      }
+
+      await fetchAisles();
+    } catch (err) {
+      console.error('Add section error:', err);
+      setError(err.message || 'Failed to add section.');
+    } finally {
+      setAisleEditorBusy(false);
+    }
+  };
+
+  const setAisleDescriptionDraft = useCallback((aisleId, nextValue) => {
+    setAisles((currentAisles) => currentAisles.map((aisle) => (
+      aisle.id === aisleId
+        ? { ...aisle, aisleName: nextValue }
+        : aisle
+    )));
+  }, []);
+
+  const updateAisleDescription = async (aisle) => {
+    if (!aisle?.id) {
+      return;
+    }
+
+    const nextDescription = String(aisle?.aisleName || '').trim();
+    const originalAisle = originalAisles.find((entry) => entry.id === aisle.id);
+    const originalDescription = String(originalAisle?.aisleName || '').trim();
+
+    if (nextDescription === originalDescription) {
+      return;
+    }
+
+    setAisleEditorBusy(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/api/aisles/${aisle.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ aisleName: nextDescription })
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.message || 'Failed to update aisle description.');
+      }
+
+      await fetchAisles();
+    } catch (err) {
+      console.error('Update aisle description error:', err);
+      setError(err.message || 'Failed to update aisle description.');
+      setAisles((currentAisles) => currentAisles.map((currentAisle) => (
+        currentAisle.id === aisle.id
+          ? { ...currentAisle, aisleName: originalDescription }
+          : currentAisle
+      )));
+    } finally {
+      setAisleEditorBusy(false);
+    }
+  };
+
+  const updateSectionTemperature = async (locationId, temperature) => {
+    setAisleEditorBusy(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/api/aisles/sections/${locationId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ temperature })
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.message || 'Failed to update section temperature.');
+      }
+
+      await Promise.all([fetchAisles(), fetchPickPaths()]);
+    } catch (err) {
+      console.error('Update section temperature error:', err);
+      setError(err.message || 'Failed to update section temperature.');
+    } finally {
+      setAisleEditorBusy(false);
+    }
+  };
+
+  const deleteSection = async (location) => {
+    if (!location?.id) {
+      return;
+    }
+
+    setAppDialog({
+      isOpen: true,
+      title: 'Delete Section',
+      message: `Are you sure? ${formatSectionLabel(location.section)} will be deleted and its assigned items will return to Unassigned.`,
+      confirmLabel: 'Yes, Delete',
+      cancelLabel: 'Cancel',
+      confirmVariant: 'secondary',
+      closeOnBackdrop: true,
+      onConfirm: async () => {
+        setAisleEditorBusy(true);
+        setError(null);
+
+        try {
+          const response = await fetch(`${API_BASE}/api/aisles/sections/${location.id}`, { method: 'DELETE' });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || !payload.success) {
+            throw new Error(payload.message || 'Failed to delete section.');
+          }
+
+          closeAppDialog();
+          await Promise.all([fetchAisles(), fetchPickPaths()]);
+        } catch (err) {
+          console.error('Delete section error:', err);
+          setError(err.message || 'Failed to delete section.');
+        } finally {
+          setAisleEditorBusy(false);
+        }
+      }
+    });
+  };
+
+  const closeAppDialog = useCallback(() => {
+    setAppDialog(createDialogState());
+  }, []);
+
+  const confirmAppDialog = useCallback(async () => {
+    if (typeof appDialog.onConfirm !== 'function') {
+      closeAppDialog();
+      return;
+    }
+
+    await appDialog.onConfirm();
+  }, [appDialog, closeAppDialog]);
+
+  const openSectionItemsModal = async (location) => {
+    setSectionItemsModal({
+      isOpen: true,
+      loading: true,
+      location,
+      items: [],
+      error: ''
+    });
+
+    try {
+      const response = await fetch(`${API_BASE}/api/aisles/sections/${location.id}/items`);
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.message || 'Failed to load section items.');
+      }
+
+      setSectionItemsModal({
+        isOpen: true,
+        loading: false,
+        location: payload.location || location,
+        items: payload.items || [],
+        error: ''
+      });
+    } catch (err) {
+      console.error('Open section items error:', err);
+      setSectionItemsModal({
+        isOpen: true,
+        loading: false,
+        location,
+        items: [],
+        error: err.message || 'Failed to load section items.'
+      });
+    }
+  };
+
+  const closeSectionItemsModal = () => {
+    setSectionItemsModal({
+      isOpen: false,
+      loading: false,
+      location: null,
+      items: [],
+      error: ''
+    });
   };
 
   // Pick path management functions
   const addPickPath = () => {
     const takenCommodities = new Set(pickPaths.map(p => p.commodity));
-    const available = ['ambient', 'chilled', 'frozen', 'hot'].find(c => !takenCommodities.has(c));
+    const available = TEMPERATURE_OPTIONS.find(c => !takenCommodities.has(c));
     if (!available) {
-      alert('All four temperature-type paths already exist. Delete one before adding another.');
+      setAppDialog({
+        isOpen: true,
+        title: "Can't Add New Pick Path",
+        message: 'All four temperature-type paths already exist. Delete one before adding another.',
+        confirmLabel: 'OK',
+        cancelLabel: '',
+        confirmVariant: 'primary',
+        closeOnBackdrop: true,
+        onConfirm: () => closeAppDialog()
+      });
       return;
     }
     setAddCommodity(available);
@@ -326,75 +651,6 @@ const MapScreen = () => {
     setDeletingPathId(pickPaths[0].id);
     setDeleteConfirm(false);
     setShowDeletePathModal(true);
-  };
-
-  const generateAIProposal = async () => {
-    setGeneratingAI(true);
-    setProposalError(null);
-    try {
-      const res = await fetch(`${API_BASE}/api/pickpaths/generate/ai`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          storeId: DEFAULT_STORE_ID,
-          commodity: proposalCommodity,
-          userId: DEFAULT_USER_ID,
-          savePath: false
-        })
-      });
-
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.message || 'Failed to generate AI proposal');
-      }
-
-      const data = await res.json();
-      setAiProposal(data);
-      setShowProposalModal(true);
-    } catch (err) {
-      console.error('AI proposal error:', err);
-      setProposalError(err.message);
-    } finally {
-      setGeneratingAI(false);
-    }
-  };
-
-  const approveProposal = async () => {
-    if (!aiProposal) return;
-
-    try {
-      const res = await fetch(`${API_BASE}/api/pickpaths`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          storeId: DEFAULT_STORE_ID,
-          commodity: proposalCommodity,
-          pathName: `AI Generated - ${proposalCommodity}`,
-          pathSequence: aiProposal.suggestedPath
-        })
-      });
-
-      if (!res.ok) {
-        throw new Error('Failed to save path');
-      }
-
-      alert('Path approved and saved successfully!');
-      setShowProposalModal(false);
-      setAiProposal(null);
-    } catch (err) {
-      console.error('Approve proposal error:', err);
-      alert(`Error: ${err.message}`);
-    }
-  };
-
-  const rejectProposal = () => {
-    setShowProposalModal(false);
-    setAiProposal(null);
-  };
-
-  const modifyProposal = () => {
-    setShowProposalModal(false);
-    // User can continue dragging aisles to manually adjust
   };
 
   const drawCanvas = useCallback(() => {
@@ -436,62 +692,31 @@ const MapScreen = () => {
       }
     });
 
-    // Draw AI proposed path if available
-    if (aiProposal && aiProposal.suggestedPath) {
-      ctx.strokeStyle = '#FF9800';
+    // Draw pick paths with commodity-specific colors
+    pickPaths.forEach(path => {
+      const color = COMMODITY_COLORS[path.commodity] || '#999';
+      const orderedAisleIds = [];
+      const seen = new Set();
+      (path.pathSequence || []).forEach(locId => {
+        const aisleId = locationToAisleId[locId];
+        if (aisleId != null && !seen.has(aisleId)) { seen.add(aisleId); orderedAisleIds.push(aisleId); }
+      });
+      if (orderedAisleIds.length < 1) return;
+      ctx.strokeStyle = color;
       ctx.lineWidth = 3;
       ctx.setLineDash([]);
-
-      // Draw path through proposed locations (convert to aisles)
       ctx.beginPath();
-      let firstPoint = true;
-      for (let i = 0; i < aiProposal.suggestedPath.length; i++) {
-        const locationId = aiProposal.suggestedPath[i];
-        const aisleId = locationToAisleId[locationId];
+      let isFirst = true;
+      orderedAisleIds.forEach(aisleId => {
         const aisle = aisles.find(a => a.id === aisleId);
-        if (aisle) {
-          const coords = getAisleCoordinates(aisle);
-          const px = coords.x * GRID_SIZE + 15;
-          const py = coords.y * GRID_SIZE + 15;
-
-          if (firstPoint) {
-            ctx.moveTo(px, py);
-            firstPoint = false;
-          } else {
-            ctx.lineTo(px, py);
-          }
-        }
-      }
-      ctx.stroke();
-    }
-
-    // Draw pick paths with commodity-specific colors
-    if (!aiProposal) {
-      pickPaths.forEach(path => {
-        const color = COMMODITY_COLORS[path.commodity] || '#999';
-        const orderedAisleIds = [];
-        const seen = new Set();
-        (path.pathSequence || []).forEach(locId => {
-          const aisleId = locationToAisleId[locId];
-          if (aisleId != null && !seen.has(aisleId)) { seen.add(aisleId); orderedAisleIds.push(aisleId); }
-        });
-        if (orderedAisleIds.length < 1) return;
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 3;
-        ctx.setLineDash([]);
-        ctx.beginPath();
-        let isFirst = true;
-        orderedAisleIds.forEach(aisleId => {
-          const aisle = aisles.find(a => a.id === aisleId);
-          if (!aisle) return;
-          const coords = getAisleCoordinates(aisle);
-          const cx = coords.x * GRID_SIZE + GRID_SIZE / 2;
-          const cy = coords.y * GRID_SIZE + GRID_SIZE / 2;
-          if (isFirst) { ctx.moveTo(cx, cy); isFirst = false; } else ctx.lineTo(cx, cy);
-        });
-        ctx.stroke();
+        if (!aisle) return;
+        const coords = getAisleCoordinates(aisle);
+        const cx = coords.x * GRID_SIZE + GRID_SIZE / 2;
+        const cy = coords.y * GRID_SIZE + GRID_SIZE / 2;
+        if (isFirst) { ctx.moveTo(cx, cy); isFirst = false; } else ctx.lineTo(cx, cy);
       });
-    }
+      ctx.stroke();
+    });
 
     // Draw aisles
     aisles.forEach((aisle, index) => {
@@ -499,17 +724,13 @@ const MapScreen = () => {
       const x = coords.x * GRID_SIZE;
       const y = coords.y * GRID_SIZE;
       const size = GRID_SIZE;
-
-      // Determine if this aisle is in the AI proposal
-      const isInProposal = aiProposal && aiProposal.suggestedPath && 
-        aisle.locations && Array.isArray(aisle.locations) &&
-        aisle.locations.some(loc => aiProposal.suggestedPath.includes(loc.id));
+      const aisleLabel = String(aisle?.aisleNumber || '');
+      const maxLabelWidth = size - 4;
+      let labelFontSize = Math.min(30, Math.max(20, Math.floor(size * 0.75)));
 
       // Draw box
       if (aisle.id === draggingId) {
         ctx.fillStyle = '#4CAF50';
-      } else if (isInProposal) {
-        ctx.fillStyle = '#FF9800';
       } else {
         ctx.fillStyle = '#2196F3';
       }
@@ -522,12 +743,22 @@ const MapScreen = () => {
 
       // Draw aisle number
       ctx.fillStyle = '#fff';
-      ctx.font = 'bold 12px Arial';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(aisle.aisleNumber, x + size / 2, y + size / 2);
+      while (labelFontSize > 14) {
+        ctx.font = `900 ${labelFontSize}px Arial`;
+        if (ctx.measureText(aisleLabel).width <= maxLabelWidth) {
+          break;
+        }
+        labelFontSize -= 1;
+      }
+
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+      ctx.strokeText(aisleLabel, x + size / 2, y + size / 2 + 0.5);
+      ctx.fillText(aisleLabel, x + size / 2, y + size / 2);
     });
-  }, [aisles, draggingId, aiProposal, pickPaths]);
+  }, [aisles, draggingId, pickPaths]);
 
   // Redraw canvas when aisles change
   useEffect(() => {
@@ -536,47 +767,8 @@ const MapScreen = () => {
 
   const saveChanges = async () => {
     try {
-      const newAisles = aisles.filter(aisle => typeof aisle.id === 'string' && aisle.id.startsWith('temp-'));
-
-      let mergedAisles = [...aisles];
-
-      if (newAisles.length > 0) {
-        const createdAisles = await Promise.all(
-          newAisles.map(async aisle => {
-            const createRes = await fetch(`${API_BASE}/api/aisles`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                storeId: DEFAULT_STORE_ID,
-                aisleNumber: aisle.aisleNumber,
-                aisleName: aisle.aisleName,
-                category: aisle.category,
-                zone: aisle.zone || null,
-                coordinates: aisle.coordinates
-              })
-            });
-
-            if (!createRes.ok) {
-              const createErr = await createRes.json().catch(() => ({}));
-              throw new Error(createErr.message || 'Failed to create new aisle');
-            }
-
-            const createData = await createRes.json();
-            return createData.aisle;
-          })
-        );
-
-        const createdByAisleNumber = new Map(createdAisles.map(aisle => [aisle.aisleNumber, aisle]));
-        mergedAisles = aisles.map(aisle => {
-          if (typeof aisle.id === 'string' && aisle.id.startsWith('temp-')) {
-            return createdByAisleNumber.get(aisle.aisleNumber) || aisle;
-          }
-          return aisle;
-        });
-      }
-
       // Only send real (numeric) IDs — never pass temp string IDs to the backend.
-      const aisleUpdates = mergedAisles
+      const aisleUpdates = aisles
         .filter(a => typeof a.id === 'number')
         .map(aisle => ({ id: aisle.id, coordinates: aisle.coordinates }));
 
@@ -625,22 +817,61 @@ const MapScreen = () => {
         }
       }
 
-      setAisles(mergedAisles);
-      setOriginalAisles(JSON.parse(JSON.stringify(mergedAisles)));
+      setOriginalAisles(JSON.parse(JSON.stringify(aisles)));
       setHasChanges(false);
-      alert('Layout saved successfully!');
+      setAppDialog({
+        isOpen: true,
+        title: 'Layout Saved',
+        message: 'Map layout changes were saved successfully.',
+        confirmLabel: 'OK',
+        cancelLabel: '',
+        confirmVariant: 'primary',
+        closeOnBackdrop: true,
+        onConfirm: () => closeAppDialog()
+      });
     } catch (err) {
       console.error('Save error:', err);
-      alert(`Error: ${err.message}`);
+      setAppDialog({
+        isOpen: true,
+        title: 'Save Failed',
+        message: err.message || 'Failed to save map changes.',
+        confirmLabel: 'OK',
+        cancelLabel: '',
+        confirmVariant: 'secondary',
+        closeOnBackdrop: true,
+        onConfirm: () => closeAppDialog()
+      });
     }
   };
 
   const revertChanges = () => {
-    if (window.confirm('Are you sure you want to revert all changes?')) {
-      setAisles(JSON.parse(JSON.stringify(originalAisles)));
-      setHasChanges(false);
-    }
+    setAppDialog({
+      isOpen: true,
+      title: 'Revert Changes',
+      message: 'Are you sure you want to revert all unsaved map changes?',
+      confirmLabel: 'Revert',
+      cancelLabel: 'Cancel',
+      confirmVariant: 'secondary',
+      closeOnBackdrop: true,
+      onConfirm: () => {
+        setAisles(JSON.parse(JSON.stringify(originalAisles)));
+        setHasChanges(false);
+        closeAppDialog();
+      }
+    });
   };
+
+  useEffect(() => {
+    setAddAisleOrder((previous) => previous.filter((aisleId) => hasEligibleSectionForCommodity(aisles.find((aisle) => aisle.id === aisleId), addCommodity)));
+  }, [addCommodity, aisles, hasEligibleSectionForCommodity]);
+
+  useEffect(() => {
+    if (!editingPath) {
+      return;
+    }
+
+    setEditAisleOrder((previous) => previous.filter((aisleId) => hasEligibleSectionForCommodity(aisles.find((aisle) => aisle.id === aisleId), editingPath.commodity)));
+  }, [aisles, editingPath, hasEligibleSectionForCommodity]);
 
   return (
     <div className={`map-screen ${isAdmin ? 'map-screen-admin' : 'map-screen-employee'}`}>
@@ -660,7 +891,7 @@ const MapScreen = () => {
             <p>
               {mode === 'view' 
                 ? 'View mode: Browse the store layout and pick paths.' 
-                : 'Editing mode: Drag aisles to rearrange them. The dashed line shows the pickup path.'
+                : 'Editing mode: Drag aisles to rearrange them and use Edit Aisles to manage sections, temperatures, and item placement.'
               }
             </p>
           </div>
@@ -711,12 +942,6 @@ const MapScreen = () => {
                 </span>
               ) : null
             )}
-            {aiProposal && (
-              <span className="legend-item">
-                <span className="legend-color" style={{ backgroundColor: '#FF9800' }} />
-                AI Proposed Path
-              </span>
-            )}
           </p>
         </div>
       </div>
@@ -736,19 +961,19 @@ const MapScreen = () => {
 
             {mode === 'editing' ? (
               <>
-                <div className="action-section">
+                <div className="action-section action-section-aisles">
                   <span className="action-label">Aisles:</span>
-                  <button className="btn btn-info" onClick={addAisle}>
+                  <button className="btn btn-success" onClick={addAisle} disabled={aisleEditorBusy}>
                     Add Aisle
                   </button>
-                  <button className="btn btn-secondary" onClick={deleteAisle}>
-                    Delete Aisle
+                  <button className="btn btn-info" onClick={() => setShowAisleEditorModal(true)}>
+                    Edit Aisles
                   </button>
                 </div>
 
-                <div className="action-section">
+                <div className="action-section action-section-paths">
                   <span className="action-label">Pick Paths:</span>
-                  <button className="btn btn-info" onClick={addPickPath}>
+                  <button className="btn btn-success" onClick={addPickPath}>
                     Add Path
                   </button>
                   <button className="btn btn-info" onClick={editPickPath}>
@@ -759,27 +984,7 @@ const MapScreen = () => {
                   </button>
                 </div>
 
-                <div className="action-section">
-                  <select
-                    value={proposalCommodity}
-                    onChange={e => setProposalCommodity(e.target.value)}
-                    className="commodity-select"
-                  >
-                    <option value="ambient">Ambient</option>
-                    <option value="chilled">Chilled</option>
-                    <option value="frozen">Frozen</option>
-                    <option value="hot">Hot</option>
-                  </select>
-                  <button
-                    className="btn btn-primary"
-                    onClick={generateAIProposal}
-                    disabled={generatingAI || loading}
-                  >
-                    {generatingAI ? 'Generating…' : 'AI Suggest Path'}
-                  </button>
-                </div>
-
-                <div className="action-section">
+                <div className="action-section action-section-save">
                   <button
                     className="btn btn-success"
                     onClick={saveChanges}
@@ -801,84 +1006,6 @@ const MapScreen = () => {
         </div>
       ) : null}
 
-      {/* AI Proposal Modal */}
-      {showProposalModal && aiProposal && (
-        <div className="modal-backdrop" onClick={rejectProposal}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <h2>AI Path Proposal</h2>
-            <div className="proposal-details">
-              <div className="proposal-section">
-                <h3>Provider</h3>
-                <p>{aiProposal.provider}</p>
-              </div>
-
-              {aiProposal.rationale && (
-                <div className="proposal-section">
-                  <h3>Rationale</h3>
-                  <p>{aiProposal.rationale}</p>
-                </div>
-              )}
-
-              {aiProposal.metrics && (
-                <div className="proposal-section">
-                  <h3>Efficiency Metrics</h3>
-                  <ul>
-                    {Object.entries(aiProposal.metrics).map(([key, value]) => (
-                      <li key={key}>
-                        <strong>{key}:</strong> {typeof value === 'number' ? value.toFixed(2) : value}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {aiProposal.weakPoints && aiProposal.weakPoints.length > 0 && (
-                <div className="proposal-section">
-                  <h3>Weak Points</h3>
-                  <ul>
-                    {aiProposal.weakPoints.map((point, idx) => (
-                      <li key={idx}>{point}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {aiProposal.recommendations && aiProposal.recommendations.length > 0 && (
-                <div className="proposal-section">
-                  <h3>Recommendations</h3>
-                  <ul>
-                    {aiProposal.recommendations.map((rec, idx) => (
-                      <li key={idx}>{rec}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {aiProposal.suggestedPath && (
-                <div className="proposal-section">
-                  <h3>Suggested Path Sequence</h3>
-                  <p className="path-sequence">
-                    {aiProposal.suggestedPath.join(' → ')}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="modal-actions">
-              <button className="btn btn-primary" onClick={approveProposal}>
-                Approve & Save
-              </button>
-              <button className="btn btn-info" onClick={modifyProposal}>
-                Modify & Continue
-              </button>
-              <button className="btn btn-secondary" onClick={rejectProposal}>
-                Reject
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Add Path Modal */}
       {showAddPathModal && (
         <div className="modal-backdrop" onClick={() => setShowAddPathModal(false)}>
@@ -887,7 +1014,7 @@ const MapScreen = () => {
             <div className="modal-field">
               <label>Temperature Type</label>
               <select value={addCommodity} onChange={e => setAddCommodity(e.target.value)}>
-                {['ambient', 'chilled', 'frozen', 'hot']
+                {TEMPERATURE_OPTIONS
                   .filter(c => !pickPaths.some(p => p.commodity === c))
                   .map(c => <option key={c} value={c}>{COMMODITY_LABELS[c]}</option>)}
               </select>
@@ -895,12 +1022,11 @@ const MapScreen = () => {
             <div className="path-editor">
               <div className="path-editor-col">
                 <h4>Available Aisles</h4>
-                {aisles
-                  .filter(a => typeof a.id === 'number' && !addAisleOrder.includes(a.id))
-                  .sort((a, b) => parseInt(a.aisleNumber) - parseInt(b.aisleNumber))
-                  .map(aisle => (
+                {getAvailableAislesForCommodity(addCommodity, addAisleOrder).length === 0 ? (
+                  <p className="path-empty">No aisles have {COMMODITY_LABELS[addCommodity].toLowerCase()} sections yet.</p>
+                ) : getAvailableAislesForCommodity(addCommodity, addAisleOrder).map(aisle => (
                     <div key={aisle.id} className="path-aisle-row">
-                      <span>{aisle.aisleNumber} — {aisle.aisleName}</span>
+                      <span>{formatAisleDescriptor(aisle)}</span>
                       <button className="btn btn-info btn-sm"
                         onClick={() => setAddAisleOrder(prev => [...prev, aisle.id])}>
                         Add →
@@ -916,7 +1042,7 @@ const MapScreen = () => {
                   if (!aisle) return null;
                   return (
                     <div key={aisleId} className="path-aisle-row">
-                      <span>{idx + 1}. {aisle.aisleNumber} — {aisle.aisleName}</span>
+                      <span>{idx + 1}. {formatAisleDescriptor(aisle)}</span>
                       <div className="path-aisle-actions">
                         <button disabled={idx === 0} onClick={() => setAddAisleOrder(prev => {
                           const n = [...prev]; [n[idx - 1], n[idx]] = [n[idx], n[idx - 1]]; return n;
@@ -944,7 +1070,7 @@ const MapScreen = () => {
                         storeId: DEFAULT_STORE_ID,
                         commodity: addCommodity,
                         pathName: `${COMMODITY_LABELS[addCommodity]} Path`,
-                        pathSequence: aisleIdsToPathSequence(addAisleOrder),
+                        pathSequence: aisleIdsToPathSequence(addAisleOrder, addCommodity),
                         userId: DEFAULT_USER_ID
                       })
                     });
@@ -991,18 +1117,17 @@ const MapScreen = () => {
             <div className="path-editor">
               <div className="path-editor-col">
                 <h4>Available Aisles</h4>
-                {aisles
-                  .filter(a => typeof a.id === 'number' && !editAisleOrder.includes(a.id))
-                  .sort((a, b) => parseInt(a.aisleNumber) - parseInt(b.aisleNumber))
-                  .map(aisle => (
+                {editingPath && getAvailableAislesForCommodity(editingPath.commodity, editAisleOrder).length === 0 ? (
+                  <p className="path-empty">No additional aisles have {COMMODITY_LABELS[editingPath.commodity].toLowerCase()} sections.</p>
+                ) : editingPath ? getAvailableAislesForCommodity(editingPath.commodity, editAisleOrder).map(aisle => (
                     <div key={aisle.id} className="path-aisle-row">
-                      <span>{aisle.aisleNumber} — {aisle.aisleName}</span>
+                      <span>{formatAisleDescriptor(aisle)}</span>
                       <button className="btn btn-info btn-sm"
                         onClick={() => setEditAisleOrder(prev => [...prev, aisle.id])}>
                         Add →
                       </button>
                     </div>
-                  ))}
+                  )) : null}
               </div>
               <div className="path-editor-col">
                 <h4>Path Order</h4>
@@ -1012,7 +1137,7 @@ const MapScreen = () => {
                   if (!aisle) return null;
                   return (
                     <div key={aisleId} className="path-aisle-row">
-                      <span>{idx + 1}. {aisle.aisleNumber} — {aisle.aisleName}</span>
+                      <span>{idx + 1}. {formatAisleDescriptor(aisle)}</span>
                       <div className="path-aisle-actions">
                         <button disabled={idx === 0} onClick={() => setEditAisleOrder(prev => {
                           const n = [...prev]; [n[idx - 1], n[idx]] = [n[idx], n[idx - 1]]; return n;
@@ -1036,7 +1161,7 @@ const MapScreen = () => {
                     const res = await fetch(`${API_BASE}/api/pickpaths/${editingPathId}`, {
                       method: 'PUT',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ pathSequence: aisleIdsToPathSequence(editAisleOrder) })
+                      body: JSON.stringify({ pathSequence: aisleIdsToPathSequence(editAisleOrder, editingPath?.commodity) })
                     });
                     if (!res.ok) {
                       const e = await res.json().catch(() => ({}));
@@ -1102,8 +1227,159 @@ const MapScreen = () => {
         </div>
       )}
 
-      {proposalError && (
-        <div className="error-banner">{proposalError}</div>
+      {showAisleEditorModal && (
+        <div className="modal-backdrop" onClick={() => setShowAisleEditorModal(false)}>
+          <div className="modal-content aisle-editor-modal" onClick={e => e.stopPropagation()}>
+            <div className="aisle-editor-header">
+              <h2>Edit Aisles and Locations</h2>
+              <p>
+                Modify and delete aisles and their sections here.
+                <br />
+                To modify aisle locations, use the map grid.
+              </p>
+            </div>
+
+            <div className="aisle-editor-list">
+              {aisles.map((aisle) => (
+                <section key={aisle.id} className="aisle-editor-card">
+                  <div className="aisle-editor-card__header">
+                    <div className="aisle-editor-card__title-block">
+                      <h3>Aisle {aisle.aisleNumber}</h3>
+                      <label className="aisle-editor-description-field">
+                        <span>Description</span>
+                        <input
+                          type="text"
+                          value={aisle.aisleName || ''}
+                          onChange={(event) => setAisleDescriptionDraft(aisle.id, event.target.value)}
+                          onBlur={() => updateAisleDescription(aisle)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault();
+                              event.currentTarget.blur();
+                            }
+                          }}
+                          placeholder="Blank"
+                          disabled={aisleEditorBusy}
+                        />
+                      </label>
+                    </div>
+                    <div className="aisle-editor-card__actions">
+                      <button
+                        type="button"
+                        className="aisle-editor-btn aisle-editor-btn--add"
+                        onClick={() => addSectionToAisle(aisle.id)}
+                        disabled={aisleEditorBusy}
+                      >
+                        Add Section
+                      </button>
+                      <button
+                        type="button"
+                        className="aisle-editor-btn aisle-editor-btn--delete"
+                        onClick={() => deleteAisleById(aisle)}
+                        disabled={aisleEditorBusy}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="aisle-editor-sections">
+                    {sortLocationsBySection(aisle.locations || []).map((location) => (
+                      <div key={location.id} className="aisle-editor-section-row">
+                        <span className="aisle-editor-section-label">{formatSectionLabel(location.section)}</span>
+                        <button
+                          type="button"
+                          className="aisle-editor-btn aisle-editor-btn--list"
+                          onClick={() => openSectionItemsModal(location)}
+                          disabled={aisleEditorBusy}
+                        >
+                          Item List
+                        </button>
+                        <select
+                          className="aisle-editor-section-select"
+                          value={normalizeTemperature(location.temperature)}
+                          onChange={(event) => updateSectionTemperature(location.id, event.target.value)}
+                          disabled={aisleEditorBusy}
+                        >
+                          {TEMPERATURE_OPTIONS.map((temperature) => (
+                            <option key={temperature} value={temperature}>{COMMODITY_LABELS[temperature]}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="aisle-editor-btn aisle-editor-btn--delete"
+                          onClick={() => deleteSection(location)}
+                          disabled={aisleEditorBusy}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+
+            <div className="aisle-editor-footer">
+              <button type="button" className="aisle-editor-exit" onClick={() => setShowAisleEditorModal(false)}>
+                Exit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {appDialog.isOpen && (
+        <div className="modal-backdrop" onClick={() => { if (appDialog.closeOnBackdrop) closeAppDialog(); }}>
+          <section className="map-inline-dialog" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
+            <h2>{appDialog.title}</h2>
+            <p className="map-inline-dialog-message">{appDialog.message}</p>
+            <div className="map-inline-dialog-actions">
+              {appDialog.cancelLabel ? (
+                <button className="map-inline-dialog-button" onClick={closeAppDialog} disabled={aisleEditorBusy}>
+                  {appDialog.cancelLabel}
+                </button>
+              ) : null}
+              <button
+                className={`map-inline-dialog-button ${appDialog.confirmVariant === 'secondary' ? 'map-inline-dialog-button-secondary' : 'map-inline-dialog-button-primary'}`}
+                onClick={confirmAppDialog}
+                disabled={aisleEditorBusy}
+              >
+                {appDialog.confirmLabel}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {sectionItemsModal.isOpen && (
+        <div className="modal-backdrop" onClick={closeSectionItemsModal}>
+          <div className="modal-content section-items-modal" onClick={e => e.stopPropagation()}>
+            <h2>
+              {sectionItemsModal.location?.aisle?.aisleNumber ? `Aisle ${sectionItemsModal.location.aisle.aisleNumber} · ` : ''}
+              {formatSectionLabel(sectionItemsModal.location?.section)}
+            </h2>
+            {sectionItemsModal.loading ? <p>Loading section items…</p> : null}
+            {!sectionItemsModal.loading && sectionItemsModal.error ? <p className="section-items-error">{sectionItemsModal.error}</p> : null}
+            {!sectionItemsModal.loading && !sectionItemsModal.error ? (
+              sectionItemsModal.items.length === 0 ? (
+                <p>No items are currently assigned to this section.</p>
+              ) : (
+                <div className="section-items-list">
+                  {sectionItemsModal.items.map((item) => (
+                    <div key={item.itemLocationId} className="section-items-row">
+                      <span>{item.name}</span>
+                      <strong>Qty {item.quantityOnHand}</strong>
+                    </div>
+                  ))}
+                </div>
+              )
+            ) : null}
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={closeSectionItemsModal}>Close</button>
+            </div>
+          </div>
+        </div>
       )}
 
       <Navbar />

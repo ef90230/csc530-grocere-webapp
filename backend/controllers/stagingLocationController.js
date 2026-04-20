@@ -12,6 +12,7 @@ const {
 } = require('../models');
 const { applyTotesDelta } = require('../utils/employeeTotesHistoryStore');
 const { applyItemsStagedDelta } = require('../utils/employeeStagedItemsHistoryStore');
+const { getStoreSettingsFromStore, normalizeStoreSettings } = require('../utils/storeSettings');
 
 const ALLOWED_ITEM_TYPES = ['ambient', 'chilled', 'frozen', 'hot', 'oversized'];
 const INACTIVE_ORDER_STATUSES = ['dispensing', 'completed', 'cancelled'];
@@ -29,6 +30,23 @@ const NON_DISPENSABLE_ITEM_STATUSES = new Set(['out_of_stock', 'skipped', 'not_f
 
 const normalizeItemType = (value) => String(value || '').trim().toLowerCase();
 
+const parseStructuredOrderNotes = (notesValue) => {
+  if (!notesValue) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(notesValue);
+    if (!parsed || typeof parsed !== 'object') {
+      return null;
+    }
+
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
 const toNullableDecimal = (value) => {
   if (value === undefined || value === null || value === '') {
     return null;
@@ -39,6 +57,11 @@ const toNullableDecimal = (value) => {
 };
 
 const getStagingTypeForItem = (item) => {
+  const normalizedCommodity = normalizeItemType(item?.commodity);
+  if (normalizedCommodity === 'oversized') {
+    return 'oversized';
+  }
+
   const normalizedTemperature = normalizeItemType(item?.temperature);
   if (normalizedTemperature === 'chilled' || normalizedTemperature === 'frozen' || normalizedTemperature === 'hot') {
     return normalizedTemperature;
@@ -52,6 +75,38 @@ const getStagingTypeForItem = (item) => {
   }
 
   return 'ambient';
+};
+
+const getStagingTypeOverridesByOrderItemId = (notesValue) => {
+  const parsedNotes = parseStructuredOrderNotes(notesValue);
+  const rawOverrides = parsedNotes?.stagingTypeByOrderItemId;
+
+  if (!rawOverrides || typeof rawOverrides !== 'object' || Array.isArray(rawOverrides)) {
+    return {};
+  }
+
+  return Object.entries(rawOverrides).reduce((accumulator, [orderItemId, commodity]) => {
+    const normalizedOrderItemId = String(orderItemId || '').trim();
+    const normalizedCommodity = normalizeItemType(commodity);
+
+    if (!normalizedOrderItemId || !ALLOWED_ITEM_TYPES.includes(normalizedCommodity)) {
+      return accumulator;
+    }
+
+    accumulator[normalizedOrderItemId] = normalizedCommodity;
+    return accumulator;
+  }, {});
+};
+
+const getStagingTypeForOrderItem = (orderItem, stagingTypeOverridesByOrderItemId = {}) => {
+  const orderItemId = String(orderItem?.id || '').trim();
+  const overrideType = stagingTypeOverridesByOrderItemId[orderItemId];
+
+  if (ALLOWED_ITEM_TYPES.includes(overrideType)) {
+    return overrideType;
+  }
+
+  return getStagingTypeForItem(orderItem?.item);
 };
 
 const parseLocationId = (value) => {
@@ -99,6 +154,13 @@ const getStagedItemCountForCommodity = async (orderId, commodity, transaction) =
     return 0;
   }
 
+  const order = await Order.findOne({
+    where: { id: normalizedOrderId },
+    attributes: ['id', 'notes'],
+    transaction
+  });
+  const stagingTypeOverridesByOrderItemId = getStagingTypeOverridesByOrderItemId(order?.notes);
+
   const orderItems = await OrderItem.findAll({
     where: { orderId: normalizedOrderId },
     attributes: ['quantity', 'pickedQuantity', 'status'],
@@ -107,14 +169,14 @@ const getStagedItemCountForCommodity = async (orderId, commodity, transaction) =
         model: Item,
         as: 'item',
         required: true,
-        attributes: ['id', 'temperature', 'weight']
+        attributes: ['id', 'commodity', 'temperature', 'weight']
       }
     ],
     transaction
   });
 
   return orderItems.reduce((sum, orderItem) => {
-    if (getStagingTypeForItem(orderItem?.item) !== normalizedCommodity) {
+    if (getStagingTypeForOrderItem(orderItem, stagingTypeOverridesByOrderItemId) !== normalizedCommodity) {
       return sum;
     }
 
@@ -139,6 +201,19 @@ const getOrCreateStoreSettings = async (storeId) => {
   return settings;
 };
 
+const getStoreTimeZone = async (storeId, transaction) => {
+  if (!Number.isInteger(storeId) || storeId <= 0) {
+    return normalizeStoreSettings(null).scheduling.timeZone;
+  }
+
+  const store = await Store.findByPk(storeId, {
+    attributes: ['id', 'backroomDoorLocation'],
+    transaction
+  });
+
+  return store ? getStoreSettingsFromStore(store).scheduling.timeZone : normalizeStoreSettings(null).scheduling.timeZone;
+};
+
 const updateEmployeeTotesStaged = async (employeeId, storeId, delta, transaction) => {
   const resolvedEmployeeId = Number(employeeId);
 
@@ -160,7 +235,8 @@ const updateEmployeeTotesStaged = async (employeeId, storeId, delta, transaction
 
   const nextValue = Math.max(0, Number(employee.totesStaged || 0) + delta);
   await employee.update({ totesStaged: nextValue }, { transaction });
-  applyTotesDelta(resolvedEmployeeId, delta);
+  const storeTimeZone = await getStoreTimeZone(storeId, transaction);
+  applyTotesDelta(resolvedEmployeeId, delta, new Date(), storeTimeZone);
 };
 
 const updateEmployeeStagingMetrics = async (employeeId, storeId, toteDelta, itemsDelta, transaction) => {
@@ -172,7 +248,8 @@ const updateEmployeeStagingMetrics = async (employeeId, storeId, toteDelta, item
     return;
   }
 
-  applyItemsStagedDelta(resolvedEmployeeId, normalizedItemsDelta);
+  const storeTimeZone = await getStoreTimeZone(storeId, transaction);
+  applyItemsStagedDelta(resolvedEmployeeId, normalizedItemsDelta, new Date(), storeTimeZone);
 };
 
 const getActiveAssignmentRows = async (storeId, extraWhere = {}) => {
@@ -625,13 +702,15 @@ const assignGroup = async (req, res) => {
           model: Item,
           as: 'item',
           required: true,
-          attributes: ['temperature', 'weight']
+          attributes: ['commodity', 'temperature', 'weight']
         }
       ],
       transaction
     });
 
-    const hasCommodityItems = orderItems.some((orderItem) => getStagingTypeForItem(orderItem?.item) === commodity);
+    const stagingTypeOverridesByOrderItemId = getStagingTypeOverridesByOrderItemId(order?.notes);
+
+    const hasCommodityItems = orderItems.some((orderItem) => getStagingTypeForOrderItem(orderItem, stagingTypeOverridesByOrderItemId) === commodity);
 
     if (!hasCommodityItems) {
       await transaction.rollback();
@@ -816,7 +895,7 @@ const getOrderTotesSummary = async (req, res) => {
         id: orderId,
         storeId
       },
-      attributes: ['id', 'orderNumber', 'status', 'scheduledPickupTime'],
+      attributes: ['id', 'orderNumber', 'status', 'scheduledPickupTime', 'notes'],
       include: [
         {
           model: Customer,
@@ -827,7 +906,6 @@ const getOrderTotesSummary = async (req, res) => {
         {
           model: OrderItem,
           as: 'items',
-          attributes: ['id', 'status'],
           include: [
             {
               model: Item,
@@ -843,9 +921,10 @@ const getOrderTotesSummary = async (req, res) => {
       return res.status(404).json({ message: 'Order not found.' });
     }
 
+    const stagingTypeOverridesByOrderItemId = getStagingTypeOverridesByOrderItemId(order?.notes);
     const groupedOrderItems = new Map();
     (order.items || []).forEach((orderItem) => {
-      const commodity = getStagingTypeForItem(orderItem?.item);
+      const commodity = getStagingTypeForOrderItem(orderItem, stagingTypeOverridesByOrderItemId);
       if (!commodity) {
         return;
       }

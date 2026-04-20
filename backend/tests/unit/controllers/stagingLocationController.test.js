@@ -149,4 +149,99 @@ describe('stagingLocationController temperature-based staging groups', () => {
     }));
     expect(res.status).toHaveBeenCalledWith(201);
   });
+
+  test('keeps explicitly oversized picked items in an oversized tote even below the weight threshold', async () => {
+    const req = {
+      params: { orderId: '11' },
+      user: { storeId: 1 }
+    };
+    const res = createMockRes();
+
+    Order.findOne.mockResolvedValue({
+      id: 11,
+      orderNumber: 'ORD-11',
+      status: 'picked',
+      scheduledPickupTime: '2026-04-19T18:00:00.000Z',
+      customer: {
+        firstName: 'Taylor',
+        lastName: 'Lane'
+      },
+      items: [
+        {
+          id: 10,
+          status: 'found',
+          item: {
+            commodity: 'oversized',
+            temperature: 'ambient',
+            weight: 1
+          }
+        }
+      ]
+    });
+    StagingAssignment.findAll.mockResolvedValue([]);
+
+    await getOrderTotesSummary(req, res);
+
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: true,
+      count: 1,
+      totes: [
+        expect.objectContaining({
+          commodity: 'oversized',
+          commodityLabel: 'Oversized',
+          status: 'unstaged'
+        })
+      ]
+    }));
+  });
+
+  test('uses order notes staging overrides to keep a specific order item in an oversized tote', async () => {
+    const req = {
+      params: { orderId: '12' },
+      user: { storeId: 1 }
+    };
+    const res = createMockRes();
+
+    Order.findOne.mockResolvedValue({
+      id: 12,
+      orderNumber: 'ORD-12',
+      status: 'picked',
+      scheduledPickupTime: '2026-04-19T18:00:00.000Z',
+      notes: JSON.stringify({
+        stagingTypeByOrderItemId: {
+          '500': 'oversized'
+        }
+      }),
+      customer: {
+        firstName: 'Jamie',
+        lastName: 'Rowe'
+      },
+      items: [
+        {
+          id: 500,
+          status: 'found',
+          item: {
+            commodity: 'restricted',
+            temperature: 'ambient',
+            weight: 1
+          }
+        }
+      ]
+    });
+    StagingAssignment.findAll.mockResolvedValue([]);
+
+    await getOrderTotesSummary(req, res);
+
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: true,
+      count: 1,
+      totes: [
+        expect.objectContaining({
+          commodity: 'oversized',
+          commodityLabel: 'Oversized',
+          status: 'unstaged'
+        })
+      ]
+    }));
+  });
 });

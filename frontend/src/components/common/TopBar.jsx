@@ -7,6 +7,23 @@ import './TopBar.css';
 
 const CLOSE_ANIMATION_MS = 280;
 
+const CommentIcon = () => (
+  <svg
+    className="topbar-comment-icon"
+    viewBox="0 0 24 24"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path
+      fill="currentColor"
+      d="M6.5 4C4.015 4 2 6.015 2 8.5v5C2 15.985 4.015 18 6.5 18H8v3.125c0 .587.672.923 1.145.572L13.5 18H17.5c2.485 0 4.5-2.015 4.5-4.5v-5C22 6.015 19.985 4 17.5 4h-11Z"
+    />
+    <circle cx="8" cy="11" r="1.1" fill="#f2cf4a" />
+    <circle cx="12" cy="11" r="1.1" fill="#f2cf4a" />
+    <circle cx="16" cy="11" r="1.1" fill="#f2cf4a" />
+  </svg>
+);
+
 const TopBar = ({
   userName,
   pickRate,
@@ -143,7 +160,7 @@ const TopBar = ({
             aria-label="Open feedback"
             onClick={openCommentDrawer}
           >
-            💬
+            <CommentIcon />
           </button>
         ) : null}
         <button

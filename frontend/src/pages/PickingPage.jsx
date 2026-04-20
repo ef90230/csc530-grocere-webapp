@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import TopBar from '../components/common/TopBar';
+import StoreMapPreview from '../components/common/StoreMapPreview';
 import './PickingPage.css';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 
@@ -188,6 +189,19 @@ const PickingPage = () => {
 
     const currentItem = queue[0] || null;
     const currentQuantity = Number(currentItem?.quantityToPick || 0);
+    const currentItemHighlightedAisles = useMemo(() => {
+        const aisleNumbers = Object.entries(currentItem?.onHandByAisle || {})
+            .filter(([, quantity]) => Number(quantity) > 0)
+            .map(([aisleNumber]) => String(aisleNumber || '').trim())
+            .filter(Boolean);
+
+        if (aisleNumbers.length > 0) {
+            return aisleNumbers;
+        }
+
+        const fallbackAisle = String(currentItem?.location?.aisleNumber || '').trim();
+        return fallbackAisle ? [fallbackAisle] : [];
+    }, [currentItem]);
     const onHandAisleCount = Object.keys(currentItem?.onHandByAisle || {}).length;
     const shouldAllowMobileScroll = !substituteMode && onHandAisleCount > 5;
     const expectedUpc = substituteMode
@@ -406,6 +420,7 @@ const PickingPage = () => {
                         },
                         body: JSON.stringify({
                             status: 'substituted',
+                            substitutedItemId: substituteMode?.originalEntry?.substitute?.id || null,
                             pickedQuantity: parsedQty
                         })
                     }
@@ -918,25 +933,14 @@ const PickingPage = () => {
                 <div className="picking-modal-overlay" onClick={() => setIsMapOpen(false)}>
                     <section className="picking-map-modal" onClick={(event) => event.stopPropagation()}>
                         <h3>Current Item Map</h3>
-                        <p className="picking-map-subtitle">Highlighted aisle for {currentItem.item.name}</p>
-                        <div className="picking-map-grid">
-                            {(aisles || []).map((aisle) => {
-                                const aisleNumber = String(aisle.aisleNumber || '');
-                                const isHighlighted = aisleNumber === String(currentItem?.location?.aisleNumber || '');
-
-                                return (
-                                    <div
-                                        key={aisle.id || aisleNumber}
-                                        className={`picking-map-aisle ${isHighlighted ? 'picking-map-aisle--highlighted' : ''}`}
-                                    >
-                                        Aisle {aisleNumber || 'â€”'}
-                                    </div>
-                                );
-                            })}
-                            {(!aisles || aisles.length === 0) ? (
-                                <div className="picking-map-empty">Map unavailable for this store.</div>
-                            ) : null}
-                        </div>
+                        <p className="picking-map-subtitle">Highlighted aisles for {currentItem.item.name}</p>
+                        <StoreMapPreview
+                            aisles={aisles || []}
+                            highlightedAisleNumbers={currentItemHighlightedAisles}
+                            title=""
+                            emptyMessage="Map unavailable for this store."
+                            className="picking-map-preview"
+                        />
                         <button type="button" className="picking-modal-close" onClick={() => setIsMapOpen(false)}>
                             Close
                         </button>

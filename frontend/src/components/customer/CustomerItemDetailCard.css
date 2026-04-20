@@ -112,41 +112,6 @@
 
 .customer-item-card__map {
   margin-top: 0.8rem;
-  border: 1px solid #111;
-  background: #afc3d4;
-  padding: 0.55rem;
-}
-
-.customer-item-card__map-title {
-  text-align: center;
-  font-size: 1.9rem;
-  margin-bottom: 0.45rem;
-}
-
-.customer-item-card__map-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.45rem;
-}
-
-.customer-item-card__map-aisle {
-  text-align: center;
-  background: #d8e0e8;
-  border: 1px solid #7c8792;
-  padding: 0.4rem;
-  font-size: 1.1rem;
-}
-
-.customer-item-card__map-aisle.highlighted {
-  background: #1f58c8;
-  color: #fff;
-  border-color: #173e90;
-}
-
-.customer-item-card__map-empty {
-  grid-column: 1 / -1;
-  text-align: center;
-  font-size: 1rem;
 }
 
 .customer-item-card__quantity {

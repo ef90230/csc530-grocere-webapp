@@ -5,6 +5,7 @@ const {
   purgeOldSchedules
 } = require('../../utils/schedulingService');
 const { syncDatabase, Store, Order } = require('../../models');
+const { buildBackroomDoorLocationWithStoreSettings } = require('../../utils/storeSettings');
 
 // helpers for date creation
 const addHours = (date, hours) => new Date(date.getTime() + hours * 60 * 60 * 1000);
@@ -81,6 +82,50 @@ describe('schedulingService unit tests', () => {
 
     const later = addHours(hourSlot, 1);
     expect((await validateScheduleTime(later, storeId, now)).isValid).toBe(true);
+  });
+
+  test('existing orders keep a disabled slot they already occupy', async () => {
+    const store = await Store.create({
+      storeNumber: 'S2',
+      name: 'Legacy Slot Store',
+      address: '789 State St',
+      city: 'Townsville',
+      state: 'TS',
+      zipCode: '12345',
+      phone: '555-0001',
+      backroomDoorLocation: buildBackroomDoorLocationWithStoreSettings(null, {
+        scheduling: {
+          timeZone: 'UTC',
+          hoursByWeekday: {
+            0: [8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23],
+            1: [8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23],
+            2: [8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23],
+            3: [8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23],
+            4: [8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23],
+            5: [8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23],
+            6: [8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+          }
+        }
+      })
+    });
+    const disabledSlot = new Date('2025-01-01T13:00:00Z');
+    const legacyOrder = await Order.create({
+      orderNumber: 'LEGACY-13',
+      customerId: null,
+      storeId: store.id,
+      scheduledPickupTime: disabledSlot,
+      totalAmount: 0
+    });
+
+    const newBookingValidation = await validateScheduleTime(disabledSlot, store.id, now);
+    expect(newBookingValidation.isValid).toBe(false);
+    expect(newBookingValidation.errors).toContain('Orders can only be scheduled during the configured store hours');
+
+    const legacyValidation = await validateScheduleTime(disabledSlot, store.id, now, {
+      existingOrderId: legacyOrder.id
+    });
+    expect(legacyValidation.isValid).toBe(true);
+    expect(legacyValidation.errors).toEqual([]);
   });
 
   test('getAvailableTimeSlots includes capacity info and respects hours', async () => {

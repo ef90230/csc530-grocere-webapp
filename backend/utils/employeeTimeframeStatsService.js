@@ -15,6 +15,7 @@ const {
   getStoreDayTotals: getStoreWaitTimeDayTotals,
   getLocalDayKey: getLocalDayKeyForWaitTime
 } = require('./storeWaitTimeHistoryStore');
+const { DEFAULT_TIME_ZONE, getTimeZoneDayKey, normalizeTimeZone } = require('./timeZone');
 
 const AVERAGE_METRIC_FIELDS = [
   'pickRate',
@@ -142,17 +143,7 @@ const resolveDispensableItemQuantity = (orderItem) => {
   return 0;
 };
 
-const getDayKey = (dateInput) => {
-  const date = new Date(dateInput);
-  if (Number.isNaN(date.getTime())) {
-    return '';
-  }
-
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
+const getDayKey = (dateInput, timeZone = DEFAULT_TIME_ZONE) => getTimeZoneDayKey(dateInput, normalizeTimeZone(timeZone));
 
 const addDays = (dayKey, daysToAdd) => {
   const [year, month, day] = String(dayKey || '').split('-').map(Number);
@@ -247,8 +238,9 @@ const ensureDayAccumulator = (accumulatorByDay, dayKey) => {
   return accumulatorByDay[dayKey];
 };
 
-const buildEmployeeDayStatsMap = async (employeeId) => {
+const buildEmployeeDayStatsMap = async (employeeId, timeZone = DEFAULT_TIME_ZONE) => {
   const normalizedEmployeeId = Number(employeeId);
+  const normalizedTimeZone = normalizeTimeZone(timeZone);
   if (!Number.isInteger(normalizedEmployeeId)) {
     return {};
   }
@@ -273,7 +265,7 @@ const buildEmployeeDayStatsMap = async (employeeId) => {
   });
 
   pickerOrders.forEach((order) => {
-    const dayKey = getDayKey(order.pickingEndTime || order.scheduledPickupTime || order.pickingStartTime);
+    const dayKey = getDayKey(order.pickingEndTime || order.scheduledPickupTime || order.pickingStartTime, normalizedTimeZone);
     const day = ensureDayAccumulator(dayAccumulator, dayKey);
     if (!day) {
       return;
@@ -342,7 +334,7 @@ const buildEmployeeDayStatsMap = async (employeeId) => {
   });
 
   dispenserOrders.forEach((order) => {
-    const dayKey = getDayKey(order.actualPickupTime);
+    const dayKey = getDayKey(order.actualPickupTime, normalizedTimeZone);
     const day = ensureDayAccumulator(dayAccumulator, dayKey);
     if (!day) {
       return;
@@ -372,7 +364,7 @@ const buildEmployeeDayStatsMap = async (employeeId) => {
 
   const walkHistory = await getCompletedPickWalkHistory(normalizedEmployeeId);
   walkHistory.forEach((walk) => {
-    const dayKey = getDayKey(walk?.startedAt);
+    const dayKey = getDayKey(walk?.startedAt, normalizedTimeZone);
     const day = ensureDayAccumulator(dayAccumulator, dayKey);
     if (!day) {
       return;
@@ -382,7 +374,7 @@ const buildEmployeeDayStatsMap = async (employeeId) => {
   });
 
   walkSummaries.forEach((walkSummary) => {
-    const dayKey = getDayKey(walkSummary?.startedAt);
+    const dayKey = getDayKey(walkSummary?.startedAt, normalizedTimeZone);
     const day = ensureDayAccumulator(dayAccumulator, dayKey);
     if (!day) {
       return;
@@ -440,9 +432,10 @@ const buildAllTimeFromDayStats = (dayStatsMap) => {
   return allTime;
 };
 
-const getEmployeeTimeframeStats = async (employeeId) => {
-  const dayStatsMap = await buildEmployeeDayStatsMap(employeeId);
-  const todayKey = getLocalDayKey(new Date());
+const getEmployeeTimeframeStats = async (employeeId, options = {}) => {
+  const normalizedTimeZone = normalizeTimeZone(options?.timeZone, DEFAULT_TIME_ZONE);
+  const dayStatsMap = await buildEmployeeDayStatsMap(employeeId, normalizedTimeZone);
+  const todayKey = getLocalDayKey(new Date(), normalizedTimeZone);
 
   return {
     today: dayStatsMap[todayKey] || cloneEmptyStats(),
@@ -462,10 +455,24 @@ const aggregateStoreStats = (employeeStats, timeframeKey) => {
   }
 
   const summary = cloneEmptyStats();
+  const totalPickedWeight = rows.reduce((sum, row) => sum + Math.max(0, toNumber(row.itemsPicked)), 0);
 
   AVERAGE_METRIC_FIELDS.forEach((field) => {
-    const total = rows.reduce((sum, row) => sum + toNumber(row[field]), 0);
-    summary[field] = Number((total / rows.length).toFixed(2));
+    if (totalPickedWeight <= 0) {
+      summary[field] = 0;
+      return;
+    }
+
+    const weightedTotal = rows.reduce((sum, row) => {
+      const pickedWeight = Math.max(0, toNumber(row.itemsPicked));
+      if (pickedWeight <= 0) {
+        return sum;
+      }
+
+      return sum + (toNumber(row[field]) * pickedWeight);
+    }, 0);
+
+    summary[field] = Number((weightedTotal / totalPickedWeight).toFixed(2));
   });
 
   TOTAL_METRIC_FIELDS.forEach((field) => {
@@ -476,9 +483,10 @@ const aggregateStoreStats = (employeeStats, timeframeKey) => {
   return summary;
 };
 
-const getStoreWaitTimeStats = (storeId) => {
+const getStoreWaitTimeStats = (storeId, options = {}) => {
   const dayTotals = getStoreWaitTimeDayTotals(storeId);
-  const todayKey = getLocalDayKeyForWaitTime(new Date());
+  const normalizedTimeZone = normalizeTimeZone(options?.timeZone, DEFAULT_TIME_ZONE);
+  const todayKey = getLocalDayKeyForWaitTime(new Date(), normalizedTimeZone);
 
   const todayData = dayTotals[todayKey] || { totalMinutes: 0, orderCount: 0 };
   const todayAvg = todayData.orderCount > 0 ? todayData.totalMinutes / todayData.orderCount : 0;

@@ -7,12 +7,12 @@ const {
 } = require('./walkPerformanceStore');
 
 const COMMODITY_DISPLAY_NAMES = {
-  ambient: 'Ambient Regular',
-  chilled: 'Chilled Regular',
-  frozen: 'Frozen Regular',
-  hot: 'Hot Regular',
+  ambient: 'Ambient',
+  chilled: 'Chilled',
+  frozen: 'Frozen',
+  hot: 'Hot',
   oversized: 'Oversized',
-  restricted: 'Team Lift'
+  restricted: 'Restricted'
 };
 
 const toNumber = (value) => {

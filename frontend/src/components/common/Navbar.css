@@ -18,12 +18,33 @@
   height: 100%;
   border: none;
   background: transparent;
-  font-size: 1rem;
+  padding: 0.25rem 0.1rem 0.35rem;
+  font-size: 0.84rem;
   font-weight: 500;
   color: #666;
   cursor: pointer;
   transition: all 0.3s ease;
   border-bottom: 3px solid transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.18rem;
+  line-height: 1;
+}
+
+.nav-item-icon {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  display: block;
+}
+
+.nav-item-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
 .nav-item:hover {
@@ -31,7 +52,15 @@
   color: #333;
 }
 
+.nav-item:hover .nav-item-icon {
+  transform: translateY(-1px);
+}
+
 .nav-item.active {
   color: #007bff;
   border-bottom-color: #007bff;
+}
+
+.nav-item.active .nav-item-icon {
+  filter: saturate(1.05);
 }

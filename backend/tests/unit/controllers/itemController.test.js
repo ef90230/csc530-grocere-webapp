@@ -3,19 +3,30 @@ jest.mock('../../../models', () => ({
     create: jest.fn(),
     findByPk: jest.fn()
   },
-  ItemLocation: {},
+  ItemLocation: {
+    destroy: jest.fn()
+  },
   Location: {},
   Aisle: {},
   Store: {},
-  Order: {},
-  OrderItem: {},
-  sequelize: {}
+  Order: {
+    update: jest.fn()
+  },
+  OrderItem: {
+    findAll: jest.fn(),
+    update: jest.fn()
+  },
+  sequelize: {
+    transaction: jest.fn()
+  }
 }));
 
-const { Item } = require('../../../models');
+const { Op } = require('sequelize');
+const { Item, ItemLocation, OrderItem, sequelize } = require('../../../models');
 const {
   createItem,
-  updateItem
+  updateItem,
+  deleteItem
 } = require('../../../controllers/itemController');
 
 const createMockRes = () => {
@@ -26,8 +37,11 @@ const createMockRes = () => {
 };
 
 describe('itemController commodity classification', () => {
+  const transaction = { LOCK: { UPDATE: 'UPDATE' } };
+
   beforeEach(() => {
     jest.clearAllMocks();
+    sequelize.transaction.mockImplementation(async (callback) => callback(transaction));
   });
 
   test('createItem keeps restricted above weight and temperature classification', async () => {
@@ -85,6 +99,76 @@ describe('itemController commodity classification', () => {
     expect(res.json).toHaveBeenCalledWith({
       success: true,
       item
+    });
+  });
+
+  test('deleteItem clears substitute specifications that reference the deleted item', async () => {
+    const req = {
+      params: { id: '12' }
+    };
+    const res = createMockRes();
+    const item = {
+      update: jest.fn().mockResolvedValue(undefined)
+    };
+
+    Item.findByPk.mockResolvedValue(item);
+    OrderItem.findAll
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 31,
+          status: 'pending',
+          order: {
+            id: 8,
+            status: 'pending'
+          }
+        },
+        {
+          id: 32,
+          status: 'substituted',
+          order: {
+            id: 9,
+            status: 'picking'
+          }
+        },
+        {
+          id: 33,
+          status: 'pending',
+          order: {
+            id: 10,
+            status: 'completed'
+          }
+        }
+      ]);
+
+    await deleteItem(req, res);
+
+    expect(OrderItem.update).toHaveBeenCalledWith(
+      {
+        substitutedItemId: null
+      },
+      {
+        where: {
+          id: { [Op.in]: [31] }
+        },
+        transaction
+      }
+    );
+    expect(ItemLocation.destroy).toHaveBeenCalledWith({
+      where: { itemId: 12 },
+      transaction
+    });
+    expect(item.update).toHaveBeenCalledWith(
+      {
+        isActive: false,
+        unassignedQuantity: 0
+      },
+      { transaction }
+    );
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      message: 'Item deleted from inventory and canceled in active orders.',
+      canceledOrderCount: 0
     });
   });
 });

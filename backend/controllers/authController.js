@@ -3,6 +3,7 @@ const { generateToken } = require('../middleware/auth');
 const {
   getEmployeeTimeframeStats
 } = require('../utils/employeeTimeframeStatsService');
+const { getStoreSettingsFromStore, normalizeStoreSettings } = require('../utils/storeSettings');
 const {
   getStoreAdminEmployeeId,
   assignStoreAdmin,
@@ -277,7 +278,10 @@ const getMe = async (req, res) => {
     const userResponse = req.user.toJSON();
 
     if (req.userType === 'employee' && req.user?.id) {
-      const timeframeStats = await getEmployeeTimeframeStats(req.user.id);
+      const storeSettings = req.user?.store ? getStoreSettingsFromStore(req.user.store) : normalizeStoreSettings(null);
+      const timeframeStats = await getEmployeeTimeframeStats(req.user.id, {
+        timeZone: storeSettings?.scheduling?.timeZone
+      });
       userResponse.pickRate = Number(timeframeStats?.today?.pickRate || 0);
     }
 

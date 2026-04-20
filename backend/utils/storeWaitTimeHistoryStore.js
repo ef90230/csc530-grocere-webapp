@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { DEFAULT_TIME_ZONE, getTimeZoneDayKey, normalizeTimeZone } = require('./timeZone');
 
 const STORE_PATH = path.join(__dirname, '..', 'database', 'store-wait-time-history.json');
 
@@ -11,17 +12,7 @@ const normalizeDayKey = (value) => {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : '';
 };
 
-const getLocalDayKey = (dateInput = new Date()) => {
-  const date = new Date(dateInput);
-  if (Number.isNaN(date.getTime())) {
-    return '';
-  }
-
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
+const getLocalDayKey = (dateInput = new Date(), timeZone = DEFAULT_TIME_ZONE) => getTimeZoneDayKey(dateInput, normalizeTimeZone(timeZone));
 
 const readStore = () => {
   try {
@@ -89,7 +80,7 @@ const getStoreDayTotals = (storeId) => {
   }, {});
 };
 
-const recordOrderWaitTime = (storeId, waitMinutes, dateInput = new Date()) => {
+const recordOrderWaitTime = (storeId, waitMinutes, dateInput = new Date(), timeZone = DEFAULT_TIME_ZONE) => {
   const id = String(storeId || '');
   if (!id) {
     return;
@@ -100,7 +91,7 @@ const recordOrderWaitTime = (storeId, waitMinutes, dateInput = new Date()) => {
     return;
   }
 
-  const dayKey = getLocalDayKey(dateInput);
+  const dayKey = getLocalDayKey(dateInput, timeZone);
   if (!dayKey) {
     return;
   }

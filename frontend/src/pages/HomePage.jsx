@@ -2,6 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/common/Navbar';
 import TopBar from '../components/common/TopBar';
+import pickingButtonSymbol from '../assets/home-buttons/picking-button-symbol.png';
+import stagingButtonSymbol from '../assets/home-buttons/staging-button-symbol.png';
+import ordersButtonSymbol from '../assets/home-buttons/orders-button-symbol.png';
+import storeManagementButtonSymbol from '../assets/home-buttons/store-management-button-symbol.png';
 import './HomePage.css';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
@@ -90,6 +94,68 @@ const getTimeOfDayLabel = (dateValue = new Date()) => {
   return 'evening';
 };
 
+const isScheduledForToday = (scheduledPickupTime, now = new Date()) => {
+  if (!scheduledPickupTime) {
+    return false;
+  }
+
+  const scheduledDate = new Date(scheduledPickupTime);
+  if (Number.isNaN(scheduledDate.getTime())) {
+    return false;
+  }
+
+  return scheduledDate.toDateString() === now.toDateString();
+};
+
+const HOME_BUTTONS = [
+  {
+    key: 'picking',
+    className: 'picking-btn',
+    icon: pickingButtonSymbol,
+    iconAlt: 'Picking symbol',
+    title: 'Picking',
+    buildStats: ({ isLoading, dashboardStats }) => ([
+      `${isLoading ? '...' : dashboardStats.pickingItemsAvailable} items available`,
+      `${isLoading ? '...' : formatPickRate(dashboardStats.storePickRate)} store pick rate`
+    ]),
+    onClick: (navigate) => navigate('/commodityselect')
+  },
+  {
+    key: 'staging',
+    className: 'staging-btn',
+    icon: stagingButtonSymbol,
+    iconAlt: 'Staging symbol',
+    title: 'Staging',
+    buildStats: ({ isLoading, dashboardStats }) => ([
+      `${isLoading ? '...' : dashboardStats.totesLeftToStage} totes left to stage`
+    ]),
+    onClick: (navigate) => navigate('/staging')
+  },
+  {
+    key: 'orders',
+    className: 'orders-btn',
+    icon: ordersButtonSymbol,
+    iconAlt: 'Order fulfillment symbol',
+    title: 'Order Fulfillment',
+    buildStats: ({ isLoading, dashboardStats }) => ([
+      `${isLoading ? '...' : dashboardStats.checkedInCars} cars checked in`,
+      `${isLoading ? '...' : dashboardStats.longWaits} long waits`
+    ]),
+    onClick: (navigate) => navigate('/orders')
+  },
+  {
+    key: 'inventory',
+    className: 'inventory-btn',
+    icon: storeManagementButtonSymbol,
+    iconAlt: 'Store management symbol',
+    title: 'Store Management',
+    buildStats: ({ isLoading, dashboardStats }) => ([
+      isLoading ? '.../... orders complete' : `${dashboardStats.completedOrders}/${dashboardStats.totalTrackableOrders} orders complete`
+    ]),
+    onClick: (navigate) => navigate('/inventory')
+  }
+];
+
 const HomePage = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
@@ -152,6 +218,7 @@ const HomePage = () => {
   }, []);
 
   const dashboardStats = useMemo(() => {
+    const today = new Date();
     const waitThresholdMinutes = getStoredThreshold();
     const stagedToteCountByOrderId = stagingAssignments.reduce((countMap, assignment) => {
       const orderId = toNumber(assignment?.orderId);
@@ -201,8 +268,16 @@ const HomePage = () => {
       return waitSeconds >= waitThresholdMinutes * 60;
     }).length;
 
-    const nonCancelledOrders = orders.filter((order) => String(order?.status || '').toLowerCase() !== 'cancelled');
-    const completedOrders = nonCancelledOrders.filter((order) => String(order?.status || '').toLowerCase() === 'completed').length;
+    const todaysTrackableOrders = orders.filter((order) => {
+      const normalizedStatus = String(order?.status || '').toLowerCase();
+      if (normalizedStatus === 'cancelled') {
+        return false;
+      }
+
+      return isScheduledForToday(order?.scheduledPickupTime, today);
+    });
+
+    const completedOrders = todaysTrackableOrders.filter((order) => String(order?.status || '').toLowerCase() === 'completed').length;
 
     return {
       pickingItemsAvailable,
@@ -210,7 +285,7 @@ const HomePage = () => {
       checkedInCars,
       longWaits,
       completedOrders,
-      totalTrackableOrders: nonCancelledOrders.length,
+      totalTrackableOrders: todaysTrackableOrders.length,
       storePickRate
     };
   }, [orders, stagingAssignments, storePickRate]);
@@ -226,38 +301,23 @@ const HomePage = () => {
           <p>Here are your store&apos;s current fulfillment tasks and stats.</p>
         </div>
         <div className="buttons-column">
-          <button
-            className="home-action-button picking-btn"
-            onClick={() => navigate('/commodityselect')}
-          >
-            <span className="home-card-title">Picking</span>
-            <span className="home-card-stat">{isLoading ? '...' : dashboardStats.pickingItemsAvailable} items available</span>
-            <span className="home-card-stat">{isLoading ? '...' : formatPickRate(dashboardStats.storePickRate)} store pick rate</span>
-          </button>
-          <button
-            className="home-action-button staging-btn"
-            onClick={() => navigate('/staging')}
-          >
-            <span className="home-card-title">Staging</span>
-            <span className="home-card-stat">{isLoading ? '...' : dashboardStats.totesLeftToStage} totes left to stage</span>
-          </button>
-          <button
-            className="home-action-button orders-btn"
-            onClick={() => navigate('/orders')}
-          >
-            <span className="home-card-title">Order Fulfillment</span>
-            <span className="home-card-stat">{isLoading ? '...' : dashboardStats.checkedInCars} cars checked in</span>
-            <span className="home-card-stat">{isLoading ? '...' : dashboardStats.longWaits} long waits</span>
-          </button>
-          <button
-            className="home-action-button inventory-btn"
-            onClick={() => navigate('/inventory')}
-          >
-            <span className="home-card-title">Store Management</span>
-            <span className="home-card-stat">
-              {isLoading ? '.../... orders complete' : `${dashboardStats.completedOrders}/${dashboardStats.totalTrackableOrders} orders complete`}
-            </span>
-          </button>
+          {HOME_BUTTONS.map((button) => (
+            <button
+              key={button.key}
+              className={`home-action-button ${button.className}`}
+              onClick={() => button.onClick(navigate)}
+            >
+              <span className="home-card-icon-wrap" aria-hidden="true">
+                <img className="home-card-icon" src={button.icon} alt={button.iconAlt} />
+              </span>
+              <span className="home-card-copy">
+                <span className="home-card-title">{button.title}</span>
+                {button.buildStats({ isLoading, dashboardStats }).map((stat) => (
+                  <span key={stat} className="home-card-stat">{stat}</span>
+                ))}
+              </span>
+            </button>
+          ))}
         </div>
       </div>
       <Navbar />

@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '../components/common/Navbar';
 import TopBar from '../components/common/TopBar';
 import ParkingSpaceDialog from '../components/common/ParkingSpaceDialog';
+import OrderDetailModal from '../components/customer/OrderDetailModal';
 import {
     collectOccupiedParkingSpaces,
     getParkingSpaceOptions,
@@ -228,6 +229,7 @@ const OrderListPage = () => {
     const [isThresholdModalOpen, setIsThresholdModalOpen] = useState(false);
     const [isThresholdSaving, setIsThresholdSaving] = useState(false);
     const [activeOrder, setActiveOrder] = useState(null);
+    const [detailOrder, setDetailOrder] = useState(null);
     const [isOrderOptionsModalOpen, setIsOrderOptionsModalOpen] = useState(false);
     const [isParkingDialogOpen, setIsParkingDialogOpen] = useState(false);
     const [parkingDialogOrder, setParkingDialogOrder] = useState(null);
@@ -444,6 +446,40 @@ const OrderListPage = () => {
         setActiveOrder(order);
         setErrorMessage('');
         setIsOrderOptionsModalOpen(true);
+    };
+
+    const handleOpenOrderDetails = (order) => {
+        if (!order) {
+            return;
+        }
+
+        setDetailOrder(order);
+        setIsOrderOptionsModalOpen(false);
+    };
+
+    const handleOrderUpdated = (updatedOrder) => {
+        if (!updatedOrder?.id) {
+            return;
+        }
+
+        const mergeOrder = (order) => ({
+            ...order,
+            ...updatedOrder,
+            customer: updatedOrder.customer || order.customer,
+            items: Array.isArray(updatedOrder.items) ? updatedOrder.items : order.items
+        });
+
+        setOrders((previous) => previous.map((order) => (
+            order.id === updatedOrder.id ? mergeOrder(order) : order
+        )));
+
+        setActiveOrder((previous) => (
+            previous?.id === updatedOrder.id ? mergeOrder(previous) : previous
+        ));
+
+        setDetailOrder((previous) => (
+            previous?.id === updatedOrder.id ? mergeOrder(previous) : previous
+        ));
     };
 
     const openParkingDialog = (order) => {
@@ -849,6 +885,14 @@ const OrderListPage = () => {
                 </div>
             ) : null}
 
+            {detailOrder ? (
+                <OrderDetailModal
+                    order={detailOrder}
+                    onClose={() => setDetailOrder(null)}
+                    onOrderUpdated={handleOrderUpdated}
+                />
+            ) : null}
+
             {isOrderOptionsModalOpen && activeOrder ? (
                 <div className="order-modal-backdrop" role="presentation" onClick={closeOrderOptionsModal}>
                     <section className="order-modal-card" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
@@ -872,6 +916,15 @@ const OrderListPage = () => {
                                 onClick={() => handleStartDispense(activeOrder)}
                             >
                                 Prep and Dispense Order
+                            </button>
+
+                            <button
+                                type="button"
+                                className="order-modal-btn order-modal-btn--primary"
+                                disabled={isSubmitting}
+                                onClick={() => handleOpenOrderDetails(activeOrder)}
+                            >
+                                Show Item Details
                             </button>
 
                             <button
