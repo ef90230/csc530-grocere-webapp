@@ -1,10 +1,21 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import TopBar from '../components/common/TopBar';
+import StoreMapPreview from '../components/common/StoreMapPreview';
 import './PickingPage.css';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
+const REPORT_TYPE_OPTIONS = [
+    { id: 'item_cannot_fit', label: 'Item cannot fit' },
+    { id: 'wrong_temperature_type', label: 'Wrong temperature type' },
+    { id: 'remove_from_oversized', label: 'Remove from Oversized' },
+    { id: 'item_locked_in_case', label: 'Item locked in case' },
+    { id: 'remove_from_restricted', label: 'Remove from Restricted' },
+    { id: 'incorrect_item_info', label: 'Incorrect item info' },
+    { id: 'item_appeared_out_of_order', label: 'Item appeared out of order' }
+];
 
 const toCurrency = (value) => {
     const numeric = Number(value);
@@ -58,6 +69,11 @@ const PickingPage = () => {
     const [isSubmittingNotFound, setIsSubmittingNotFound] = useState(false);
     const [isCameraOpen, setIsCameraOpen] = useState(false);
     const [cameraMessage, setCameraMessage] = useState('');
+    const [isReportMenuOpen, setIsReportMenuOpen] = useState(false);
+    const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
+    const [selectedReportTypes, setSelectedReportTypes] = useState([]);
+    const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+    const [reportDialogError, setReportDialogError] = useState('');
 
     const videoRef = useRef(null);
     const zxingControlsRef = useRef(null);
@@ -173,6 +189,19 @@ const PickingPage = () => {
 
     const currentItem = queue[0] || null;
     const currentQuantity = Number(currentItem?.quantityToPick || 0);
+    const currentItemHighlightedAisles = useMemo(() => {
+        const aisleNumbers = Object.entries(currentItem?.onHandByAisle || {})
+            .filter(([, quantity]) => Number(quantity) > 0)
+            .map(([aisleNumber]) => String(aisleNumber || '').trim())
+            .filter(Boolean);
+
+        if (aisleNumbers.length > 0) {
+            return aisleNumbers;
+        }
+
+        const fallbackAisle = String(currentItem?.location?.aisleNumber || '').trim();
+        return fallbackAisle ? [fallbackAisle] : [];
+    }, [currentItem]);
     const onHandAisleCount = Object.keys(currentItem?.onHandByAisle || {}).length;
     const shouldAllowMobileScroll = !substituteMode && onHandAisleCount > 5;
     const expectedUpc = substituteMode
@@ -182,6 +211,7 @@ const PickingPage = () => {
         const fallback = deriveCommodityTitle(selectedCommodity || 'Commodity');
         return deriveCommodityTitle(selectedCommodityLabel || fallback);
     }, [selectedCommodity, selectedCommodityLabel]);
+    const displayedItem = substituteMode ? substituteMode.originalEntry.substitute : currentItem?.item;
 
     const normalizeUpc = (value = '') => String(value || '').replace(/\D/g, '');
 
@@ -258,6 +288,71 @@ const PickingPage = () => {
         setSubstituteMode(null);
     };
 
+    const closeReportDialog = () => {
+        setIsReportDialogOpen(false);
+        setSelectedReportTypes([]);
+        setReportDialogError('');
+        setIsSubmittingReport(false);
+    };
+
+    const toggleReportType = (reportTypeId) => {
+        setSelectedReportTypes((previous) => (
+            previous.includes(reportTypeId)
+                ? previous.filter((value) => value !== reportTypeId)
+                : [...previous, reportTypeId]
+        ));
+    };
+
+    const openReportDialog = () => {
+        setIsReportMenuOpen(false);
+        setSelectedReportTypes([]);
+        setReportDialogError('');
+        setIsReportDialogOpen(true);
+    };
+
+    const sendItemReport = async () => {
+        if (!currentItem || !displayedItem) {
+            setReportDialogError('No active item is available to report.');
+            return;
+        }
+
+        if (selectedReportTypes.length === 0) {
+            setReportDialogError('Select at least one report type.');
+            return;
+        }
+
+        const token = window.localStorage.getItem('authToken');
+        setIsSubmittingReport(true);
+        setReportDialogError('');
+
+        try {
+            const response = await fetch(`${API_BASE}/api/alerts/reports`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    reportTypes: selectedReportTypes,
+                    orderId: currentItem.orderId,
+                    itemId: displayedItem.id,
+                    itemName: displayedItem.name,
+                    locationLabel: formatLocationLabel(currentItem.location)
+                })
+            });
+
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || !payload.success) {
+                throw new Error(payload.message || 'Unable to send report.');
+            }
+
+            closeReportDialog();
+        } catch (error) {
+            setReportDialogError(error.message || 'Unable to send report.');
+            setIsSubmittingReport(false);
+        }
+    };
+
     const submitPick = async ({ upcValue, quantityValue, showDialogErrors = true }) => {
         const trimmedUpc = String(upcValue || '').trim();
         const parsedQty = Number(String(quantityValue || '').trim());
@@ -325,6 +420,7 @@ const PickingPage = () => {
                         },
                         body: JSON.stringify({
                             status: 'substituted',
+                            substitutedItemId: substituteMode?.originalEntry?.substitute?.id || null,
                             pickedQuantity: parsedQty
                         })
                     }
@@ -450,6 +546,7 @@ const PickingPage = () => {
             return undefined;
         }
 
+        const videoElement = videoRef.current;
         const reader = new BrowserMultiFormatReader();
         isHandlingScanRef.current = false;
 
@@ -457,7 +554,7 @@ const PickingPage = () => {
             try {
                 const controls = await reader.decodeFromConstraints(
                     { video: { facingMode: { ideal: 'environment' } } },
-                    videoRef.current,
+                    videoElement,
                     (result) => {
                         if (!result || isHandlingScanRef.current) return;
 
@@ -500,8 +597,8 @@ const PickingPage = () => {
             zxingControlsRef.current?.stop();
             zxingControlsRef.current = null;
             isHandlingScanRef.current = false;
-            if (videoRef.current) {
-                videoRef.current.srcObject = null;
+            if (videoElement) {
+                videoElement.srcObject = null;
             }
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -610,7 +707,7 @@ const PickingPage = () => {
         });
     };
 
-    const endWalk = async () => {
+    const endWalk = async (endedEarly = false) => {
         const token = window.localStorage.getItem('authToken');
         if (!token || !storeId || !selectedCommodity) {
             navigate('/commodityselect');
@@ -629,7 +726,8 @@ const PickingPage = () => {
                 },
                 body: JSON.stringify({
                     storeId,
-                    commodity: selectedCommodity
+                    commodity: selectedCommodity,
+                    endedEarly
                 })
             });
 
@@ -663,6 +761,15 @@ const PickingPage = () => {
                 leftActionLabel="X"
                 leftActionAriaLabel="End pick walk"
                 onLeftAction={() => setIsEndPromptOpen(true)}
+                extraActionLabel="⋮"
+                extraActionAriaLabel="Toggle item reporting actions"
+                onExtraAction={() => setIsReportMenuOpen((previous) => !previous)}
+                isExtraActionMenuOpen={isReportMenuOpen}
+                extraActionMenu={(
+                    <button type="button" className="picking-report-menu-button" onClick={openReportDialog}>
+                        Report Item
+                    </button>
+                )}
                 statMode="walk"
                 walkCompletedUnits={completedUnits}
                 walkTotalUnits={totalUnits}
@@ -826,25 +933,14 @@ const PickingPage = () => {
                 <div className="picking-modal-overlay" onClick={() => setIsMapOpen(false)}>
                     <section className="picking-map-modal" onClick={(event) => event.stopPropagation()}>
                         <h3>Current Item Map</h3>
-                        <p className="picking-map-subtitle">Highlighted aisle for {currentItem.item.name}</p>
-                        <div className="picking-map-grid">
-                            {(aisles || []).map((aisle) => {
-                                const aisleNumber = String(aisle.aisleNumber || '');
-                                const isHighlighted = aisleNumber === String(currentItem?.location?.aisleNumber || '');
-
-                                return (
-                                    <div
-                                        key={aisle.id || aisleNumber}
-                                        className={`picking-map-aisle ${isHighlighted ? 'picking-map-aisle--highlighted' : ''}`}
-                                    >
-                                        Aisle {aisleNumber || 'â€”'}
-                                    </div>
-                                );
-                            })}
-                            {(!aisles || aisles.length === 0) ? (
-                                <div className="picking-map-empty">Map unavailable for this store.</div>
-                            ) : null}
-                        </div>
+                        <p className="picking-map-subtitle">Highlighted aisles for {currentItem.item.name}</p>
+                        <StoreMapPreview
+                            aisles={aisles || []}
+                            highlightedAisleNumbers={currentItemHighlightedAisles}
+                            title=""
+                            emptyMessage="Map unavailable for this store."
+                            className="picking-map-preview"
+                        />
                         <button type="button" className="picking-modal-close" onClick={() => setIsMapOpen(false)}>
                             Close
                         </button>
@@ -864,7 +960,7 @@ const PickingPage = () => {
                             <button type="button" onClick={() => setIsEndPromptOpen(false)} disabled={isEndingWalk}>
                                 No
                             </button>
-                            <button type="button" className="danger" onClick={endWalk} disabled={isEndingWalk}>
+                            <button type="button" className="danger" onClick={() => endWalk(true)} disabled={isEndingWalk}>
                                 {isEndingWalk ? 'Ending\u2026' : 'Yes'}
                             </button>
                         </div>
@@ -971,6 +1067,44 @@ const PickingPage = () => {
                         <button type="button" className="picking-modal-close" onClick={closeCameraModal}>
                             Close
                         </button>
+                    </section>
+                </div>
+            ) : null}
+
+            {isReportDialogOpen && currentItem && displayedItem ? (
+                <div className="picking-modal-overlay" onClick={closeReportDialog}>
+                    <section className="picking-report-modal" onClick={(event) => event.stopPropagation()}>
+                        <h3>What would you like to report?</h3>
+                        <p className="picking-report-subtitle">{displayedItem.name}</p>
+                        <div className="picking-report-options">
+                            {REPORT_TYPE_OPTIONS.map((option) => {
+                                const isSelected = selectedReportTypes.includes(option.id);
+                                return (
+                                    <button
+                                        key={option.id}
+                                        type="button"
+                                        className={`picking-report-option ${isSelected ? 'picking-report-option--selected' : ''}`}
+                                        onClick={() => toggleReportType(option.id)}
+                                    >
+                                        {option.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        {reportDialogError ? <p className="picking-report-error">{reportDialogError}</p> : null}
+                        <div className="picking-report-actions">
+                            <button type="button" className="picking-report-back" onClick={closeReportDialog} disabled={isSubmittingReport}>
+                                Back
+                            </button>
+                            <button
+                                type="button"
+                                className="picking-report-send"
+                                onClick={sendItemReport}
+                                disabled={isSubmittingReport || selectedReportTypes.length === 0}
+                            >
+                                {isSubmittingReport ? 'Sending…' : 'Send Report'}
+                            </button>
+                        </div>
                     </section>
                 </div>
             ) : null}

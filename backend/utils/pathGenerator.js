@@ -9,12 +9,18 @@ const calculateDistance = (coord1, coord2) => {
   return Math.sqrt(dx * dx + dy * dy);
 };
 
+const normalizeTemperature = (value, fallback = 'ambient') => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['ambient', 'chilled', 'frozen', 'hot'].includes(normalized) ? normalized : fallback;
+};
+
 const generateOptimizedPath = async (storeId, commodity, backroomCoords) => {
   try {
+    const temperature = normalizeTemperature(commodity);
     const locations = await Location.findAll({
       where: {
         storeId,
-        commodity
+        temperature
       },
       include: [
         {
@@ -112,7 +118,7 @@ const generateAllPaths = async (storeId) => {
     }
 
     const backroomCoords = store.backroomDoorLocation || { x: 0, y: 0 };
-    const commodities = ['ambient', 'chilled', 'frozen', 'hot', 'oversized', 'restricted'];
+    const commodities = ['ambient', 'chilled', 'frozen', 'hot'];
     
     const paths = {};
     
@@ -129,6 +135,7 @@ const generateAllPaths = async (storeId) => {
 };
 
 const generateAvailableLocationPath = async (storeId, commodity, backroomCoords) => {
+  const temperature = commodity ? normalizeTemperature(commodity) : null;
   const stockedLocations = await ItemLocation.findAll({
     where: {
       storeId,
@@ -140,13 +147,14 @@ const generateAvailableLocationPath = async (storeId, commodity, backroomCoords)
         as: 'item',
         where: {
           isActive: true,
-          ...(commodity ? { commodity } : {})
+          ...(temperature ? { temperature } : {})
         },
-        attributes: ['id', 'commodity', 'name']
+        attributes: ['id', 'commodity', 'temperature', 'name']
       },
       {
         model: Location,
         as: 'location',
+        where: temperature ? { temperature } : undefined,
         include: [
           {
             model: Aisle,

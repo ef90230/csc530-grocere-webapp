@@ -1,4 +1,11 @@
 const STORE_SETTINGS_KEY = '__storeSettings';
+const {
+  DEFAULT_TIME_ZONE,
+  addDaysToDayKey,
+  getTimeZoneDayKey,
+  normalizeTimeZone,
+  getWeekdayIndexFromDayKey
+} = require('./timeZone');
 
 const DEFAULT_GOALS = {
   pickRateGoal: {
@@ -26,6 +33,15 @@ const DEFAULT_GOALS = {
 const DEFAULT_TIMESLOT_ORDER_LIMIT = 20;
 const DEFAULT_WAIT_TIME_WARNING_MINUTES = 5;
 const MAX_STORE_PHONE_LENGTH = 32;
+const DEFAULT_SCHEDULING_HOURS = Object.freeze({
+  0: Object.freeze([8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]),
+  1: Object.freeze([8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]),
+  2: Object.freeze([8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]),
+  3: Object.freeze([8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]),
+  4: Object.freeze([8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]),
+  5: Object.freeze([8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]),
+  6: Object.freeze([8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23])
+});
 
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 const isUnsafeObjectKey = (key) => key === '__proto__' || key === 'prototype' || key === 'constructor';
@@ -85,6 +101,24 @@ const normalizeOverrides = (inputOverrides) => {
   }, {});
 };
 
+const normalizeSchedulingHours = (inputSchedulingHours) => {
+  const source = inputSchedulingHours && typeof inputSchedulingHours === 'object' && !Array.isArray(inputSchedulingHours)
+    ? inputSchedulingHours
+    : {};
+
+  return Object.keys(DEFAULT_SCHEDULING_HOURS).reduce((accumulator, dayKey) => {
+    const inputHours = Array.isArray(source[dayKey]) ? source[dayKey] : DEFAULT_SCHEDULING_HOURS[dayKey];
+    const normalizedHours = Array.from(new Set(
+      inputHours
+        .map((hour) => Math.round(toNumber(hour, NaN)))
+        .filter((hour) => Number.isInteger(hour) && hour >= 0 && hour <= 23)
+    )).sort((left, right) => left - right);
+
+    accumulator[dayKey] = normalizedHours;
+    return accumulator;
+  }, {});
+};
+
 const normalizeStoreSettings = (inputSettings, options = {}) => {
   const source = inputSettings && typeof inputSettings === 'object' && !Array.isArray(inputSettings)
     ? inputSettings
@@ -93,6 +127,7 @@ const normalizeStoreSettings = (inputSettings, options = {}) => {
 
   const goals = source.goals && typeof source.goals === 'object' ? source.goals : {};
   const timeslot = source.timeslot && typeof source.timeslot === 'object' ? source.timeslot : {};
+  const scheduling = source.scheduling && typeof source.scheduling === 'object' ? source.scheduling : {};
   const hasGoal = (goalKey) => hasOwn(goals, goalKey) && goals[goalKey] && typeof goals[goalKey] === 'object';
 
   const defaultLimit = Math.round(clamp(toNumber(timeslot.defaultLimit, DEFAULT_TIMESLOT_ORDER_LIMIT), 1, 500));
@@ -109,6 +144,10 @@ const normalizeStoreSettings = (inputSettings, options = {}) => {
     timeslot: {
       defaultLimit,
       overrides: normalizeOverrides(timeslot.overrides)
+    },
+    scheduling: {
+      timeZone: normalizeTimeZone(scheduling.timeZone, DEFAULT_TIME_ZONE),
+      hoursByWeekday: normalizeSchedulingHours(scheduling.hoursByWeekday)
     },
     waitTimeWarningMinutes,
     storePhone: normalizeStorePhone(source.storePhone, fallbackStorePhone)
@@ -172,16 +211,39 @@ const getTimeslotCapacityForDate = (storeSettings, dateValue) => {
   return settings.timeslot.overrides[slotKey] || settings.timeslot.defaultLimit;
 };
 
+const getSchedulingHoursForDay = (storeSettings, dayKey) => {
+  const settings = normalizeStoreSettings(storeSettings);
+  const weekdayIndex = getWeekdayIndexFromDayKey(dayKey);
+  return settings.scheduling.hoursByWeekday[String(weekdayIndex)] || [];
+};
+
+const getStoreTodayKey = (storeSettings, dateValue = new Date()) => {
+  const settings = normalizeStoreSettings(storeSettings);
+  return getTimeZoneDayKey(dateValue, settings.scheduling.timeZone);
+};
+
+const getStoreDateRange = (storeSettings, startDayKey, daysAhead = 7) => {
+  const normalizedStart = startDayKey || getStoreTodayKey(storeSettings, new Date());
+  return {
+    startDayKey: normalizedStart,
+    endDayKey: addDaysToDayKey(normalizedStart, daysAhead)
+  };
+};
+
 module.exports = {
   DEFAULT_GOALS,
   DEFAULT_TIMESLOT_ORDER_LIMIT,
   DEFAULT_WAIT_TIME_WARNING_MINUTES,
+  DEFAULT_SCHEDULING_HOURS,
   STORE_SETTINGS_KEY,
   normalizeStoreSettings,
   normalizeStorePhone,
   getStoreSettingsFromStore,
   resolveStorePhoneFromStore,
   buildBackroomDoorLocationWithStoreSettings,
+  getSchedulingHoursForDay,
+  getStoreDateRange,
+  getStoreTodayKey,
   getTimeslotKeyFromDate,
   getTimeslotCapacityForDate
 };

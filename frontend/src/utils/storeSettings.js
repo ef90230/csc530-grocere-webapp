@@ -1,6 +1,157 @@
 export const STORE_SETTINGS_CACHE_KEY = 'grocereStoreSettingsCache';
 
 export const DEFAULT_WAIT_TIME_WARNING_MINUTES = 5;
+export const DEFAULT_STORE_TIME_ZONE = 'UTC';
+export const WEEKDAY_OPTIONS = [
+  { key: '0', label: 'Sunday' },
+  { key: '1', label: 'Monday' },
+  { key: '2', label: 'Tuesday' },
+  { key: '3', label: 'Wednesday' },
+  { key: '4', label: 'Thursday' },
+  { key: '5', label: 'Friday' },
+  { key: '6', label: 'Saturday' }
+];
+export const DEFAULT_SCHEDULING_HOURS = WEEKDAY_OPTIONS.reduce((accumulator, day) => {
+  accumulator[day.key] = Array.from({ length: 16 }, (_, index) => index + 8);
+  return accumulator;
+}, {});
+
+const FALLBACK_TIME_ZONE_VALUES = [
+  'UTC',
+  'Pacific/Honolulu',
+  'America/Anchorage',
+  'America/Los_Angeles',
+  'America/Phoenix',
+  'America/Denver',
+  'America/Chicago',
+  'America/New_York',
+  'America/Halifax',
+  'America/St_Johns',
+  'Europe/London',
+  'Europe/Paris',
+  'Europe/Athens',
+  'Asia/Dubai',
+  'Asia/Karachi',
+  'Asia/Kolkata',
+  'Asia/Dhaka',
+  'Asia/Bangkok',
+  'Asia/Shanghai',
+  'Asia/Tokyo',
+  'Australia/Adelaide',
+  'Australia/Sydney',
+  'Pacific/Auckland'
+];
+
+const formatUtcOffsetLabel = (offsetMinutes) => {
+  const totalMinutes = Number.isFinite(offsetMinutes) ? offsetMinutes : 0;
+  const sign = totalMinutes >= 0 ? '+' : '-';
+  const absoluteMinutes = Math.abs(totalMinutes);
+  const hours = Math.floor(absoluteMinutes / 60);
+  const minutes = absoluteMinutes % 60;
+
+  if (minutes === 0) {
+    return `UTC${sign}${hours}`;
+  }
+
+  return `UTC${sign}${hours}:${String(minutes).padStart(2, '0')}`;
+};
+
+const getTimeZoneParts = (value, timeZoneName) => {
+  try {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: value,
+      timeZoneName,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).formatToParts(new Date());
+  } catch {
+    return [];
+  }
+};
+
+const getTimeZoneOffsetMinutes = (value) => {
+  const parts = getTimeZoneParts(value, 'longOffset');
+  const offsetName = parts.find((part) => part.type === 'timeZoneName')?.value || 'GMT';
+  if (offsetName === 'GMT' || offsetName === 'UTC') {
+    return 0;
+  }
+
+  const match = offsetName.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/i);
+  if (!match) {
+    return 0;
+  }
+
+  const sign = match[1] === '+' ? 1 : -1;
+  const hours = Number(match[2] || 0);
+  const minutes = Number(match[3] || 0);
+  return sign * ((hours * 60) + minutes);
+};
+
+const getFriendlyTimeZoneName = (value) => {
+  const parts = getTimeZoneParts(value, 'long');
+  const rawName = String(parts.find((part) => part.type === 'timeZoneName')?.value || '').trim();
+  if (!rawName || /^gmt/i.test(rawName) || /^utc/i.test(rawName)) {
+    return 'Coordinated Universal Time';
+  }
+
+  return rawName;
+};
+
+export const getTimeZoneOption = (value) => {
+  if (typeof value !== 'string' || !value.trim()) {
+    return null;
+  }
+
+  const normalizedValue = value.trim();
+  const offsetMinutes = getTimeZoneOffsetMinutes(normalizedValue);
+  const friendlyName = getFriendlyTimeZoneName(normalizedValue);
+
+  return {
+    value: normalizedValue,
+    label: `${friendlyName} (${formatUtcOffsetLabel(offsetMinutes)})`,
+    offsetMinutes,
+    sortLabel: friendlyName
+  };
+};
+
+export const TIME_ZONE_OPTIONS = (() => {
+  const rawValues = (() => {
+    if (typeof Intl !== 'undefined' && typeof Intl.supportedValuesOf === 'function') {
+      try {
+        const supported = Intl.supportedValuesOf('timeZone');
+        if (Array.isArray(supported) && supported.length > 0) {
+          return Array.from(new Set([DEFAULT_STORE_TIME_ZONE, ...supported]));
+        }
+      } catch {
+      }
+    }
+
+    return FALLBACK_TIME_ZONE_VALUES;
+  })();
+
+  const definitionsByLabel = new Map();
+
+  rawValues.forEach((value) => {
+    const option = getTimeZoneOption(value);
+    if (!option) {
+      return;
+    }
+
+    const existing = definitionsByLabel.get(option.label);
+    if (!existing || option.value === DEFAULT_STORE_TIME_ZONE) {
+      definitionsByLabel.set(option.label, option);
+    }
+  });
+
+  return Array.from(definitionsByLabel.values()).sort((left, right) => {
+    if (left.offsetMinutes !== right.offsetMinutes) {
+      return left.offsetMinutes - right.offsetMinutes;
+    }
+
+    return left.sortLabel.localeCompare(right.sortLabel);
+  });
+})();
 
 export const DEFAULT_STORE_SETTINGS = {
   goals: {
@@ -29,6 +180,10 @@ export const DEFAULT_STORE_SETTINGS = {
     defaultLimit: 20,
     overrides: {}
   },
+  scheduling: {
+    timeZone: DEFAULT_STORE_TIME_ZONE,
+    hoursByWeekday: DEFAULT_SCHEDULING_HOURS
+  },
   storePhone: ''
 };
 
@@ -42,6 +197,21 @@ const toNumber = (value, fallback = 0) => {
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
 const isUnsafeObjectKey = (key) => key === '__proto__' || key === 'prototype' || key === 'constructor';
+
+const isValidTimeZone = (value) => {
+  if (typeof value !== 'string' || !value.trim()) {
+    return false;
+  }
+
+  try {
+    new Intl.DateTimeFormat([], { timeZone: value }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const normalizeTimeZone = (value) => (isValidTimeZone(value) ? value : DEFAULT_STORE_TIME_ZONE);
 
 const normalizeStorePhone = (value) => {
   if (typeof value !== 'string' && typeof value !== 'number') {
@@ -78,6 +248,22 @@ const normalizeOverrides = (inputOverrides) => {
   return safeOverrides;
 };
 
+const normalizeSchedulingHours = (inputSchedulingHours) => {
+  const source = inputSchedulingHours && typeof inputSchedulingHours === 'object' && !Array.isArray(inputSchedulingHours)
+    ? inputSchedulingHours
+    : {};
+
+  return WEEKDAY_OPTIONS.reduce((accumulator, day) => {
+    const inputHours = Array.isArray(source[day.key]) ? source[day.key] : DEFAULT_SCHEDULING_HOURS[day.key];
+    accumulator[day.key] = Array.from(new Set(
+      inputHours
+        .map((hour) => Math.round(toNumber(hour, NaN)))
+        .filter((hour) => Number.isInteger(hour) && hour >= 0 && hour <= 23)
+    )).sort((left, right) => left - right);
+    return accumulator;
+  }, {});
+};
+
 const normalizeGoal = (inputGoal, defaultGoal, options = {}) => {
   const min = Number.isFinite(options.min) ? options.min : 0;
   const max = Number.isFinite(options.max) ? options.max : Number.MAX_SAFE_INTEGER;
@@ -94,6 +280,7 @@ export const normalizeStoreSettings = (inputSettings) => {
   const source = inputSettings && typeof inputSettings === 'object' ? inputSettings : {};
   const goals = source.goals && typeof source.goals === 'object' ? source.goals : {};
   const timeslot = source.timeslot && typeof source.timeslot === 'object' ? source.timeslot : {};
+  const scheduling = source.scheduling && typeof source.scheduling === 'object' ? source.scheduling : {};
 
   const hasGoal = (goalKey) => hasOwn(goals, goalKey) && goals[goalKey] && typeof goals[goalKey] === 'object';
 
@@ -110,6 +297,10 @@ export const normalizeStoreSettings = (inputSettings) => {
     timeslot: {
       defaultLimit: Math.round(Math.max(1, toNumber(timeslot.defaultLimit, DEFAULT_STORE_SETTINGS.timeslot.defaultLimit))),
       overrides: normalizeOverrides(timeslot.overrides)
+    },
+    scheduling: {
+      timeZone: normalizeTimeZone(scheduling.timeZone),
+      hoursByWeekday: normalizeSchedulingHours(scheduling.hoursByWeekday)
     },
     waitTimeWarningMinutes,
     storePhone: normalizeStorePhone(source.storePhone)

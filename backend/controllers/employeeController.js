@@ -279,9 +279,15 @@ const getMyAndStoreStats = async (req, res) => {
       attributes: ['id']
     });
 
+    const storeRecord = await Store.findByPk(currentEmployee.storeId, {
+      attributes: ['id', 'backroomDoorLocation']
+    });
+    const storeSettings = storeRecord ? getStoreSettingsFromStore(storeRecord) : normalizeStoreSettings(null);
+    const storeTimeZone = storeSettings?.scheduling?.timeZone;
+
     const employeeIds = storeEmployees.map((employee) => employee.id);
     const timeframeEntries = await Promise.all(employeeIds.map(async (employeeId) => {
-      const stats = await getEmployeeTimeframeStats(employeeId);
+      const stats = await getEmployeeTimeframeStats(employeeId, { timeZone: storeTimeZone });
       return {
         employeeId,
         ...stats
@@ -300,12 +306,7 @@ const getMyAndStoreStats = async (req, res) => {
     const storeAllTimeStats = aggregateStoreStats(timeframeEntries, 'allTime');
     const walkHistory = await getCompletedPickWalkHistory(currentEmployee.id);
 
-    const storeRecord = await Store.findByPk(currentEmployee.storeId, {
-      attributes: ['id', 'backroomDoorLocation']
-    });
-    const storeSettings = storeRecord ? getStoreSettingsFromStore(storeRecord) : normalizeStoreSettings(null);
-
-    const waitTimeStats = getStoreWaitTimeStats(currentEmployee.storeId);
+    const waitTimeStats = getStoreWaitTimeStats(currentEmployee.storeId, { timeZone: storeTimeZone });
 
     res.json({
       success: true,
@@ -491,10 +492,16 @@ const getStoreLeaderboard = async (req, res) => {
       attributes: ['id', 'firstName', 'lastName']
     });
 
+    const storeRecord = await Store.findByPk(currentEmployee.storeId, {
+      attributes: ['id', 'backroomDoorLocation']
+    });
+    const storeSettings = storeRecord ? getStoreSettingsFromStore(storeRecord) : normalizeStoreSettings(null);
+    const storeTimeZone = storeSettings?.scheduling?.timeZone;
+
     // Get today's stats for all employees
     const leaderboardEntries = await Promise.all(
       storeEmployees.map(async (employee) => {
-        const stats = await getEmployeeTimeframeStats(employee.id);
+        const stats = await getEmployeeTimeframeStats(employee.id, { timeZone: storeTimeZone });
         return {
           id: employee.id,
           firstName: employee.firstName,

@@ -1,5 +1,6 @@
 const { Item, ItemLocation, Location, Aisle, Store, Order, OrderItem, sequelize } = require('../models');
 const { Op } = require('sequelize');
+const { syncItemOutOfStockAlerts } = require('./alertController');
 
 const TERMINAL_ORDER_STATUSES = new Set(['completed', 'complete', 'cancelled', 'canceled', 'deleted']);
 const CANCELED_ORDER_ITEM_STATUSES = new Set(['canceled', 'cancelled', 'out_of_stock', 'skipped', 'not_found']);
@@ -11,6 +12,11 @@ const toNonNegativeInteger = (value, fallback = 0) => {
   }
 
   return Math.max(0, Math.round(parsed));
+};
+
+const normalizeTemperature = (value, fallback = 'ambient') => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['ambient', 'chilled', 'frozen', 'hot'].includes(normalized) ? normalized : fallback;
 };
 
 const getAssignedQuantityTotal = (item) => {
@@ -301,6 +307,20 @@ const deleteItem = async (req, res) => {
         lock: transaction.LOCK.UPDATE
       });
 
+      const substituteOrderItems = await OrderItem.findAll({
+        where: { substitutedItemId: itemId },
+        include: [
+          {
+            model: Order,
+            as: 'order',
+            attributes: ['id', 'status'],
+            required: true
+          }
+        ],
+        transaction,
+        lock: transaction.LOCK.UPDATE
+      });
+
       const activeOrderIds = Array.from(new Set(
         orderItems
           .map((orderItem) => {
@@ -312,6 +332,35 @@ const deleteItem = async (req, res) => {
           })
           .filter(Boolean)
       ));
+
+      const substituteOrderItemIdsToClear = Array.from(new Set(
+        substituteOrderItems
+          .map((orderItem) => {
+            const normalizedOrderStatus = String(orderItem?.order?.status || '').toLowerCase();
+            const normalizedItemStatus = String(orderItem?.status || '').toLowerCase();
+
+            if (!orderItem?.id || TERMINAL_ORDER_STATUSES.has(normalizedOrderStatus) || normalizedItemStatus === 'substituted') {
+              return null;
+            }
+
+            return orderItem.id;
+          })
+          .filter(Boolean)
+      ));
+
+      if (substituteOrderItemIdsToClear.length > 0) {
+        await OrderItem.update(
+          {
+            substitutedItemId: null
+          },
+          {
+            where: {
+              id: { [Op.in]: substituteOrderItemIdsToClear }
+            },
+            transaction
+          }
+        );
+      }
 
       if (activeOrderIds.length > 0) {
         await OrderItem.update(
@@ -496,6 +545,13 @@ const updateItemInventory = async (req, res) => {
       await item.update({ unassignedQuantity: nextQuantity }, { transaction });
       await transaction.commit();
 
+      await syncItemOutOfStockAlerts({
+        itemId,
+        storeId,
+        locationLabel: '',
+        locationQuantity: null
+      });
+
       return res.json({
         success: true,
         unassignedQuantity: toNonNegativeInteger(item.unassignedQuantity, 0)
@@ -557,6 +613,16 @@ const updateItemInventory = async (req, res) => {
 
     await transaction.commit();
 
+    const locationLabel = [location?.aisleId, location?.section]
+      .filter((value) => value !== undefined && value !== null && String(value).trim() !== '')
+      .join('-');
+    await syncItemOutOfStockAlerts({
+      itemId,
+      storeId,
+      locationLabel,
+      locationQuantity: nextQuantity
+    });
+
     return res.json({
       success: true,
       itemLocation,
@@ -592,6 +658,11 @@ const addItemLocationAssignment = async (req, res) => {
     if (!location) {
       await transaction.rollback();
       return res.status(404).json({ message: 'Location not found for this store.' });
+    }
+
+    if (normalizeTemperature(item.temperature) !== normalizeTemperature(location.temperature)) {
+      await transaction.rollback();
+      return res.status(400).json({ message: 'Items can only be assigned to sections with the same temperature type.' });
     }
 
     const [itemLocation] = await ItemLocation.findOrCreate({
@@ -655,6 +726,17 @@ const reassignItemLocationAssignment = async (req, res) => {
     if (!targetLocation) {
       await transaction.rollback();
       return res.status(404).json({ message: 'Target location not found for this store.' });
+    }
+
+    const item = await Item.findByPk(itemId, { transaction, lock: transaction.LOCK.UPDATE });
+    if (!item) {
+      await transaction.rollback();
+      return res.status(404).json({ message: 'Item not found.' });
+    }
+
+    if (normalizeTemperature(item.temperature) !== normalizeTemperature(targetLocation.temperature)) {
+      await transaction.rollback();
+      return res.status(400).json({ message: 'Items can only be assigned to sections with the same temperature type.' });
     }
 
     const [targetRow] = await ItemLocation.findOrCreate({

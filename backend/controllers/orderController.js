@@ -12,18 +12,25 @@ const {
   recordPickQuantity,
   recordMistakeQuantity,
   closeWalk,
-  closeLatestOpenWalk
+  closeLatestOpenWalk,
+  getLatestOpenWalk
 } = require('../utils/walkPerformanceStore');
 const { recordOrderWaitTime } = require('../utils/storeWaitTimeHistoryStore');
-const { resolveStorePhoneFromStore } = require('../utils/storeSettings');
+const { resolveStorePhoneFromStore, getStoreSettingsFromStore, normalizeStoreSettings } = require('../utils/storeSettings');
+const {
+  createOrderCanceledAlert,
+  createPickerExitedWalkAlert,
+  syncItemOutOfStockAlerts,
+  upsertSystemAlert
+} = require('./alertController');
 
 const COMMODITY_DISPLAY_NAMES = {
-  ambient: 'Ambient Regular',
-  chilled: 'Chilled Regular',
-  frozen: 'Frozen Regular',
-  hot: 'Hot Regular',
+  ambient: 'Ambient',
+  chilled: 'Chilled',
+  frozen: 'Frozen',
+  hot: 'Hot',
   oversized: 'Oversized',
-  restricted: 'Team Lift'
+  restricted: 'Restricted'
 };
 
 const WALK_LOOKAHEAD_HOURS = 3;
@@ -496,7 +503,6 @@ const createOrder = async (req, res) => {
       storeId,
       scheduledPickupTime,
       items,
-      timezoneOffsetMinutes,
       notes: orderNotesInput
     } = req.body;
 
@@ -506,7 +512,7 @@ const createOrder = async (req, res) => {
 
     // Validate scheduling constraints
     const scheduledTime = new Date(scheduledPickupTime);
-    const validation = await validateScheduleTime(scheduledTime, storeId, new Date(), timezoneOffsetMinutes);
+    const validation = await validateScheduleTime(scheduledTime, storeId, new Date());
 
     if (!validation.isValid) {
       return res.status(400).json({
@@ -638,7 +644,13 @@ const updateOrderStatus = async (req, res) => {
           if (!Number.isNaN(checkInDate.getTime())) {
             const waitMinutes = (Date.now() - checkInDate.getTime()) / 60000;
             if (waitMinutes > 0 && order.storeId) {
-              recordOrderWaitTime(order.storeId, waitMinutes);
+              const storeRecord = await Store.findByPk(order.storeId, {
+                attributes: ['id', 'backroomDoorLocation']
+              });
+              const storeTimeZone = storeRecord
+                ? getStoreSettingsFromStore(storeRecord).scheduling.timeZone
+                : normalizeStoreSettings(null).scheduling.timeZone;
+              recordOrderWaitTime(order.storeId, waitMinutes, new Date(), storeTimeZone);
             }
           }
         }
@@ -648,9 +660,8 @@ const updateOrderStatus = async (req, res) => {
     }
 
     if (
-      ['dispensing', 'completed'].includes(String(status || '').toLowerCase())
+      String(status || '').toLowerCase() === 'completed'
       && !assignedDispenserId
-      && !order.assignedDispenserId
       && Number.isInteger(currentEmployeeId)
       && currentEmployeeId > 0
     ) {
@@ -850,11 +861,7 @@ const getCommodityQueueForPicking = async (req, res) => {
       order: [['scheduledPickupTime', 'ASC']]
     });
 
-    const activeCommodity = orders
-      .filter((order) => order.status === 'picking')
-      .flatMap((order) => order.items || [])
-      .map((orderItem) => orderItem?.item?.commodity)
-      .find(Boolean);
+    const activeCommodity = normalizeCommodity(getLatestOpenWalk({ employeeId, storeId })?.commodity);
 
     const commodityMap = new Map();
 
@@ -881,6 +888,7 @@ const getCommodityQueueForPicking = async (req, res) => {
           commodity: commodityKey,
           displayName: COMMODITY_DISPLAY_NAMES[commodityKey] || commodityKey,
           itemCount: 0,
+          dueItemCount: 0,
           dueTime: order.scheduledPickupTime,
           isOverdue: false,
           orderNumbers: []
@@ -888,8 +896,16 @@ const getCommodityQueueForPicking = async (req, res) => {
 
         currentEntry.itemCount += remainingQuantity;
 
-        if (new Date(order.scheduledPickupTime) < new Date(currentEntry.dueTime)) {
+        const scheduledPickupTime = new Date(order.scheduledPickupTime);
+        const currentDueTime = new Date(currentEntry.dueTime);
+
+        if (scheduledPickupTime < currentDueTime) {
           currentEntry.dueTime = order.scheduledPickupTime;
+          currentEntry.dueItemCount = remainingQuantity;
+        } else if (scheduledPickupTime.getTime() === currentDueTime.getTime()) {
+          currentEntry.dueItemCount += remainingQuantity;
+        } else if (!currentEntry.dueItemCount) {
+          currentEntry.dueItemCount = remainingQuantity;
         }
 
         if (!currentEntry.orderNumbers.includes(order.orderNumber)) {
@@ -906,6 +922,28 @@ const getCommodityQueueForPicking = async (req, res) => {
         isOverdue: new Date(commodity.dueTime) < now
       }))
       .sort((left, right) => new Date(left.dueTime) - new Date(right.dueTime));
+
+    commodities.forEach((commodity) => {
+      if (!commodity.isOverdue) {
+        return;
+      }
+
+      upsertSystemAlert({
+        type: 'picks_overdue',
+        subtype: commodity.commodity,
+        title: 'Picks went overdue',
+        subject: commodity.commodity,
+        message: commodity.commodity,
+        actionLabel: 'Pick List',
+        actionTarget: {
+          path: '/commodityselect'
+        },
+        icon: 'warning',
+        severity: 'critical',
+        storeId: Number(storeId),
+        sourceKey: `picks_overdue:${storeId}:${commodity.commodity}`
+      });
+    });
 
     res.json({
       success: true,
@@ -931,6 +969,16 @@ const getCurrentPickWalk = async (req, res) => {
       return res.status(400).json({ message: 'storeId is required' });
     }
 
+    const activeWalk = getLatestOpenWalk({ employeeId, storeId });
+    const activeCommodity = normalizeCommodity(activeWalk?.commodity);
+
+    if (!activeCommodity) {
+      return res.json({
+        success: true,
+        hasActiveWalk: false
+      });
+    }
+
     const activeOrders = await Order.findAll({
       where: {
         storeId,
@@ -952,6 +1000,9 @@ const getCurrentPickWalk = async (req, res) => {
               model: Item,
               as: 'item',
               required: true,
+              where: {
+                commodity: activeCommodity
+              },
               attributes: ['id', 'commodity']
             }
           ]
@@ -960,18 +1011,6 @@ const getCurrentPickWalk = async (req, res) => {
     });
 
     if (activeOrders.length === 0) {
-      return res.json({
-        success: true,
-        hasActiveWalk: false
-      });
-    }
-
-    const firstCommodity = activeOrders
-      .flatMap((order) => order.items || [])
-      .map((orderItem) => orderItem?.item?.commodity)
-      .find(Boolean);
-
-    if (!firstCommodity) {
       return res.json({
         success: true,
         hasActiveWalk: false
@@ -988,8 +1027,8 @@ const getCurrentPickWalk = async (req, res) => {
     res.json({
       success: true,
       hasActiveWalk: true,
-      commodity: firstCommodity,
-      displayName: COMMODITY_DISPLAY_NAMES[firstCommodity] || firstCommodity,
+      commodity: activeCommodity,
+      displayName: COMMODITY_DISPLAY_NAMES[activeCommodity] || activeCommodity,
       totalItems,
       orderCount: activeOrders.length
     });
@@ -1203,6 +1242,12 @@ const recordPick = async (req, res) => {
       if (itemLocation) {
         const newQty = Math.max(0, Number(itemLocation.quantityOnHand) - qtyPicked);
         await itemLocation.update({ quantityOnHand: newQty });
+        await syncItemOutOfStockAlerts({
+          itemId: orderItem.itemId,
+          storeId: orderItem?.order?.storeId,
+          locationLabel: String(locationId),
+          locationQuantity: newQty
+        });
       }
     }
 
@@ -1227,7 +1272,7 @@ const recordPick = async (req, res) => {
 const endPickWalk = async (req, res) => {
   try {
     const employeeId = req.user?.id;
-    const { storeId, commodity } = req.body;
+    const { storeId, commodity, endedEarly } = req.body;
 
     if (!employeeId) {
       return res.status(401).json({ message: 'Employee authentication is required' });
@@ -1299,6 +1344,15 @@ const endPickWalk = async (req, res) => {
         }
       }
     );
+
+    if (endedEarly) {
+      const employeeName = `${req.user?.firstName || ''} ${req.user?.lastName || ''}`.trim() || 'Employee Name';
+      await createPickerExitedWalkAlert({
+        employeeId,
+        employeeName,
+        storeId
+      });
+    }
 
     const releasedItems = claimedOrders.reduce((sum, order) => (
       sum + order.items.reduce((itemSum, orderItem) => {
@@ -1410,24 +1464,78 @@ const recordWalkMistake = async (req, res) => {
 };
 
 const cancelOrder = async (req, res) => {
+  let transaction;
   try {
-    const order = await Order.findByPk(req.params.id);
+    transaction = await Order.sequelize.transaction();
+
+    const order = await Order.findByPk(req.params.id, { transaction });
 
     if (!order) {
+      await transaction.rollback();
       return res.status(404).json({ message: 'Order not found' });
     }
 
     if (['dispensing', 'completed'].includes(order.status)) {
+      await transaction.rollback();
       return res.status(400).json({ message: 'Cannot cancel order in current status' });
     }
 
-    await order.update({ status: 'cancelled' });
+    await order.update({ status: 'cancelled' }, { transaction });
+
+    await OrderItem.update(
+      { status: 'canceled' },
+      {
+        where: {
+          orderId: order.id,
+          status: 'pending'
+        },
+        transaction
+      }
+    );
+
+    const relatedOrders = await Order.findAll({
+      where: {
+        storeId: order.storeId,
+        orderNumber: order.orderNumber
+      },
+      attributes: ['id'],
+      transaction
+    });
+
+    const relatedOrderIds = relatedOrders
+      .map((relatedOrder) => Number(relatedOrder?.id))
+      .filter(Number.isInteger);
+
+    const orderIdsToClear = relatedOrderIds.length > 0
+      ? relatedOrderIds
+      : [Number(order.id)].filter(Number.isInteger);
+
+    if (orderIdsToClear.length > 0) {
+      await StagingAssignment.destroy({
+        where: {
+          storeId: order.storeId,
+          orderId: orderIdsToClear
+        },
+        transaction
+      });
+    }
+
+    await transaction.commit();
+
+    await createOrderCanceledAlert({
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      storeId: order.storeId
+    });
 
     res.json({
       success: true,
       message: 'Order cancelled successfully'
     });
   } catch (error) {
+    if (transaction) {
+      await transaction.rollback();
+    }
     console.error('Cancel order error:', error);
     res.status(500).json({ message: 'Server error cancelling order' });
   }
@@ -1437,32 +1545,24 @@ const cancelOrder = async (req, res) => {
 const getAvailableScheduleSlots = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const { startDate, endDate, timezoneOffsetMinutes } = req.query;
+    const { startDate, endDate } = req.query;
 
-    if (!startDate || !endDate) {
+    if ((startDate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) || (endDate && !/^\d{4}-\d{2}-\d{2}$/.test(endDate))) {
       return res.status(400).json({
-        message: 'startDate and endDate query parameters are required (ISO format)'
+        message: 'Invalid date format. Use YYYY-MM-DD for store-local scheduling dates.'
       });
     }
 
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      return res.status(400).json({
-        message: 'Invalid date format. Use ISO format (e.g., 2026-03-15)'
-      });
-    }
-
-    const slots = await getAvailableTimeSlots(storeId, startDate, endDate, new Date(), timezoneOffsetMinutes);
+    const slots = await getAvailableTimeSlots(storeId, startDate, endDate, new Date());
 
     res.json({
       success: true,
       storeId,
       dateRange: {
-        startDate: start.toISOString(),
-        endDate: end.toISOString()
+        startDate: startDate || null,
+        endDate: endDate || null
       },
+      timeZone: slots[0]?.timeZone || normalizeStoreSettings(null).scheduling.timeZone,
       slots: slots
     });
   } catch (error) {
@@ -1475,9 +1575,7 @@ const getAvailableScheduleSlots = async (req, res) => {
 const getNextAvailableSlotForStore = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const { timezoneOffsetMinutes } = req.query;
-
-    const nextSlot = await getNextAvailableSlot(storeId, new Date(), timezoneOffsetMinutes);
+    const nextSlot = await getNextAvailableSlot(storeId, new Date());
 
     if (!nextSlot) {
       return res.status(200).json({
@@ -1501,7 +1599,7 @@ const getNextAvailableSlotForStore = async (req, res) => {
 const validateOrderScheduleTime = async (req, res) => {
   try {
     const { storeId } = req.params;
-    const { scheduledPickupTime, timezoneOffsetMinutes } = req.body;
+    const { scheduledPickupTime, existingOrderId } = req.body;
 
     if (!scheduledPickupTime) {
       return res.status(400).json({
@@ -1516,7 +1614,9 @@ const validateOrderScheduleTime = async (req, res) => {
       });
     }
 
-    const validation = await validateScheduleTime(scheduledTime, storeId, new Date(), timezoneOffsetMinutes);
+    const validation = await validateScheduleTime(scheduledTime, storeId, new Date(), {
+      existingOrderId
+    });
 
     res.json({
       success: validation.isValid,

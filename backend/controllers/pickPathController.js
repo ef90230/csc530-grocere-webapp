@@ -9,6 +9,78 @@ const {
 } = require('../utils/pathGenerator');
 const { analyzePathWithAI, evaluatePath } = require('../services/aiPathService');
 
+const VALID_PATH_TEMPERATURES = new Set(['ambient', 'chilled', 'frozen', 'hot']);
+
+const normalizePathTemperature = (value, fallback = 'ambient') => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return VALID_PATH_TEMPERATURES.has(normalized) ? normalized : fallback;
+};
+
+const validateAndNormalizePathSequence = async ({ storeId, commodity, pathSequence }) => {
+  if (!Array.isArray(pathSequence)) {
+    throw new Error('pathSequence must be an array');
+  }
+
+  const normalizedCommodity = normalizePathTemperature(commodity);
+  const uniqueLocationIds = Array.from(new Set(
+    pathSequence
+      .map((locationId) => Number(locationId))
+      .filter((locationId) => Number.isInteger(locationId) && locationId > 0)
+  ));
+
+  const locations = await Location.findAll({
+    where: {
+      id: uniqueLocationIds,
+      storeId
+    },
+    attributes: ['id', 'temperature']
+  });
+
+  const locationById = new Map(locations.map((location) => [Number(location.id), location]));
+  const nextPathSequence = [];
+  const seenLocationIds = new Set();
+
+  for (const rawLocationId of pathSequence) {
+    const locationId = Number(rawLocationId);
+    if (!Number.isInteger(locationId) || locationId < 1 || seenLocationIds.has(locationId)) {
+      continue;
+    }
+
+    const location = locationById.get(locationId);
+    if (!location) {
+      continue;
+    }
+
+    if (normalizePathTemperature(location.temperature) !== normalizedCommodity) {
+      continue;
+    }
+
+    seenLocationIds.add(locationId);
+    nextPathSequence.push(locationId);
+  }
+
+  return nextPathSequence;
+};
+
+const normalizeStoredPickPath = async (pickPath) => {
+  const normalizedSequence = await validateAndNormalizePathSequence({
+    storeId: pickPath.storeId,
+    commodity: pickPath.commodity,
+    pathSequence: pickPath.pathSequence
+  });
+
+  const existingSequence = Array.isArray(pickPath.pathSequence) ? pickPath.pathSequence.map((locationId) => Number(locationId)) : [];
+  const hasChanged = normalizedSequence.length !== existingSequence.length
+    || normalizedSequence.some((locationId, index) => locationId !== existingSequence[index]);
+
+  if (hasChanged) {
+    await pickPath.update({ pathSequence: normalizedSequence });
+    pickPath.set('pathSequence', normalizedSequence);
+  }
+
+  return pickPath;
+};
+
 const getPickPaths = async (req, res) => {
   try {
     const { storeId } = req.params;
@@ -29,6 +101,8 @@ const getPickPaths = async (req, res) => {
       ],
       order: [['commodity', 'ASC'], ['createdAt', 'DESC']]
     });
+
+    await Promise.all(pickPaths.map((pickPath) => normalizeStoredPickPath(pickPath)));
 
     res.json({
       success: true,
@@ -56,6 +130,8 @@ const getPickPath = async (req, res) => {
     if (!pickPath) {
       return res.status(404).json({ message: 'Pick path not found' });
     }
+
+    await normalizeStoredPickPath(pickPath);
 
     const locations = await Location.findAll({
       where: {
@@ -178,18 +254,31 @@ const createPickPath = async (req, res) => {
   try {
     const { storeId, commodity, pathName, pathSequence } = req.body;
     const createdBy = req.user ? req.user.id : null;
+    const normalizedCommodity = normalizePathTemperature(commodity);
 
     // Enforce one-path-per-temperature-type per store
-    const existing = await PickPath.findOne({ where: { storeId, commodity } });
+    const existing = await PickPath.findOne({ where: { storeId, commodity: normalizedCommodity } });
     if (existing) {
       return res.status(409).json({
-        message: `A ${commodity} path already exists for this store. Delete it first to create a new one.`
+        message: `A ${normalizedCommodity} path already exists for this store. Delete it first to create a new one.`
+      });
+    }
+
+    const normalizedPathSequence = await validateAndNormalizePathSequence({
+      storeId,
+      commodity: normalizedCommodity,
+      pathSequence
+    });
+
+    if (normalizedPathSequence.length === 0) {
+      return res.status(400).json({
+        message: `Pick paths must use sections with the ${normalizedCommodity} temperature type.`
       });
     }
 
     let metrics = { averageDistance: 0 };
     try {
-      metrics = await calculatePathMetrics(pathSequence, storeId);
+      metrics = await calculatePathMetrics(normalizedPathSequence, storeId);
     } catch (e) {
       // Non-fatal: path is saved without metrics
     }
@@ -197,9 +286,9 @@ const createPickPath = async (req, res) => {
 
     const pickPath = await PickPath.create({
       storeId,
-      commodity,
+      commodity: normalizedCommodity,
       pathName,
-      pathSequence,
+      pathSequence: normalizedPathSequence,
       isAiGenerated: false,
       efficiencyScore: efficiencyScore.toFixed(2),
       createdBy
@@ -224,16 +313,34 @@ const updatePickPath = async (req, res) => {
       return res.status(404).json({ message: 'Pick path not found' });
     }
 
+    const nextCommodity = req.body?.commodity ? normalizePathTemperature(req.body.commodity) : pickPath.commodity;
     const { pathSequence } = req.body;
 
     if (pathSequence) {
+      const normalizedPathSequence = await validateAndNormalizePathSequence({
+        storeId: pickPath.storeId,
+        commodity: nextCommodity,
+        pathSequence
+      });
+
+      if (normalizedPathSequence.length === 0) {
+        return res.status(400).json({
+          message: `Pick paths must use sections with the ${nextCommodity} temperature type.`
+        });
+      }
+
+      req.body.pathSequence = normalizedPathSequence;
+      req.body.commodity = nextCommodity;
+
       try {
-        const metrics = await calculatePathMetrics(pathSequence, pickPath.storeId);
+        const metrics = await calculatePathMetrics(normalizedPathSequence, pickPath.storeId);
         const efficiencyScore = Math.max(0, 100 - (parseFloat(metrics.averageDistance) * 2));
         req.body.efficiencyScore = efficiencyScore.toFixed(2);
       } catch (e) {
         // Non-fatal: efficiency score will not be updated
       }
+    } else if (req.body?.commodity) {
+      req.body.commodity = nextCommodity;
     }
 
     await pickPath.update(req.body);

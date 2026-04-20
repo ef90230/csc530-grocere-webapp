@@ -424,7 +424,6 @@ const DispensePage = () => {
                 {!isLoading && !errorMessage ? (
                     <>
                         <section className="dispense-order-header">
-                            <p className="dispense-order-id">{orderNumber || 'Order'}</p>
                             <h1>{customerName}</h1>
                             <p className="dispense-order-number">Order {orderNumber || `#${orderId}`}</p>
                             <div className="dispense-space-badge">

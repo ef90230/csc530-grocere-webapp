@@ -6,22 +6,20 @@ import './SchedulingScreen.css';
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 const CLOSE_ANIMATION_MS = 280;
 const SLOTS_PER_HOUR_CAPACITY = 20;
-const START_HOUR = 8;
-const END_HOUR = 23;
-const MAX_DAYS_AHEAD = 7;
 
-const pad = (value) => `${value}`.padStart(2, '0');
-const toDateKey = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+const getDateFromKey = (dateKey) => {
+    const [year, month, day] = String(dateKey || '').split('-').map(Number);
+    return new Date(year, (month || 1) - 1, day || 1, 0, 0, 0, 0);
+};
 
-const getDayLabel = (date) => date.toLocaleDateString([], {
+const getDayLabel = (dateKey) => getDateFromKey(dateKey).toLocaleDateString([], {
     weekday: 'short',
     month: 'numeric',
     day: 'numeric'
 });
 
 const formatDateHeading = (dateKey) => {
-    const [year, month, day] = dateKey.split('-').map(Number);
-    const date = new Date(year, month - 1, day);
+    const date = getDateFromKey(dateKey);
     return date.toLocaleDateString([], {
         weekday: 'long',
         month: 'long',
@@ -35,11 +33,6 @@ const formatHourLabel = (hour) => {
     return `${normalizedHour}:00 ${period}`;
 };
 
-const createSlotDate = (dateKey, hour) => {
-    const [year, month, day] = dateKey.split('-').map(Number);
-    return new Date(year, month - 1, day, hour, 0, 0, 0);
-};
-
 const formatCurrency = (value) => `$${Number(value || 0).toFixed(2)}`;
 
 const SchedulingScreen = () => {
@@ -50,9 +43,10 @@ const SchedulingScreen = () => {
     const [customerId, setCustomerId] = useState(null);
     const [storeId, setStoreId] = useState(null);
     const [cartItems, setCartItems] = useState([]);
-    const [selectedDate, setSelectedDate] = useState(toDateKey(new Date()));
+    const [selectedDate, setSelectedDate] = useState('');
     const [selectedSlotKey, setSelectedSlotKey] = useState('');
-    const [slotMetaByKey, setSlotMetaByKey] = useState({});
+    const [availableSlots, setAvailableSlots] = useState([]);
+    const [storeTimeZone, setStoreTimeZone] = useState('UTC');
     const [isLoading, setIsLoading] = useState(true);
     const [isPlacingOrder, setIsPlacingOrder] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
@@ -122,13 +116,8 @@ const SchedulingScreen = () => {
                     return;
                 }
 
-                const now = new Date();
-                const end = new Date(now);
-                end.setDate(end.getDate() + MAX_DAYS_AHEAD);
-                const timezoneOffsetMinutes = now.getTimezoneOffset();
-
                 const slotsResponse = await fetch(
-                    `${API_BASE}/api/orders/scheduling/slots/${resolvedStoreId}?startDate=${toDateKey(now)}&endDate=${toDateKey(end)}&timezoneOffsetMinutes=${timezoneOffsetMinutes}`,
+                    `${API_BASE}/api/orders/scheduling/slots/${resolvedStoreId}`,
                     {
                         headers: {
                             Authorization: `Bearer ${token}`
@@ -144,22 +133,38 @@ const SchedulingScreen = () => {
                 const slotsPayload = await slotsResponse.json();
                 const incomingSlots = slotsPayload?.slots || [];
 
-                const nextMeta = incomingSlots.reduce((accumulator, slot) => {
-                    const slotTime = new Date(slot?.time);
-                    if (Number.isNaN(slotTime.getTime())) {
-                        return accumulator;
+                const normalizedSlots = incomingSlots
+                    .map((slot) => {
+                        const slotTime = new Date(slot?.time);
+                        const slotDateKey = String(slot?.date || '');
+                        const slotHour = Number(slot?.hour);
+
+                        if (!slotDateKey || Number.isNaN(slotTime.getTime()) || !Number.isInteger(slotHour)) {
+                            return null;
+                        }
+
+                        return {
+                            key: `${slotDateKey}-${slotHour}`,
+                            date: slotDateKey,
+                            hour: slotHour,
+                            slotDate: slotTime,
+                            ordersScheduled: Number(slot?.ordersScheduled || 0),
+                            capacity: Number(slot?.capacity || SLOTS_PER_HOUR_CAPACITY),
+                            isAvailable: Boolean(slot?.isAvailable)
+                        };
+                    })
+                    .filter(Boolean)
+                    .sort((left, right) => left.slotDate.getTime() - right.slotDate.getTime());
+
+                setAvailableSlots(normalizedSlots);
+                setStoreTimeZone(String(slotsPayload?.timeZone || 'UTC'));
+                setSelectedDate((previousDate) => {
+                    if (previousDate && normalizedSlots.some((slot) => slot.date === previousDate)) {
+                        return previousDate;
                     }
 
-                    const key = `${toDateKey(slotTime)}-${slotTime.getHours()}`;
-                    accumulator[key] = {
-                        ordersScheduled: Number(slot?.ordersScheduled || 0),
-                        capacity: Number(slot?.capacity || SLOTS_PER_HOUR_CAPACITY)
-                    };
-
-                    return accumulator;
-                }, {});
-
-                setSlotMetaByKey(nextMeta);
+                    return normalizedSlots[0]?.date || '';
+                });
             } catch {
                 setErrorMessage('Unable to load scheduling information. Please try again.');
             } finally {
@@ -184,55 +189,21 @@ const SchedulingScreen = () => {
     }, [isMenuClosing]);
 
     const dayOptions = useMemo(() => {
-        const days = [];
-        const today = new Date();
-
-        for (let offset = 0; offset <= MAX_DAYS_AHEAD; offset += 1) {
-            const date = new Date(today);
-            date.setDate(today.getDate() + offset);
-            days.push({
-                key: toDateKey(date),
-                label: getDayLabel(date)
-            });
-        }
-
-        return days;
-    }, []);
+        return Array.from(new Set(availableSlots.map((slot) => slot.date))).map((dateKey) => ({
+            key: dateKey,
+            label: getDayLabel(dateKey)
+        }));
+    }, [availableSlots]);
 
     const slotsForSelectedDate = useMemo(() => {
-        const now = new Date();
-        const todayKey = toDateKey(now);
-        const minimumAllowedTime = new Date(now.getTime() + 3 * 60 * 60 * 1000);
-
-        const allSlots = Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, index) => {
-            const hour = START_HOUR + index;
-            const slotDate = createSlotDate(selectedDate, hour);
-            const key = `${selectedDate}-${hour}`;
-            const slotMeta = slotMetaByKey[key] || {};
-            const ordersScheduled = Number(slotMeta?.ordersScheduled || 0);
-            const capacity = Number(slotMeta?.capacity || SLOTS_PER_HOUR_CAPACITY);
-            const isFull = ordersScheduled >= capacity;
-            const lessThanThreeHoursOut = slotDate.getTime() < minimumAllowedTime.getTime();
-            const isUnavailable = isFull || lessThanThreeHoursOut;
-
-            return {
-                key,
-                hour,
-                slotDate,
-                ordersScheduled,
-                capacity,
-                isUnavailable,
-                isSelected: selectedSlotKey === key
-            };
-        });
-
-        return allSlots.filter((slot) => {
-            if (selectedDate === todayKey && slot.slotDate.getTime() < now.getTime()) {
-                return false;
-            }
-            return true;
-        });
-    }, [selectedDate, selectedSlotKey, slotMetaByKey]);
+        return availableSlots
+            .filter((slot) => slot.date === selectedDate)
+            .map((slot) => ({
+                ...slot,
+                isUnavailable: !slot.isAvailable,
+                isSelected: selectedSlotKey === slot.key
+            }));
+    }, [availableSlots, selectedDate, selectedSlotKey]);
 
     const estimatedTotal = useMemo(() => (
         cartItems.reduce((sum, cartItem) => {
@@ -304,7 +275,6 @@ const SchedulingScreen = () => {
                 body: JSON.stringify({
                     customerId,
                     storeId,
-                    timezoneOffsetMinutes: new Date().getTimezoneOffset(),
                     scheduledPickupTime: selectedSlot.slotDate.toISOString(),
                     items: cartItems
                         .filter((cartItem) => cartItem?.item?.id)
@@ -374,6 +344,8 @@ const SchedulingScreen = () => {
                     </button>
                 </section>
 
+                <p className="schedule-screen__status">Scheduling time zone: {storeTimeZone}</p>
+
                 <section className="schedule-screen__day-picker" aria-label="Available days">
                     {dayOptions.map((day) => (
                         <button
@@ -390,7 +362,7 @@ const SchedulingScreen = () => {
                     ))}
                 </section>
 
-                <h2 className="schedule-screen__date-heading">{formatDateHeading(selectedDate)}</h2>
+                {selectedDate ? <h2 className="schedule-screen__date-heading">{formatDateHeading(selectedDate)}</h2> : null}
 
                 {isLoading && <p className="schedule-screen__status">Loading schedule...</p>}
 

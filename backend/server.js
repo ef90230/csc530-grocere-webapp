@@ -34,6 +34,7 @@ app.use('/api/cart', require('./routes/cart'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/pickpaths', require('./routes/pickPaths'));
 app.use('/api/staging-locations', require('./routes/stagingLocations'));
+app.use('/api/alerts', require('./routes/alerts'));
 
 app.get('/', (req, res) => {
   res.json({
@@ -49,7 +50,8 @@ app.get('/', (req, res) => {
       cart: '/api/cart',
       orders: '/api/orders',
       pickPaths: '/api/pickpaths',
-      stagingLocations: '/api/staging-locations'
+      stagingLocations: '/api/staging-locations',
+      alerts: '/api/alerts'
     }
   });
 });

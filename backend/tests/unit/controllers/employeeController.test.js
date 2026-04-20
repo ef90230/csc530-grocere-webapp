@@ -274,7 +274,7 @@ describe('employeeController.getMyAndStoreStats', () => {
     getCompletedPickWalkHistory.mockResolvedValue([
       {
         commodity: 'ambient',
-        commodityLabel: 'Ambient Regular',
+        commodityLabel: 'Ambient',
         startedAt: '2026-04-10T10:00:00.000Z',
         endedAt: '2026-04-10T11:00:00.000Z',
         initialTotal: 12,
@@ -357,7 +357,7 @@ describe('employeeController.getMyAndStoreStats', () => {
         walkHistory: [
           {
             commodity: 'ambient',
-            commodityLabel: 'Ambient Regular',
+            commodityLabel: 'Ambient',
             startedAt: '2026-04-10T10:00:00.000Z',
             endedAt: '2026-04-10T11:00:00.000Z',
             initialTotal: 12,

@@ -411,6 +411,31 @@ const closeLatestOpenWalk = ({ employeeId, commodity, extraMistakeQuantity = 0, 
   return target;
 };
 
+const getLatestOpenWalk = ({ employeeId, storeId } = {}) => {
+  const normalizedEmployeeId = toInt(employeeId, 0);
+  const normalizedStoreId = toInt(storeId, 0);
+  if (!normalizedEmployeeId) {
+    return null;
+  }
+
+  const store = readStore();
+  const candidates = Object.values(safeObject(store.walks))
+    .filter((walk) => {
+      if (toInt(walk?.employeeId, 0) !== normalizedEmployeeId || walk?.closed) {
+        return false;
+      }
+
+      if (normalizedStoreId && toInt(walk?.storeId, 0) !== normalizedStoreId) {
+        return false;
+      }
+
+      return true;
+    })
+    .sort((left, right) => new Date(right.startedAt).getTime() - new Date(left.startedAt).getTime());
+
+  return candidates[0] || null;
+};
+
 const getWalkFtprByKey = (key) => {
   const store = readStore();
   const walk = safeObject(store.walks[key]);
@@ -476,6 +501,7 @@ module.exports = {
   recordMistakeQuantity,
   closeWalk,
   closeLatestOpenWalk,
+  getLatestOpenWalk,
   getWalkFtprByKey,
   getWalkSummariesForEmployee
 };

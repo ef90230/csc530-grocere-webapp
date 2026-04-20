@@ -87,12 +87,24 @@
 }
 
 .store-settings-goal-main input,
-.store-settings-timeslot-row input {
+.store-settings-timeslot-row input,
+.store-settings-select {
   border: 1px solid #7b7b7b;
   border-radius: 6px;
   min-height: 36px;
   padding: 0 0.5rem;
   font-size: 1rem;
+  background: #fff;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.store-settings-select {
+  font-size: 0.84rem;
+  line-height: 1.2;
+  padding-right: 1.75rem;
+  text-overflow: ellipsis;
 }
 
 .store-settings-goal-main input:disabled {
@@ -111,6 +123,7 @@
 .store-settings-timeslot-row {
   display: grid;
   gap: 0.35rem;
+  width: 100%;
 }
 
 .store-settings-timeslot-row label {
@@ -121,6 +134,49 @@
   margin: 0.5rem 0 0;
   color: #4f4f4f;
   line-height: 1.32;
+}
+
+.store-settings-hours-grid {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.store-settings-hours-card {
+  border: 1px solid #d0d0d0;
+  border-radius: 8px;
+  background: #fff;
+  padding: 0.6rem;
+}
+
+.store-settings-hours-card h3 {
+  margin: 0 0 0.45rem;
+  font-size: 1rem;
+}
+
+.store-settings-hours-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.store-settings-hour-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid #9c9c9c;
+  border-radius: 999px;
+  background: #f4f4f4;
+  padding: 0.32rem 0.58rem;
+  font-size: 0.92rem;
+}
+
+.store-settings-hour-pill input {
+  margin: 0;
+}
+
+.store-settings-hour-pill--selected {
+  border-color: #1f54a7;
+  background: #dbe8fb;
 }
 
 .store-settings-actions {
@@ -141,4 +197,10 @@
 
 .store-settings-save-btn:disabled {
   opacity: 0.6;
+}
+
+@media (min-width: 480px) {
+  .store-settings-select {
+    font-size: 0.9rem;
+  }
 }

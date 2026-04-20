@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import Navbar from '../components/common/Navbar';
 import TopBar from '../components/common/TopBar';
@@ -98,6 +98,7 @@ export const isValidUpcCode = (value = '') => {
 
 const InventoryScreen = () => {
   const navigate = useNavigate();
+  const routeLocation = useLocation();
   const userType = window.localStorage.getItem('userType');
   const isAdmin = userType === 'admin';
   const [items, setItems] = useState([]);
@@ -159,6 +160,21 @@ const InventoryScreen = () => {
   useEffect(() => {
     fetchItems();
   }, [fetchItems]);
+
+  useEffect(() => {
+    const focusItemId = Number(routeLocation?.state?.focusItemId);
+    if (!Number.isInteger(focusItemId) || items.length === 0) {
+      return;
+    }
+
+    const matchedItem = items.find((item) => Number(item.id) === focusItemId);
+    if (!matchedItem) {
+      return;
+    }
+
+    setSelectedItem(matchedItem);
+    navigate('/inventory', { replace: true, state: {} });
+  }, [items, navigate, routeLocation?.state]);
 
   useEffect(() => {
     const token = localStorage.getItem('authToken');
@@ -471,7 +487,7 @@ const InventoryScreen = () => {
 
   return (
     <div className="inventory-screen">
-      <TopBar />
+      <TopBar title="Store Inventory" />
       <div className="page-content">
         <div className="inventory-title-row">
           <h1>Inventory</h1>

@@ -1,0 +1,206 @@
+.alert-management-page {
+  min-height: 100vh;
+  background: #f3f0e5;
+}
+
+.alert-management-content {
+  min-height: calc(100vh - 56px);
+  padding: 1rem 0.85rem calc(86px + env(safe-area-inset-bottom));
+}
+
+.alert-management-controls {
+  display: grid;
+  grid-template-columns: 1fr minmax(9rem, 11rem);
+  gap: 0.45rem;
+  margin-bottom: 0.9rem;
+}
+
+.alert-management-search,
+.alert-management-filter {
+  height: 2.3rem;
+  border: 1px solid #2d2d2d;
+  border-radius: 6px;
+  padding: 0 0.7rem;
+  font: inherit;
+  background: #fff;
+}
+
+.alert-management-search:focus,
+.alert-management-filter:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(43, 92, 186, 0.18);
+}
+
+.alert-management-message {
+  margin: 0.2rem 0 0.9rem;
+}
+
+.alert-management-message--error {
+  color: #b42318;
+}
+
+.alert-management-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.alert-management-empty {
+  padding: 1rem;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid #d7d1c2;
+}
+
+.alert-management-empty h2,
+.alert-management-empty p {
+  margin: 0;
+}
+
+.alert-management-empty p {
+  margin-top: 0.4rem;
+  color: #555;
+}
+
+.alert-management-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.7rem;
+  align-items: center;
+  padding: 0.8rem 0.9rem;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  color: #111;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.08);
+}
+
+.alert-management-card--item-report {
+  background: #ef9a3b;
+}
+
+.alert-management-card--map-report {
+  background: #b45b8b;
+}
+
+.alert-management-card--out-of-stock {
+  background: #e10600;
+  color: #fff6f3;
+}
+
+.alert-management-card--picker-alert {
+  background: #f7dd73;
+}
+
+.alert-management-card--employee-comment {
+  background: #9e9e9e;
+  color: #141414;
+}
+
+.alert-management-card--order-canceled {
+  background: #73150f;
+  border-color: #ff281f;
+  color: #fff6f3;
+}
+
+.alert-management-card--picks-overdue {
+  background: #176236;
+  border-color: #ff281f;
+  color: #fffef5;
+}
+
+.alert-management-card-heading-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.alert-management-card h2,
+.alert-management-subject,
+.alert-management-message-copy,
+.alert-management-time {
+  margin: 0;
+}
+
+.alert-management-card h2 {
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.alert-management-subject {
+  font-size: 0.95rem;
+}
+
+.alert-management-message-copy {
+  margin-top: 0.15rem;
+  font-size: 0.9rem;
+  opacity: 0.92;
+}
+
+.alert-management-time {
+  display: inline-block;
+  margin-top: 0.35rem;
+  font-size: 0.76rem;
+  opacity: 0.82;
+}
+
+.alert-management-warning {
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffd248;
+  color: #5e4300;
+  font-weight: 900;
+}
+
+.alert-management-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.alert-management-action-button,
+.alert-management-dismiss-button {
+  border: none;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 700;
+}
+
+.alert-management-action-button {
+  min-width: 6.2rem;
+  padding: 0.55rem 0.95rem;
+  background: #3d84e7;
+  color: #101010;
+}
+
+.alert-management-dismiss-button {
+  width: 2rem;
+  height: 2rem;
+  background: #fff;
+  color: #101010;
+}
+
+.alert-management-dismiss-button:disabled {
+  opacity: 0.65;
+}
+
+.alert-management-action-spacer {
+  width: 6.2rem;
+}
+
+@media (max-width: 640px) {
+  .alert-management-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .alert-management-card {
+    grid-template-columns: 1fr;
+  }
+
+  .alert-management-actions {
+    justify-content: flex-end;
+  }
+}

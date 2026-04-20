@@ -1,0 +1,82 @@
+{
+  "alerts": [
+    {
+      "id": "alert_1776534376790_nniooy",
+      "type": "order_canceled",
+      "subtype": "",
+      "title": "Order canceled",
+      "subject": "ORD-15",
+      "message": "ORD-15",
+      "actionLabel": "Order List",
+      "actionTarget": {
+        "path": "/orders",
+        "state": {
+          "focusOrderId": 15
+        }
+      },
+      "icon": "warning",
+      "severity": "critical",
+      "storeId": 3,
+      "itemId": null,
+      "orderId": 15,
+      "employeeId": null,
+      "employeeName": "",
+      "metadata": {},
+      "sourceKey": "",
+      "createdAt": "2026-04-18T17:46:16.790Z",
+      "updatedAt": "2026-04-18T17:46:16.790Z"
+    },
+    {
+      "id": "alert_1776533888234_r8szlj",
+      "type": "order_canceled",
+      "subtype": "",
+      "title": "Order canceled",
+      "subject": "ORD-15",
+      "message": "ORD-15",
+      "actionLabel": "Order List",
+      "actionTarget": {
+        "path": "/orders",
+        "state": {
+          "focusOrderId": 15
+        }
+      },
+      "icon": "warning",
+      "severity": "critical",
+      "storeId": 3,
+      "itemId": null,
+      "orderId": 15,
+      "employeeId": null,
+      "employeeName": "",
+      "metadata": {},
+      "sourceKey": "",
+      "createdAt": "2026-04-18T17:38:08.233Z",
+      "updatedAt": "2026-04-18T17:38:08.233Z"
+    },
+    {
+      "id": "alert_1776485748362_st1odw",
+      "type": "order_canceled",
+      "subtype": "",
+      "title": "Order canceled",
+      "subject": "ORD-15",
+      "message": "ORD-15",
+      "actionLabel": "Order List",
+      "actionTarget": {
+        "path": "/orders",
+        "state": {
+          "focusOrderId": 15
+        }
+      },
+      "icon": "warning",
+      "severity": "critical",
+      "storeId": 3,
+      "itemId": null,
+      "orderId": 15,
+      "employeeId": null,
+      "employeeName": "",
+      "metadata": {},
+      "sourceKey": "",
+      "createdAt": "2026-04-18T04:15:48.361Z",
+      "updatedAt": "2026-04-18T04:15:48.361Z"
+    }
+  ]
+}

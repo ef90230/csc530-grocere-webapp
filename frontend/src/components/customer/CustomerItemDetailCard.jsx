@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import './CustomerItemDetailCard.css';
+import StoreMapPreview from '../common/StoreMapPreview';
 
 const toCurrency = (value) => {
   const numeric = Number(value);
@@ -131,24 +132,12 @@ const CustomerItemDetailCard = ({
         </div>
 
         <div className="customer-item-card__map">
-          <div className="customer-item-card__map-title">Store Map</div>
-          <div className="customer-item-card__map-grid">
-            {(aisles || []).map((aisle) => {
-              const aisleNumber = String(aisle.aisleNumber || '');
-              const isHighlighted = itemAisles.has(aisleNumber);
-              return (
-                <div
-                  key={aisle.id || aisleNumber}
-                  className={`customer-item-card__map-aisle ${isHighlighted ? 'highlighted' : ''}`}
-                >
-                  Aisle {aisleNumber}
-                </div>
-              );
-            })}
-            {(!aisles || aisles.length === 0) && (
-              <div className="customer-item-card__map-empty">Map unavailable for this store</div>
-            )}
-          </div>
+          <StoreMapPreview
+            aisles={aisles || []}
+            highlightedAisleNumbers={Array.from(itemAisles)}
+            title="Store Map"
+            emptyMessage="Map unavailable for this store"
+          />
         </div>
 
         <div className="customer-item-card__quantity" aria-label={`${item?.name || 'Item'} quantity`}>

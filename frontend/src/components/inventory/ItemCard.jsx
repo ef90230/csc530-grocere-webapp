@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import './ItemCard.css';
+import StoreMapPreview from '../common/StoreMapPreview';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
@@ -20,18 +21,29 @@ const toNonNegativeInteger = (value, fallback = 0) => {
   return Math.max(0, Math.round(parsed));
 };
 
+const normalizeTemperature = (value, fallback = 'ambient') => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['ambient', 'chilled', 'frozen', 'hot'].includes(normalized) ? normalized : fallback;
+};
+
+const formatSectionLabel = (value) => {
+  const match = String(value || '').match(/(\d+)/);
+  return match ? match[1] : String(value || '').trim();
+};
+
 const getAisleLabel = (locationRow) => {
   const aisle = locationRow?.location?.aisle;
   const aisleNumber = aisle?.aisleNumber ?? '?';
-  const section = locationRow?.location?.section;
+  const section = formatSectionLabel(locationRow?.location?.section);
   if (!section) {
     return `Aisle ${aisleNumber}`;
   }
   return `Aisle ${aisleNumber} \u00B7 Section ${section}`;
 };
 
-const buildLocationOptions = (aisles = []) => {
+const buildLocationOptions = (aisles = [], itemTemperature = 'ambient') => {
   const options = [];
+  const resolvedTemperature = normalizeTemperature(itemTemperature);
 
   aisles.forEach((aisle) => {
     const aisleNumber = String(aisle?.aisleNumber || '').trim();
@@ -40,7 +52,11 @@ const buildLocationOptions = (aisles = []) => {
         return;
       }
 
-      const section = String(location?.section || '').trim();
+      if (normalizeTemperature(location?.temperature) !== resolvedTemperature) {
+        return;
+      }
+
+      const section = formatSectionLabel(location?.section);
       const label = section
         ? `Aisle ${aisleNumber || '?'} \u00B7 Section ${section}`
         : `Aisle ${aisleNumber || '?'} \u00B7 Unknown section`;
@@ -106,7 +122,7 @@ const ItemCard = ({ item, aisles, storeId, isAdmin, onClose, onItemUpdated, onIt
     return new Set(values);
   }, [item]);
 
-  const locationOptions = useMemo(() => buildLocationOptions(aisles || []), [aisles]);
+  const locationOptions = useMemo(() => buildLocationOptions(aisles || [], item?.temperature), [aisles, item?.temperature]);
 
   const refreshItem = async () => {
     if (!resolvedStoreId) {
@@ -480,24 +496,12 @@ const ItemCard = ({ item, aisles, storeId, isAdmin, onClose, onItemUpdated, onIt
             </div>
 
             <div className="item-card-map">
-              <div className="map-title">Store Map</div>
-              <div className="map-grid">
-                {(aisles || []).map((aisle) => {
-                  const aisleNumber = String(aisle.aisleNumber || '');
-                  const isHighlighted = itemAisles.has(aisleNumber);
-                  return (
-                    <div
-                      key={aisle.id || aisleNumber}
-                      className={`map-aisle ${isHighlighted ? 'highlighted' : ''}`}
-                    >
-                      Aisle {aisleNumber}
-                    </div>
-                  );
-                })}
-                {(!aisles || aisles.length === 0) && (
-                  <div className="map-empty">Map unavailable for this store</div>
-                )}
-              </div>
+              <StoreMapPreview
+                aisles={aisles || []}
+                highlightedAisleNumbers={Array.from(itemAisles)}
+                title="Store Map"
+                emptyMessage="Map unavailable for this store"
+              />
             </div>
 
             <div className="item-card-actions">

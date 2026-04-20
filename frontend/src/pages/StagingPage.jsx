@@ -10,13 +10,12 @@ const COMMODITY_DISPLAY_NAMES = {
     ambient: 'Ambient',
     chilled: 'Chilled',
     frozen: 'Frozen',
-    hot: 'Hot',
-    oversized: 'Oversized',
-    restricted: 'Team Lift'
+    hot: 'Hot'
 };
 
 const STAGED_ORDER_STATUSES = new Set(['staged', 'ready', 'dispensing', 'completed']);
-const TYPE_SORT_ORDER = ['ambient', 'chilled', 'frozen', 'hot', 'oversized'];
+const CANCELED_ORDER_STATUSES = new Set(['cancelled', 'canceled']);
+const TYPE_SORT_ORDER = ['ambient', 'chilled', 'frozen', 'hot'];
 
 const buildGroupKey = (orderId, commodity) => `${orderId}:${commodity}`;
 
@@ -48,7 +47,7 @@ const getCommodityGroupStatuses = (order, assignmentByGroup) => {
     const orderItems = Array.isArray(order?.items) ? order.items : [];
 
     orderItems.forEach((orderItem) => {
-        const commodityKey = String(orderItem?.item?.commodity || '').toLowerCase();
+        const commodityKey = String(orderItem?.item?.temperature || '').toLowerCase();
         if (!commodityKey) {
             return;
         }
@@ -387,6 +386,7 @@ const StagingPage = () => {
 
     const stagingOrders = useMemo(() => {
         return orders
+            .filter((order) => !CANCELED_ORDER_STATUSES.has(String(order?.status || '').toLowerCase()))
             .map((order) => {
                 const commodityGroups = getCommodityGroupStatuses(order, assignmentByGroup);
                 const stagedGroups = commodityGroups.filter((group) => group.status === 'staged').length;

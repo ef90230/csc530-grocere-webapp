@@ -112,7 +112,6 @@ const LeaderboardPage = () => {
     <div className="leaderboard-page">
       <TopBar
         title="Leaderboard"
-        theme="leaderboard"
         leftActionLabel="<"
         onLeftAction={() => navigate(-1)}
       />
