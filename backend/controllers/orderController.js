@@ -195,6 +195,10 @@ const buildPickQueue = (orders, pathIndexMap) => {
 
       const primaryLocation = sortedLocations[0] || null;
 
+      if (!primaryLocation || !pathIndexMap.has(primaryLocation.locationId)) {
+        return;
+      }
+
       const onHandByAisle = sortedLocations.reduce((accumulator, location) => {
         const aisleKey = `Aisle ${location.aisleNumber}`;
         accumulator[aisleKey] = (accumulator[aisleKey] || 0) + Number(location.quantityOnHand || 0);

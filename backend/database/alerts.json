@@ -1,6 +1,98 @@
 {
   "alerts": [
     {
+      "id": "alert_1776698135381_lunoly",
+      "type": "picker_alert",
+      "subtype": "walk_ended_early",
+      "title": "Picker exited walk early",
+      "subject": "user2 example2",
+      "message": "user2 example2",
+      "actionLabel": "Leaderboard",
+      "actionTarget": {
+        "path": "/leaderboard"
+      },
+      "icon": "",
+      "severity": "warning",
+      "storeId": 1,
+      "itemId": null,
+      "orderId": null,
+      "employeeId": 1,
+      "employeeName": "user2 example2",
+      "metadata": {},
+      "sourceKey": "",
+      "createdAt": "2026-04-20T15:15:35.381Z",
+      "updatedAt": "2026-04-20T15:15:35.381Z"
+    },
+    {
+      "id": "alert_1776698064358_bwsm2x",
+      "type": "picker_alert",
+      "subtype": "walk_ended_early",
+      "title": "Picker exited walk early",
+      "subject": "user2 example2",
+      "message": "user2 example2",
+      "actionLabel": "Leaderboard",
+      "actionTarget": {
+        "path": "/leaderboard"
+      },
+      "icon": "",
+      "severity": "warning",
+      "storeId": 1,
+      "itemId": null,
+      "orderId": null,
+      "employeeId": 1,
+      "employeeName": "user2 example2",
+      "metadata": {},
+      "sourceKey": "",
+      "createdAt": "2026-04-20T15:14:24.358Z",
+      "updatedAt": "2026-04-20T15:14:24.358Z"
+    },
+    {
+      "id": "alert_1776698044651_226szw",
+      "type": "picks_overdue",
+      "subtype": "ambient",
+      "title": "Picks went overdue",
+      "subject": "ambient",
+      "message": "ambient",
+      "actionLabel": "Pick List",
+      "actionTarget": {
+        "path": "/commodityselect"
+      },
+      "icon": "warning",
+      "severity": "critical",
+      "storeId": 1,
+      "itemId": null,
+      "orderId": null,
+      "employeeId": null,
+      "employeeName": "",
+      "metadata": {},
+      "sourceKey": "picks_overdue:1:ambient",
+      "createdAt": "2026-04-20T15:14:04.651Z",
+      "updatedAt": "2026-04-20T15:14:41.150Z"
+    },
+    {
+      "id": "alert_1776698044650_oq5igk",
+      "type": "picks_overdue",
+      "subtype": "chilled",
+      "title": "Picks went overdue",
+      "subject": "chilled",
+      "message": "chilled",
+      "actionLabel": "Pick List",
+      "actionTarget": {
+        "path": "/commodityselect"
+      },
+      "icon": "warning",
+      "severity": "critical",
+      "storeId": 1,
+      "itemId": null,
+      "orderId": null,
+      "employeeId": null,
+      "employeeName": "",
+      "metadata": {},
+      "sourceKey": "picks_overdue:1:chilled",
+      "createdAt": "2026-04-20T15:14:04.650Z",
+      "updatedAt": "2026-04-20T15:14:41.149Z"
+    },
+    {
       "id": "alert_1776534376790_nniooy",
       "type": "order_canceled",
       "subtype": "",

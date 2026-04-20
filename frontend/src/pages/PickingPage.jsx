@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import TopBar from '../components/common/TopBar';
 import StoreMapPreview from '../components/common/StoreMapPreview';
+import StatBar from '../components/common/StatBar';
 import './PickingPage.css';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 
@@ -775,6 +776,9 @@ const PickingPage = () => {
                 walkTotalUnits={totalUnits}
                 walkStartedAt={walkStartedAt}
             />
+            
+            {/* Daily Pick Rate Summary - shows picker's efficiency for the day */}
+            <StatBar mode="default" />
 
             <main className={`picking-page-content ${shouldAllowMobileScroll ? 'picking-page-content--allow-scroll' : ''}`}>
                 {errorMessage ? (
