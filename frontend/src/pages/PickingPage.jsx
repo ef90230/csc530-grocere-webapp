@@ -17,6 +17,15 @@ const REPORT_TYPE_OPTIONS = [
     { id: 'item_appeared_out_of_order', label: 'Item appeared out of order' }
 ];
 
+const normalizeHighlightedAisleNumber = (value) => {
+    const normalized = String(value || '').trim();
+    if (!normalized || /^unassigned$/i.test(normalized)) {
+        return '';
+    }
+
+    return normalized.replace(/^aisle\s+/i, '').trim();
+};
+
 const toCurrency = (value) => {
     const numeric = Number(value);
     if (!Number.isFinite(numeric)) {
@@ -88,6 +97,10 @@ const PickingPage = () => {
     const selectedCommodity = location?.state?.commodity;
     const selectedCommodityLabel = location?.state?.commodityLabel;
 
+    const filterActionableQueue = (rows = []) => rows.filter(
+        (row) => Math.max(0, Number(row?.quantityToPick || 0)) > 0
+    );
+
     useEffect(() => {
         const token = window.localStorage.getItem('authToken');
         const userType = window.localStorage.getItem('userType');
@@ -129,17 +142,11 @@ const PickingPage = () => {
 
                 setStoreId(resolvedStoreId);
 
-                const [walkResponse, aislesResponse] = await Promise.all([
-                    fetch(`${API_BASE}/api/orders/picking/walk/start`, {
-                        method: 'POST',
+                const [activeWalkResponse, aislesResponse] = await Promise.all([
+                    fetch(`${API_BASE}/api/orders/picking/walk/list/${resolvedStoreId}?commodity=${encodeURIComponent(selectedCommodity)}`, {
                         headers: {
-                            Authorization: `Bearer ${token}`,
-                            'Content-Type': 'application/json'
+                            Authorization: `Bearer ${token}`
                         },
-                        body: JSON.stringify({
-                            storeId: resolvedStoreId,
-                            commodity: selectedCommodity
-                        }),
                         signal: controller.signal
                     }),
                     fetch(`${API_BASE}/api/aisles/store/${resolvedStoreId}`, {
@@ -150,14 +157,45 @@ const PickingPage = () => {
                     })
                 ]);
 
-                if (!walkResponse.ok) {
-                    throw new Error('Unable to start pick walk for the selected commodity.');
+                let walkPayload = null;
+
+                if (!activeWalkResponse.ok) {
+                    throw new Error('Unable to check for an active pick walk.');
                 }
 
-                const walkPayload = await walkResponse.json();
-                const resolvedQueue = Array.isArray(walkPayload?.queue) ? walkPayload.queue : [];
-                setQueue(resolvedQueue);
-                setWalkStartedAt(walkPayload?.walkStartedAt || new Date().toISOString());
+                const activeWalkPayload = await activeWalkResponse.json();
+                const hasMatchingActiveWalk = Boolean(activeWalkPayload?.hasActiveWalk)
+                    && String(activeWalkPayload?.commodity || '').toLowerCase() === String(selectedCommodity || '').toLowerCase();
+
+                if (hasMatchingActiveWalk) {
+                    const fullQueue = Array.isArray(activeWalkPayload?.queue) ? activeWalkPayload.queue : [];
+                    setQueue(filterActionableQueue(fullQueue));
+                    setCompletedUnits(Math.max(0, Number(activeWalkPayload?.completedUnits || 0)));
+                    setWalkStartedAt(activeWalkPayload?.walkStartedAt || new Date().toISOString());
+                } else {
+                    const startWalkResponse = await fetch(`${API_BASE}/api/orders/picking/walk/start`, {
+                        method: 'POST',
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            storeId: resolvedStoreId,
+                            commodity: selectedCommodity
+                        }),
+                        signal: controller.signal
+                    });
+
+                    if (!startWalkResponse.ok) {
+                        throw new Error('Unable to start pick walk for the selected commodity.');
+                    }
+
+                    walkPayload = await startWalkResponse.json();
+                    const resolvedQueue = Array.isArray(walkPayload?.queue) ? walkPayload.queue : [];
+                    setQueue(resolvedQueue);
+                    setCompletedUnits(Math.max(0, Number(walkPayload?.completedUnits || 0)));
+                    setWalkStartedAt(walkPayload?.walkStartedAt || new Date().toISOString());
+                }
 
                 if (aislesResponse.ok) {
                     const aislesPayload = await aislesResponse.json().catch(() => ({}));
@@ -189,17 +227,27 @@ const PickingPage = () => {
 
     const currentItem = queue[0] || null;
     const currentQuantity = Number(currentItem?.quantityToPick || 0);
+    const currentOrderSymbol = String(currentItem?.orderSymbol || '').trim().toUpperCase();
     const currentItemHighlightedAisles = useMemo(() => {
-        const aisleNumbers = Object.entries(currentItem?.onHandByAisle || {})
-            .filter(([, quantity]) => Number(quantity) > 0)
-            .map(([aisleNumber]) => String(aisleNumber || '').trim())
+        const aisleNumbers = (currentItem?.allLocations || [])
+            .filter((itemLocation) => Number(itemLocation?.quantityOnHand) > 0)
+            .map((itemLocation) => normalizeHighlightedAisleNumber(itemLocation?.aisleNumber))
             .filter(Boolean);
 
         if (aisleNumbers.length > 0) {
-            return aisleNumbers;
+            return Array.from(new Set(aisleNumbers));
         }
 
-        const fallbackAisle = String(currentItem?.location?.aisleNumber || '').trim();
+        const onHandAisles = Object.entries(currentItem?.onHandByAisle || {})
+            .filter(([, quantity]) => Number(quantity) > 0)
+            .map(([aisleNumber]) => normalizeHighlightedAisleNumber(aisleNumber))
+            .filter(Boolean);
+
+        if (onHandAisles.length > 0) {
+            return Array.from(new Set(onHandAisles));
+        }
+
+        const fallbackAisle = normalizeHighlightedAisleNumber(currentItem?.location?.aisleNumber);
         return fallbackAisle ? [fallbackAisle] : [];
     }, [currentItem]);
     const onHandAisleCount = Object.keys(currentItem?.onHandByAisle || {}).length;
@@ -308,6 +356,17 @@ const PickingPage = () => {
         setSelectedReportTypes([]);
         setReportDialogError('');
         setIsReportDialogOpen(true);
+    };
+
+    const openPickListPage = () => {
+        setIsReportMenuOpen(false);
+        navigate('/pick-list', {
+            state: {
+                storeId,
+                commodity: selectedCommodity,
+                commodityLabel: commodityTitle
+            }
+        });
     };
 
     const sendItemReport = async () => {
@@ -766,9 +825,14 @@ const PickingPage = () => {
                 onExtraAction={() => setIsReportMenuOpen((previous) => !previous)}
                 isExtraActionMenuOpen={isReportMenuOpen}
                 extraActionMenu={(
-                    <button type="button" className="picking-report-menu-button" onClick={openReportDialog}>
-                        Report Item
-                    </button>
+                    <div className="picking-report-menu-list">
+                        <button type="button" className="picking-report-menu-button" onClick={openPickListPage}>
+                            Pick List
+                        </button>
+                        <button type="button" className="picking-report-menu-button" onClick={openReportDialog}>
+                            Report Item
+                        </button>
+                    </div>
                 )}
                 statMode="walk"
                 walkCompletedUnits={completedUnits}
@@ -786,7 +850,7 @@ const PickingPage = () => {
 
                 {!errorMessage && isLoading ? (
                     <section className="picking-empty-state">
-                        <h2>Preparing your pick walkâ€¦</h2>
+                        <h2>Preparing your pick walk...</h2>
                     </section>
                 ) : null}
 
@@ -848,6 +912,18 @@ const PickingPage = () => {
                             ) : (
                                 <div className="picking-image-placeholder">ITEM IMAGE HERE</div>
                             )}
+                        </div>
+
+                        <div className="picking-order-identity">
+                            {currentOrderSymbol ? (
+                                <span className={`picking-order-symbol picking-order-symbol--${currentOrderSymbol.toLowerCase()}`}>
+                                    {currentOrderSymbol}
+                                </span>
+                            ) : null}
+                            <div className="picking-order-identity-copy">
+                                <span className="picking-field-label">Order</span>
+                                <strong>{currentItem.orderNumber || 'No order number'}</strong>
+                            </div>
                         </div>
 
                         {substituteMode ? (

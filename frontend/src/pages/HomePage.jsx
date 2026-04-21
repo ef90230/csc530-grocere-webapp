@@ -6,6 +6,7 @@ import pickingButtonSymbol from '../assets/home-buttons/picking-button-symbol.pn
 import stagingButtonSymbol from '../assets/home-buttons/staging-button-symbol.png';
 import ordersButtonSymbol from '../assets/home-buttons/orders-button-symbol.png';
 import storeManagementButtonSymbol from '../assets/home-buttons/store-management-button-symbol.png';
+import { getOrderToteCount } from '../utils/customerOrderStatus';
 import './HomePage.css';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
@@ -59,17 +60,6 @@ const getRemainingPickUnits = (order) => {
     const pickedQuantity = Math.max(0, toNumber(item?.pickedQuantity));
     return sum + Math.max(0, quantity - pickedQuantity);
   }, 0);
-};
-
-const getOrderToteCount = (order) => {
-  const items = Array.isArray(order?.items) ? order.items : [];
-  const commoditySet = new Set(
-    items
-      .map((item) => String(item?.item?.commodity || '').toLowerCase())
-      .filter(Boolean)
-  );
-
-  return commoditySet.size;
 };
 
 const formatPickRate = (value) => {

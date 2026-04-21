@@ -5,8 +5,7 @@ const ITEM_TYPE_OPTIONS = [
     { value: 'ambient', label: 'Ambient' },
     { value: 'chilled', label: 'Chilled' },
     { value: 'frozen', label: 'Frozen' },
-    { value: 'hot', label: 'Hot' },
-    { value: 'oversized', label: 'Oversized' }
+    { value: 'hot', label: 'Hot' }
 ];
 
 const StagingLocationForm = ({ isOpen, onClose, onSubmit, isSubmitting = false, errorMessage = '' }) => {

@@ -105,6 +105,24 @@ const normalizeItemIdArray = (value) => {
   return Array.from(uniqueItemIds);
 };
 
+const normalizeOrderSymbolMap = (value) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  return Object.entries(value).reduce((accumulator, [orderId, symbol]) => {
+    const normalizedOrderId = String(orderId || '').trim();
+    const normalizedSymbol = String(symbol || '').trim().toUpperCase();
+
+    if (!normalizedOrderId || !/^[A-H]$/.test(normalizedSymbol)) {
+      return accumulator;
+    }
+
+    accumulator[normalizedOrderId] = normalizedSymbol;
+    return accumulator;
+  }, {});
+};
+
 const readStore = () => {
   try {
     if (!fs.existsSync(STORE_PATH)) {
@@ -180,18 +198,58 @@ const getMistakeTotal = (walk) => {
   return Math.min(totalQuantity, perItemMistakes + extraMistakes);
 };
 
+const getFtprMistakeItemIds = (walk) => {
+  return Object.entries(safeObject(walk?.itemFtprMistakeFlags))
+    .filter(([, flagged]) => Boolean(flagged))
+    .map(([itemId]) => String(itemId || '').trim())
+    .filter(Boolean);
+};
+
+const getFtprMistakeQuantity = (walk) => {
+  const itemTotals = safeObject(walk?.itemTotals);
+
+  return getFtprMistakeItemIds(walk)
+    .reduce((sum, itemId) => sum + clampNonNegativeInt(itemTotals[itemId]), 0);
+};
+
 const getWalkFtpr = (walk) => {
-  const totalItems = getTotalItemCount(walk);
-  if (totalItems <= 0) {
+  const totalQuantity = clampNonNegativeInt(walk?.totalQuantity);
+  if (totalQuantity <= 0) {
     return 0;
   }
 
-  const mistakeItems = getMistakeItemCount(walk);
-  const numerator = Math.max(0, totalItems - mistakeItems);
-  return Number(((numerator / totalItems) * 100).toFixed(2));
+  const mistakeQuantity = getFtprMistakeQuantity(walk);
+  const numerator = Math.max(0, totalQuantity - mistakeQuantity);
+  return Number(((numerator / totalQuantity) * 100).toFixed(2));
 };
 
-const ensureWalk = ({ employeeId, storeId, commodity, startedAt, queueItems = [] }) => {
+const ensureTrackedItemQuantity = (walk, orderItemId, fallbackQuantity = 0) => {
+  const itemId = String(orderItemId || '').trim();
+  if (!itemId) {
+    return { walk, itemId: '' };
+  }
+
+  if (getItemTotal(walk, itemId) > 0) {
+    return { walk, itemId };
+  }
+
+  const normalizedFallbackQuantity = clampNonNegativeInt(fallbackQuantity);
+  if (normalizedFallbackQuantity <= 0) {
+    return { walk, itemId };
+  }
+
+  const nextItemTotals = {
+    ...safeObject(walk.itemTotals),
+    [itemId]: normalizedFallbackQuantity
+  };
+
+  walk.itemTotals = nextItemTotals;
+  walk.totalQuantity = computeTotalQuantity(nextItemTotals);
+
+  return { walk, itemId };
+};
+
+const ensureWalk = ({ employeeId, storeId, commodity, startedAt, queueItems = [], orderSymbolsByOrderId = {} }) => {
   const key = makeWalkKey({ employeeId, commodity, startedAt });
   if (!key) {
     return null;
@@ -205,6 +263,10 @@ const ensureWalk = ({ employeeId, storeId, commodity, startedAt, queueItems = []
   const nextItemTotals = { ...safeObject(existing.itemTotals) };
   const existingOrderIds = safeOrderIdArray(existing.orderIds);
   const nextOrderIds = safeOrderIdArray([...existingOrderIds, ...incomingOrderIds]);
+  const nextOrderSymbolsByOrderId = {
+    ...normalizeOrderSymbolMap(existing.orderSymbolsByOrderId),
+    ...normalizeOrderSymbolMap(orderSymbolsByOrderId)
+  };
 
   Object.entries(incomingItemTotals).forEach(([itemId, qty]) => {
     nextItemTotals[itemId] = Math.max(clampNonNegativeInt(nextItemTotals[itemId]), clampNonNegativeInt(qty));
@@ -219,11 +281,16 @@ const ensureWalk = ({ employeeId, storeId, commodity, startedAt, queueItems = []
     endedAt: existing.endedAt ? toIso(existing.endedAt) : null,
     closed: Boolean(existing.closed),
     orderIds: nextOrderIds,
+    orderSymbolsByOrderId: nextOrderSymbolsByOrderId,
     itemTotals: nextItemTotals,
     itemMistakes: safeObject(existing.itemMistakes),
     itemMistakeFlags: safeObject(existing.itemMistakeFlags),
+    itemFtprMistakeFlags: safeObject(existing.itemFtprMistakeFlags),
+    itemFtprAttemptedFlags: safeObject(existing.itemFtprAttemptedFlags),
     extraMistakes: clampNonNegativeInt(existing.extraMistakes),
     pickedQuantity: clampNonNegativeInt(existing.pickedQuantity),
+    originalPickedQuantity: clampNonNegativeInt(existing.originalPickedQuantity),
+    substitutedQuantity: clampNonNegativeInt(existing.substitutedQuantity),
     totalQuantity: computeTotalQuantity(nextItemTotals)
   };
 
@@ -233,7 +300,7 @@ const ensureWalk = ({ employeeId, storeId, commodity, startedAt, queueItems = []
   return nextWalk;
 };
 
-const recordPickQuantity = ({ employeeId, commodity, startedAt, orderItemId, quantity }) => {
+const recordPickQuantity = ({ employeeId, commodity, startedAt, orderItemId, quantity, pickKind = 'original' }) => {
   const key = makeWalkKey({ employeeId, commodity, startedAt });
   if (!key) {
     return;
@@ -250,20 +317,31 @@ const recordPickQuantity = ({ employeeId, commodity, startedAt, orderItemId, qua
     return;
   }
 
-  const itemId = String(orderItemId || '').trim();
-  if (itemId && !getItemTotal(walk, itemId)) {
-    const nextItemTotals = {
-      ...safeObject(walk.itemTotals),
-      [itemId]: delta
-    };
-    walk.itemTotals = nextItemTotals;
-    walk.totalQuantity = computeTotalQuantity(nextItemTotals);
-  }
+  const { itemId } = ensureTrackedItemQuantity(walk, orderItemId, delta);
 
   walk.pickedQuantity = Math.min(
     clampNonNegativeInt(walk.totalQuantity),
     clampNonNegativeInt(walk.pickedQuantity) + delta
   );
+
+  if (itemId) {
+    walk.itemFtprAttemptedFlags = {
+      ...safeObject(walk.itemFtprAttemptedFlags),
+      [itemId]: true
+    };
+  }
+
+  if (String(pickKind || '').trim().toLowerCase() === 'substituted') {
+    walk.substitutedQuantity = Math.min(
+      clampNonNegativeInt(walk.totalQuantity),
+      clampNonNegativeInt(walk.substitutedQuantity) + delta
+    );
+  } else {
+    walk.originalPickedQuantity = Math.min(
+      clampNonNegativeInt(walk.totalQuantity),
+      clampNonNegativeInt(walk.originalPickedQuantity) + delta
+    );
+  }
 
   store.walks[key] = walk;
   writeStore(store);
@@ -319,6 +397,48 @@ const recordMistakeQuantity = ({ employeeId, commodity, startedAt, orderItemId, 
   };
   walk.itemMistakeFlags = {
     ...itemMistakeFlags,
+    [itemId]: true
+  };
+
+  store.walks[key] = walk;
+  writeStore(store);
+};
+
+const recordFtprMistake = ({ employeeId, commodity, startedAt, orderItemId, quantity }) => {
+  const key = makeWalkKey({ employeeId, commodity, startedAt });
+  if (!key) {
+    return;
+  }
+
+  const store = readStore();
+  const walk = safeObject(store.walks[key]);
+  if (!walk || !Object.keys(walk).length) {
+    return;
+  }
+
+  const delta = clampNonNegativeInt(quantity);
+  if (delta <= 0) {
+    return;
+  }
+
+  const { itemId } = ensureTrackedItemQuantity(walk, orderItemId, delta);
+  if (!itemId) {
+    return;
+  }
+
+  const attemptedFlags = safeObject(walk.itemFtprAttemptedFlags);
+  if (Boolean(attemptedFlags[itemId])) {
+    store.walks[key] = walk;
+    writeStore(store);
+    return;
+  }
+
+  walk.itemFtprAttemptedFlags = {
+    ...attemptedFlags,
+    [itemId]: true
+  };
+  walk.itemFtprMistakeFlags = {
+    ...safeObject(walk.itemFtprMistakeFlags),
     [itemId]: true
   };
 
@@ -411,15 +531,16 @@ const closeLatestOpenWalk = ({ employeeId, commodity, extraMistakeQuantity = 0, 
   return target;
 };
 
-const getLatestOpenWalk = ({ employeeId, storeId } = {}) => {
+const getOpenWalks = ({ employeeId, storeId, commodity } = {}) => {
   const normalizedEmployeeId = toInt(employeeId, 0);
   const normalizedStoreId = toInt(storeId, 0);
+  const normalizedCommodity = String(commodity || '').trim().toLowerCase();
   if (!normalizedEmployeeId) {
-    return null;
+    return [];
   }
 
   const store = readStore();
-  const candidates = Object.values(safeObject(store.walks))
+  return Object.values(safeObject(store.walks))
     .filter((walk) => {
       if (toInt(walk?.employeeId, 0) !== normalizedEmployeeId || walk?.closed) {
         return false;
@@ -429,11 +550,17 @@ const getLatestOpenWalk = ({ employeeId, storeId } = {}) => {
         return false;
       }
 
+      if (normalizedCommodity && String(walk?.commodity || '').trim().toLowerCase() !== normalizedCommodity) {
+        return false;
+      }
+
       return true;
     })
     .sort((left, right) => new Date(right.startedAt).getTime() - new Date(left.startedAt).getTime());
+};
 
-  return candidates[0] || null;
+const getLatestOpenWalk = (options = {}) => {
+  return getOpenWalks(options)[0] || null;
 };
 
 const getWalkFtprByKey = (key) => {
@@ -487,8 +614,11 @@ const getWalkSummariesForEmployee = (employeeId, { dayKey, closedOnly = true } =
       totalItems: getTotalItemCount(walk),
       totalQuantity: clampNonNegativeInt(walk.totalQuantity),
       pickedQuantity: clampNonNegativeInt(walk.pickedQuantity),
+      originalPickedQuantity: clampNonNegativeInt(walk.originalPickedQuantity),
+      substitutedQuantity: clampNonNegativeInt(walk.substitutedQuantity),
       mistakeItems: getMistakeItemCount(walk),
       mistakeQuantity: getMistakeTotal(walk),
+      ftprMistakeQuantity: getFtprMistakeQuantity(walk),
       firstTimePickRate: getWalkFtpr(walk)
     }))
     .sort((left, right) => new Date(right.startedAt).getTime() - new Date(left.startedAt).getTime());
@@ -499,8 +629,10 @@ module.exports = {
   ensureWalk,
   recordPickQuantity,
   recordMistakeQuantity,
+  recordFtprMistake,
   closeWalk,
   closeLatestOpenWalk,
+  getOpenWalks,
   getLatestOpenWalk,
   getWalkFtprByKey,
   getWalkSummariesForEmployee

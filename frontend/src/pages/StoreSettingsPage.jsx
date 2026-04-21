@@ -59,6 +59,7 @@ const GOAL_FIELDS = [
 const clamp = (value, minValue, maxValue) => Math.min(maxValue, Math.max(minValue, value));
 
 const MAX_MESSAGE_LENGTH = 180;
+const MAX_STORE_NAME_LENGTH = 120;
 
 const sanitizeDisplayText = (value, fallback = '') => {
   if (typeof value !== 'string') {
@@ -72,6 +73,16 @@ const sanitizeDisplayText = (value, fallback = '') => {
   }
 
   return noAngleBrackets.slice(0, MAX_MESSAGE_LENGTH);
+};
+
+const sanitizeStoreNameInput = (value, fallback = '') => {
+  if (typeof value !== 'string') {
+    return fallback;
+  }
+
+  const collapsed = value.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ');
+  const noAngleBrackets = collapsed.replace(/[<>]/g, '').trimStart();
+  return noAngleBrackets.slice(0, MAX_STORE_NAME_LENGTH);
 };
 
 const parseFiniteNumber = (rawValue, fallback) => {
@@ -128,7 +139,7 @@ const StoreSettingsPage = () => {
     const token = window.localStorage.getItem('authToken');
     const userType = window.localStorage.getItem('userType');
 
-    if (!token || (userType !== 'employee' && userType !== 'admin')) {
+    if (!token || userType !== 'admin') {
       navigate('/');
       return;
     }
@@ -251,6 +262,13 @@ const StoreSettingsPage = () => {
     });
   };
 
+  const handleStoreNameChange = (nextValue) => {
+    setStoreSummary((previousSummary) => ({
+      ...previousSummary,
+      name: sanitizeStoreNameInput(nextValue, previousSummary.name)
+    }));
+  };
+
   const handleTimeZoneChange = (nextValue) => {
     setSettings((previousSettings) => {
       const current = normalizeStoreSettings(previousSettings);
@@ -301,6 +319,9 @@ const StoreSettingsPage = () => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
+          store: {
+            name: storeSummary.name
+          },
           settings: normalizedSettings
         })
       });
@@ -314,6 +335,10 @@ const StoreSettingsPage = () => {
       const savedSettings = normalizeStoreSettings(payload?.settings);
       setSettings(savedSettings);
       saveStoreSettingsToCache(savedSettings);
+      setStoreSummary((previousSummary) => ({
+        ...previousSummary,
+        name: sanitizeDisplayText(payload?.store?.name, previousSummary.name)
+      }));
       setMessage('Store settings saved.');
     } catch (saveError) {
       setError(sanitizeDisplayText(saveError?.message, 'Unable to save store settings.'));
@@ -344,6 +369,24 @@ const StoreSettingsPage = () => {
 
         {!isLoading ? (
           <form className="store-settings-form" onSubmit={handleSave}>
+            <section className="store-settings-section">
+              <h2>Store Identity</h2>
+              <div className="store-settings-timeslot-row">
+                <label htmlFor="store-name-input">Store display name</label>
+                <input
+                  id="store-name-input"
+                  type="text"
+                  maxLength={MAX_STORE_NAME_LENGTH}
+                  value={storeSummary.name}
+                  onChange={(event) => handleStoreNameChange(event.target.value)}
+                  placeholder="Main Store"
+                />
+              </div>
+              <p className="store-settings-hint">
+                This name appears throughout the app for your store only.
+              </p>
+            </section>
+
             <section className="store-settings-section">
               <h2>Goal Configuration</h2>
               {GOAL_FIELDS.map((field) => {

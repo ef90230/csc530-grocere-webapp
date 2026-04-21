@@ -14,6 +14,7 @@ import MapScreen from './pages/MapScreen';
 import OrderListPage from './pages/OrderListPage';
 import OrderSummary from './pages/OrderSummary';
 import ParkingLotPage from './pages/ParkingLotPage';
+import PickListPage from './pages/PickListPage';
 import PickingPage from './pages/PickingPage';
 import DispensePage from './pages/DispensePage';
 import SignupPage from './pages/SignupPage';
@@ -174,7 +175,7 @@ function App() {
                         <Route
                             path="/store-settings"
                             element={
-                                <ProtectedRoute allowedRole="employee">
+                                <ProtectedRoute allowedRole="admin">
                                     <StoreSettingsPage />
                                 </ProtectedRoute>
                             }
@@ -192,6 +193,14 @@ function App() {
                             element={
                                 <ProtectedRoute allowedRole="employee">
                                     <MapScreen />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="/pick-list"
+                            element={
+                                <ProtectedRoute allowedRole="employee">
+                                    <PickListPage />
                                 </ProtectedRoute>
                             }
                         />

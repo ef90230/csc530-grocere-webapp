@@ -55,6 +55,13 @@ const EMPTY_STATS = {
 const NON_DISPENSABLE_ITEM_STATUSES = new Set(['out_of_stock', 'skipped', 'not_found', 'cancelled', 'canceled']);
 const NOT_FOUND_ITEM_STATUSES = new Set(['not_found']);
 const CANCELED_ITEM_STATUSES = new Set(['cancelled', 'canceled']);
+const FTPR_NUMERATOR_FIELD = '__ftprNumerator';
+const FTPR_DENOMINATOR_FIELD = '__ftprDenominator';
+const PRE_SUB_NUMERATOR_FIELD = '__preSubNumerator';
+const POST_SUB_NUMERATOR_FIELD = '__postSubNumerator';
+const WALK_ITEMS_DENOMINATOR_FIELD = '__walkItemsDenominator';
+const PERCENT_NOT_FOUND_NUMERATOR_FIELD = '__percentNotFoundNumerator';
+const PERCENT_NOT_FOUND_DENOMINATOR_FIELD = '__percentNotFoundDenominator';
 
 const toNumber = (value) => {
   const parsed = Number(value);
@@ -124,6 +131,63 @@ const resolveItemPickedAt = (orderItem, order) => {
 
 const clampPercent = (value) => Math.max(0, Math.min(100, toNumber(value)));
 
+const attachPercentNotFoundMeta = (stats, numerator, denominator) => {
+  Object.defineProperty(stats, PERCENT_NOT_FOUND_NUMERATOR_FIELD, {
+    value: Math.max(0, Math.round(toNumber(numerator))),
+    enumerable: false,
+    configurable: true,
+    writable: true
+  });
+  Object.defineProperty(stats, PERCENT_NOT_FOUND_DENOMINATOR_FIELD, {
+    value: Math.max(0, Math.round(toNumber(denominator))),
+    enumerable: false,
+    configurable: true,
+    writable: true
+  });
+
+  return stats;
+};
+
+const attachFtprMeta = (stats, numerator, denominator) => {
+  Object.defineProperty(stats, FTPR_NUMERATOR_FIELD, {
+    value: Math.max(0, Math.round(toNumber(numerator))),
+    enumerable: false,
+    configurable: true,
+    writable: true
+  });
+  Object.defineProperty(stats, FTPR_DENOMINATOR_FIELD, {
+    value: Math.max(0, Math.round(toNumber(denominator))),
+    enumerable: false,
+    configurable: true,
+    writable: true
+  });
+
+  return stats;
+};
+
+const attachWalkQuantityMeta = (stats, preSubNumerator, postSubNumerator, denominator) => {
+  Object.defineProperty(stats, PRE_SUB_NUMERATOR_FIELD, {
+    value: Math.max(0, Math.round(toNumber(preSubNumerator))),
+    enumerable: false,
+    configurable: true,
+    writable: true
+  });
+  Object.defineProperty(stats, POST_SUB_NUMERATOR_FIELD, {
+    value: Math.max(0, Math.round(toNumber(postSubNumerator))),
+    enumerable: false,
+    configurable: true,
+    writable: true
+  });
+  Object.defineProperty(stats, WALK_ITEMS_DENOMINATOR_FIELD, {
+    value: Math.max(0, Math.round(toNumber(denominator))),
+    enumerable: false,
+    configurable: true,
+    writable: true
+  });
+
+  return stats;
+};
+
 const resolveDispensableItemQuantity = (orderItem) => {
   const normalizedStatus = String(orderItem?.status || '').trim().toLowerCase();
   if (NON_DISPENSABLE_ITEM_STATUSES.has(normalizedStatus)) {
@@ -172,10 +236,10 @@ const finalizeDayAccumulator = (dayData = {}) => {
   const onTimeTotal = toNumber(dayData.onTimeTotal);
   const onTimeCount = toNumber(dayData.onTimeCount);
   const walkRates = Array.isArray(dayData.walkRates) ? dayData.walkRates : [];
-  const ftprRates = Array.isArray(dayData.ftprRates) ? dayData.ftprRates : [];
-
-  const firstTimePickPercent = ftprRates.length > 0
-    ? ftprRates.reduce((sum, rate) => sum + toNumber(rate), 0) / ftprRates.length
+  const ftprDenominator = toNumber(dayData.ftprDenominator);
+  const ftprMistakes = toNumber(dayData.ftprMistakes);
+  const firstTimePickPercent = ftprDenominator > 0
+    ? ((Math.max(0, ftprDenominator - ftprMistakes)) / ftprDenominator) * 100
     : 0;
   const postSubstitutionPercent = originalItemsTotal > 0
     ? ((originalItemsPicked + originalItemsSubstituted) / originalItemsTotal) * 100
@@ -192,7 +256,7 @@ const finalizeDayAccumulator = (dayData = {}) => {
   const walkRateTotal = walkRates.reduce((sum, rate) => sum + toNumber(rate), 0);
   const pickRate = walkRates.length > 0 ? walkRateTotal / walkRates.length : 0;
 
-  return {
+  const stats = {
     pickRate: Number(pickRate.toFixed(2)),
     itemsPicked: Math.max(0, Math.round(totalPicks)),
     firstTimePickPercent: Number(clampPercent(firstTimePickPercent).toFixed(2)),
@@ -207,6 +271,17 @@ const finalizeDayAccumulator = (dayData = {}) => {
     totesDispensed: Math.max(0, Math.round(toNumber(dayData.totesDispensed))),
     itemsDispensed: Math.max(0, Math.round(toNumber(dayData.itemsDispensed)))
   };
+
+  return attachPercentNotFoundMeta(
+    attachWalkQuantityMeta(
+      attachFtprMeta(stats, Math.max(0, ftprDenominator - ftprMistakes), ftprDenominator),
+      originalItemsPicked,
+      originalItemsPicked + originalItemsSubstituted,
+      originalItemsTotal
+    ),
+    notFound,
+    totalItems
+  );
 };
 
 const ensureDayAccumulator = (accumulatorByDay, dayKey) => {
@@ -223,10 +298,11 @@ const ensureDayAccumulator = (accumulatorByDay, dayKey) => {
       totalPicks: 0,
       substituted: 0,
       notFound: 0,
+      ftprDenominator: 0,
+      ftprMistakes: 0,
       onTimeTotal: 0,
       onTimeCount: 0,
       walkRates: [],
-      ftprRates: [],
       totesStaged: 0,
       itemsStaged: 0,
       ordersDispensed: 0,
@@ -276,10 +352,16 @@ const buildEmployeeDayStatsMap = async (employeeId, timeZone = DEFAULT_TIME_ZONE
       const orderedQty = Math.max(0, Math.round(toNumber(item.quantity)));
       const pickedQty = Math.max(0, Math.round(toNumber(item.pickedQuantity)));
       const normalizedOrderedQty = orderedQty > 0 ? orderedQty : 1;
-      day.totalItems += normalizedOrderedQty;
-      day.originalItemsTotal += normalizedOrderedQty;
-      day.originalItemsPicked += resolveOriginalPickedQuantity(item);
-      day.originalItemsSubstituted += resolveOriginalSubstitutedQuantity(item);
+      if (!hasWalkSummaries) {
+        day.totalItems += normalizedOrderedQty;
+        day.originalItemsTotal += normalizedOrderedQty;
+        day.originalItemsPicked += resolveOriginalPickedQuantity(item);
+        day.originalItemsSubstituted += resolveOriginalSubstitutedQuantity(item);
+
+        if (itemStatus === 'out_of_stock' || itemStatus === 'not_found') {
+          day.notFound += normalizedOrderedQty;
+        }
+      }
 
       if (!hasWalkSummaries && (item.status === 'found' || item.status === 'substituted')) {
         day.totalPicks += pickedQty > 0 ? pickedQty : 1;
@@ -380,9 +462,16 @@ const buildEmployeeDayStatsMap = async (employeeId, timeZone = DEFAULT_TIME_ZONE
       return;
     }
 
+    const walkQuantity = Math.max(0, Math.round(toNumber(walkSummary?.totalQuantity)));
+
+    day.totalItems += walkQuantity;
+    day.originalItemsTotal += walkQuantity;
+    day.originalItemsPicked += Math.max(0, Math.round(toNumber(walkSummary?.originalPickedQuantity)));
+    day.originalItemsSubstituted += Math.max(0, Math.round(toNumber(walkSummary?.substitutedQuantity)));
     day.totalPicks += Math.max(0, Math.round(toNumber(walkSummary?.pickedQuantity)));
-    day.ftprRates.push(toNumber(walkSummary?.firstTimePickRate));
-    day.notFound += Math.max(0, Math.round(toNumber(walkSummary?.mistakeItems)));
+    day.ftprDenominator += walkQuantity;
+    day.ftprMistakes += Math.max(0, Math.round(toNumber(walkSummary?.ftprMistakeQuantity)));
+    day.notFound += Math.max(0, Math.round(toNumber(walkSummary?.mistakeQuantity)));
   });
 
   const totesByDay = getEmployeeDayTotals(normalizedEmployeeId);
@@ -420,6 +509,15 @@ const buildAllTimeFromDayStats = (dayStatsMap) => {
   const allTime = cloneEmptyStats();
 
   AVERAGE_METRIC_FIELDS.forEach((field) => {
+    if (
+      field === 'firstTimePickPercent'
+      || field === 'preSubstitutionPercent'
+      || field === 'postSubstitutionPercent'
+      || field === 'percentNotFound'
+    ) {
+      return;
+    }
+
     const total = dayEntries.reduce((sum, dayStats) => sum + toNumber(dayStats?.[field]), 0);
     allTime[field] = Number((total / dayEntries.length).toFixed(2));
   });
@@ -429,7 +527,58 @@ const buildAllTimeFromDayStats = (dayStatsMap) => {
     allTime[field] = Math.max(0, Math.round(total));
   });
 
-  return allTime;
+  const ftprNumerator = dayEntries.reduce(
+    (sum, dayStats) => sum + toNumber(dayStats?.[FTPR_NUMERATOR_FIELD]),
+    0
+  );
+  const ftprDenominator = dayEntries.reduce(
+    (sum, dayStats) => sum + toNumber(dayStats?.[FTPR_DENOMINATOR_FIELD]),
+    0
+  );
+  const preSubNumerator = dayEntries.reduce(
+    (sum, dayStats) => sum + toNumber(dayStats?.[PRE_SUB_NUMERATOR_FIELD]),
+    0
+  );
+  const postSubNumerator = dayEntries.reduce(
+    (sum, dayStats) => sum + toNumber(dayStats?.[POST_SUB_NUMERATOR_FIELD]),
+    0
+  );
+  const walkItemsDenominator = dayEntries.reduce(
+    (sum, dayStats) => sum + toNumber(dayStats?.[WALK_ITEMS_DENOMINATOR_FIELD]),
+    0
+  );
+  const percentNotFoundNumerator = dayEntries.reduce(
+    (sum, dayStats) => sum + toNumber(dayStats?.[PERCENT_NOT_FOUND_NUMERATOR_FIELD]),
+    0
+  );
+  const percentNotFoundDenominator = dayEntries.reduce(
+    (sum, dayStats) => sum + toNumber(dayStats?.[PERCENT_NOT_FOUND_DENOMINATOR_FIELD]),
+    0
+  );
+
+  allTime.firstTimePickPercent = ftprDenominator > 0
+    ? Number(clampPercent((ftprNumerator / ftprDenominator) * 100).toFixed(2))
+    : 0;
+  allTime.preSubstitutionPercent = walkItemsDenominator > 0
+    ? Number(clampPercent((preSubNumerator / walkItemsDenominator) * 100).toFixed(2))
+    : 0;
+  allTime.postSubstitutionPercent = walkItemsDenominator > 0
+    ? Number(clampPercent((postSubNumerator / walkItemsDenominator) * 100).toFixed(2))
+    : 0;
+  allTime.percentNotFound = percentNotFoundDenominator > 0
+    ? Number(clampPercent((percentNotFoundNumerator / percentNotFoundDenominator) * 100).toFixed(2))
+    : 0;
+
+  return attachPercentNotFoundMeta(
+    attachWalkQuantityMeta(
+      attachFtprMeta(allTime, ftprNumerator, ftprDenominator),
+      preSubNumerator,
+      postSubNumerator,
+      walkItemsDenominator
+    ),
+    percentNotFoundNumerator,
+    percentNotFoundDenominator
+  );
 };
 
 const getEmployeeTimeframeStats = async (employeeId, options = {}) => {
@@ -458,6 +607,15 @@ const aggregateStoreStats = (employeeStats, timeframeKey) => {
   const totalPickedWeight = rows.reduce((sum, row) => sum + Math.max(0, toNumber(row.itemsPicked)), 0);
 
   AVERAGE_METRIC_FIELDS.forEach((field) => {
+    if (
+      field === 'firstTimePickPercent'
+      || field === 'preSubstitutionPercent'
+      || field === 'postSubstitutionPercent'
+      || field === 'percentNotFound'
+    ) {
+      return;
+    }
+
     if (totalPickedWeight <= 0) {
       summary[field] = 0;
       return;
@@ -480,7 +638,58 @@ const aggregateStoreStats = (employeeStats, timeframeKey) => {
     summary[field] = Math.max(0, Math.round(total));
   });
 
-  return summary;
+  const ftprNumerator = rows.reduce(
+    (sum, row) => sum + toNumber(row?.[FTPR_NUMERATOR_FIELD]),
+    0
+  );
+  const ftprDenominator = rows.reduce(
+    (sum, row) => sum + toNumber(row?.[FTPR_DENOMINATOR_FIELD]),
+    0
+  );
+  const preSubNumerator = rows.reduce(
+    (sum, row) => sum + toNumber(row?.[PRE_SUB_NUMERATOR_FIELD]),
+    0
+  );
+  const postSubNumerator = rows.reduce(
+    (sum, row) => sum + toNumber(row?.[POST_SUB_NUMERATOR_FIELD]),
+    0
+  );
+  const walkItemsDenominator = rows.reduce(
+    (sum, row) => sum + toNumber(row?.[WALK_ITEMS_DENOMINATOR_FIELD]),
+    0
+  );
+  const percentNotFoundNumerator = rows.reduce(
+    (sum, row) => sum + toNumber(row?.[PERCENT_NOT_FOUND_NUMERATOR_FIELD]),
+    0
+  );
+  const percentNotFoundDenominator = rows.reduce(
+    (sum, row) => sum + toNumber(row?.[PERCENT_NOT_FOUND_DENOMINATOR_FIELD]),
+    0
+  );
+
+  summary.firstTimePickPercent = ftprDenominator > 0
+    ? Number(clampPercent((ftprNumerator / ftprDenominator) * 100).toFixed(2))
+    : 0;
+  summary.preSubstitutionPercent = walkItemsDenominator > 0
+    ? Number(clampPercent((preSubNumerator / walkItemsDenominator) * 100).toFixed(2))
+    : 0;
+  summary.postSubstitutionPercent = walkItemsDenominator > 0
+    ? Number(clampPercent((postSubNumerator / walkItemsDenominator) * 100).toFixed(2))
+    : 0;
+  summary.percentNotFound = percentNotFoundDenominator > 0
+    ? Number(clampPercent((percentNotFoundNumerator / percentNotFoundDenominator) * 100).toFixed(2))
+    : 0;
+
+  return attachPercentNotFoundMeta(
+    attachWalkQuantityMeta(
+      attachFtprMeta(summary, ftprNumerator, ftprDenominator),
+      preSubNumerator,
+      postSubNumerator,
+      walkItemsDenominator
+    ),
+    percentNotFoundNumerator,
+    percentNotFoundDenominator
+  );
 };
 
 const getStoreWaitTimeStats = (storeId, options = {}) => {

@@ -99,11 +99,21 @@ const getLineItemState = (orderItem) => {
   return 'pending';
 };
 
-const getOrderToteCount = (order) => {
+export const getStagingCommodityForItem = (item) => {
+  const normalizedTemperature = String(item?.item?.temperature || '').toLowerCase();
+
+  if (normalizedTemperature === 'chilled' || normalizedTemperature === 'frozen' || normalizedTemperature === 'hot') {
+    return normalizedTemperature;
+  }
+
+  return 'ambient';
+};
+
+export const getOrderToteCount = (order) => {
   const items = Array.isArray(order?.items) ? order.items : [];
   const commoditySet = new Set(
     items
-      .map((item) => String(item?.item?.commodity || '').toLowerCase())
+      .map((item) => getStagingCommodityForItem(item))
       .filter(Boolean)
   );
 

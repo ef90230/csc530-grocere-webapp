@@ -47,6 +47,26 @@ const resolveStoreIdFromRequest = (req) => {
   return storeId > 0 ? storeId : null;
 };
 
+const MAX_STORE_NAME_LENGTH = 120;
+
+const sanitizeStoreName = (value, fallback = '') => {
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    return fallback;
+  }
+
+  const collapsed = String(value)
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const withoutAngleBrackets = collapsed.replace(/[<>]/g, '');
+
+  if (!withoutAngleBrackets) {
+    return fallback;
+  }
+
+  return withoutAngleBrackets.slice(0, MAX_STORE_NAME_LENGTH);
+};
+
 const mapEmployeeStats = (employee) => {
   if (!employee) {
     return METRIC_FIELDS.reduce((accumulator, field) => {
@@ -336,8 +356,8 @@ const getMyAndStoreStats = async (req, res) => {
 
 const getStoreSettings = async (req, res) => {
   try {
-    if (req.userType !== 'employee') {
-      return res.status(403).json({ message: 'Only employees can access store settings.' });
+    if (req.userType !== 'employee' || req.authType !== 'admin') {
+      return res.status(403).json({ message: 'Only admins can access store settings.' });
     }
 
     const storeId = resolveStoreIdFromRequest(req);
@@ -374,8 +394,8 @@ const getStoreSettings = async (req, res) => {
 
 const updateStoreSettings = async (req, res) => {
   try {
-    if (req.userType !== 'employee') {
-      return res.status(403).json({ message: 'Only employees can update store settings.' });
+    if (req.userType !== 'employee' || req.authType !== 'admin') {
+      return res.status(403).json({ message: 'Only admins can update store settings.' });
     }
 
     const storeId = resolveStoreIdFromRequest(req);
@@ -394,6 +414,7 @@ const updateStoreSettings = async (req, res) => {
     const requestedSettings = normalizeStoreSettings(req.body?.settings, {
       fallbackStorePhone: store.phone
     });
+    const requestedStoreName = sanitizeStoreName(req.body?.store?.name, store.name);
     const existingSettings = getStoreSettingsFromStore(store, {
       fallbackStorePhone: store.phone
     });
@@ -450,6 +471,7 @@ const updateStoreSettings = async (req, res) => {
     });
 
     await store.update({
+      name: requestedStoreName,
       backroomDoorLocation: buildBackroomDoorLocationWithStoreSettings(store.backroomDoorLocation, nextSettings)
     });
 
@@ -459,7 +481,7 @@ const updateStoreSettings = async (req, res) => {
       store: {
         id: store.id,
         storeNumber: store.storeNumber,
-        name: store.name
+        name: requestedStoreName
       },
       settings: nextSettings
     });

@@ -9,6 +9,7 @@ const {
   getOrdersForPicking,
   getCommodityQueueForPicking,
   getCurrentPickWalk,
+  getPickWalkList,
   startPickWalk,
   recordPick,
   recordWalkMistake,
@@ -34,6 +35,7 @@ router.get('/', getOrders);
 
 router.get('/commodities/:storeId', restrictTo('manager', 'picker'), getCommodityQueueForPicking);
 router.get('/picking/walk/current/:storeId', restrictTo('manager', 'picker'), getCurrentPickWalk);
+router.get('/picking/walk/list/:storeId', restrictTo('manager', 'picker'), getPickWalkList);
 
 router.post('/picking/walk/start', restrictTo('manager', 'picker'), startPickWalk);
 router.post('/picking/walk/record-pick', restrictTo('manager', 'picker'), recordPick);

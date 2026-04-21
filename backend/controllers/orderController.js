@@ -11,8 +11,10 @@ const {
   ensureWalk,
   recordPickQuantity,
   recordMistakeQuantity,
+  recordFtprMistake,
   closeWalk,
   closeLatestOpenWalk,
+  getOpenWalks,
   getLatestOpenWalk
 } = require('../utils/walkPerformanceStore');
 const { recordOrderWaitTime } = require('../utils/storeWaitTimeHistoryStore');
@@ -34,8 +36,153 @@ const COMMODITY_DISPLAY_NAMES = {
 };
 
 const WALK_LOOKAHEAD_HOURS = 3;
+const MAX_ORDERS_PER_WALK = 8;
+const PICK_WALK_SYMBOLS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+const RESOLVED_NON_PICKABLE_STATUSES = new Set(['out_of_stock', 'skipped', 'not_found', 'canceled', 'cancelled']);
 
 const normalizeCommodity = (value) => String(value || '').trim().toLowerCase();
+const clampNonNegativeInt = (value) => Math.max(0, Math.round(Number(value) || 0));
+
+const normalizeOrderIdKey = (value) => {
+  const normalized = Number(value);
+  return Number.isInteger(normalized) && normalized > 0 ? String(normalized) : '';
+};
+
+const buildOrderSymbolAssignments = (orders = [], existingAssignments = {}) => {
+  const nextAssignments = {};
+  const usedSymbols = new Set();
+
+  orders.forEach((order) => {
+    const orderId = normalizeOrderIdKey(order?.id);
+    const existingSymbol = String(existingAssignments?.[orderId] || '').trim().toUpperCase();
+
+    if (!orderId || !PICK_WALK_SYMBOLS.includes(existingSymbol) || usedSymbols.has(existingSymbol)) {
+      return;
+    }
+
+    nextAssignments[orderId] = existingSymbol;
+    usedSymbols.add(existingSymbol);
+  });
+
+  let symbolIndex = 0;
+
+  orders.forEach((order) => {
+    const orderId = normalizeOrderIdKey(order?.id);
+    if (!orderId || nextAssignments[orderId]) {
+      return;
+    }
+
+    while (symbolIndex < PICK_WALK_SYMBOLS.length && usedSymbols.has(PICK_WALK_SYMBOLS[symbolIndex])) {
+      symbolIndex += 1;
+    }
+
+    if (symbolIndex >= PICK_WALK_SYMBOLS.length) {
+      return;
+    }
+
+    const nextSymbol = PICK_WALK_SYMBOLS[symbolIndex];
+    nextAssignments[orderId] = nextSymbol;
+    usedSymbols.add(nextSymbol);
+    symbolIndex += 1;
+  });
+
+  return nextAssignments;
+};
+
+const datesMatch = (left, right) => {
+  const leftTime = new Date(left).getTime();
+  const rightTime = new Date(right).getTime();
+
+  if (Number.isNaN(leftTime) || Number.isNaN(rightTime)) {
+    return false;
+  }
+
+  return leftTime === rightTime;
+};
+
+const resolveTrackedOpenWalk = ({ employeeId, storeId, commodity, startedAt } = {}) => {
+  const openWalks = getOpenWalks({ employeeId, storeId, commodity });
+  if (!startedAt) {
+    return openWalks[0] || null;
+  }
+
+  return openWalks.find((walk) => datesMatch(walk?.startedAt, startedAt)) || openWalks[0] || null;
+};
+
+const getPendingCommodityItemCount = async ({ employeeId, storeId, commodity }) => {
+  if (!employeeId || !storeId || !commodity) {
+    return 0;
+  }
+
+  return OrderItem.count({
+    where: {
+      status: 'pending'
+    },
+    include: [
+      {
+        model: Order,
+        as: 'order',
+        required: true,
+        where: {
+          storeId,
+          status: 'picking',
+          assignedPickerId: employeeId
+        },
+        attributes: []
+      },
+      {
+        model: Item,
+        as: 'item',
+        required: true,
+        where: {
+          commodity
+        },
+        attributes: []
+      }
+    ]
+  });
+};
+
+const closeWalkIfCommodityResolved = async ({ employeeId, storeId, commodity, startedAt }) => {
+  if (!employeeId || !storeId || !commodity) {
+    return null;
+  }
+
+  const pendingCount = await getPendingCommodityItemCount({ employeeId, storeId, commodity });
+  if (pendingCount > 0) {
+    return null;
+  }
+
+  const trackedWalk = resolveTrackedOpenWalk({ employeeId, storeId, commodity, startedAt });
+  if (!trackedWalk?.startedAt) {
+    return null;
+  }
+
+  return closeWalk({
+    employeeId,
+    commodity,
+    startedAt: trackedWalk.startedAt
+  });
+};
+
+const closeRemainingOpenCommodityWalks = ({ employeeId, storeId, commodity }) => {
+  if (!employeeId || !storeId || !commodity) {
+    return;
+  }
+
+  const remainingOpenWalks = getOpenWalks({ employeeId, storeId, commodity });
+  remainingOpenWalks.forEach((walk) => {
+    if (!walk?.startedAt) {
+      return;
+    }
+
+    closeWalk({
+      employeeId,
+      commodity,
+      startedAt: walk.startedAt
+    });
+  });
+};
 
 const parseStructuredOrderNotes = (notesValue) => {
   if (!notesValue) {
@@ -134,7 +281,7 @@ const getPathIndexMap = async (storeId, commodity) => {
   return pathIndexMap;
 };
 
-const buildPickQueue = (orders, pathIndexMap) => {
+const buildPickQueue = (orders, pathIndexMap, orderSymbolsByOrderId = {}, { includeResolved = false } = {}) => {
   const queue = [];
 
   orders.forEach((order) => {
@@ -147,9 +294,12 @@ const buildPickQueue = (orders, pathIndexMap) => {
     order.items.forEach((orderItem) => {
       const orderedQuantity = Number(orderItem.quantity || 0);
       const alreadyPickedQuantity = Number(orderItem.pickedQuantity || 0);
-      const remainingQuantity = Math.max(0, orderedQuantity - alreadyPickedQuantity);
+      const normalizedStatus = String(orderItem.status || '').toLowerCase();
+      const remainingQuantity = RESOLVED_NON_PICKABLE_STATUSES.has(normalizedStatus)
+        ? 0
+        : Math.max(0, orderedQuantity - alreadyPickedQuantity);
 
-      if (remainingQuantity <= 0) {
+      if (remainingQuantity <= 0 && !includeResolved) {
         return;
       }
 
@@ -208,6 +358,7 @@ const buildPickQueue = (orders, pathIndexMap) => {
       queue.push({
         orderId: order.id,
         orderNumber: order.orderNumber,
+        orderSymbol: orderSymbolsByOrderId[normalizeOrderIdKey(order.id)] || '',
         orderItemId: orderItem.id,
         scheduledPickupTime: order.scheduledPickupTime,
         quantity: orderedQuantity,
@@ -258,14 +409,16 @@ const buildPickQueue = (orders, pathIndexMap) => {
   return queue;
 };
 
-const walkOrdersInclude = (commodity) => ([
+const walkOrdersInclude = (commodity, { onlyPending = true } = {}) => ([
   {
     model: OrderItem,
     as: 'items',
     required: true,
-    where: {
-      status: 'pending'
-    },
+    ...(onlyPending ? {
+      where: {
+        status: 'pending'
+      }
+    } : {}),
     attributes: ['id', 'itemId', 'quantity', 'pickedQuantity', 'status', 'substitutedItemId'],
     include: [
       {
@@ -378,6 +531,9 @@ const getOrders = async (req, res) => {
         where: {
           orderId: {
             [Op.in]: orderIds
+          },
+          commodity: {
+            [Op.in]: ['ambient', 'chilled', 'frozen', 'hot']
           }
         },
         group: ['orderId'],
@@ -702,7 +858,7 @@ const updateOrderItem = async (req, res) => {
         {
           model: Order,
           as: 'order',
-          attributes: ['id', 'assignedPickerId', 'pickingStartTime']
+          attributes: ['id', 'assignedPickerId', 'pickingStartTime', 'storeId']
         }
       ]
     });
@@ -738,7 +894,8 @@ const updateOrderItem = async (req, res) => {
         commodity: walkCommodity,
         startedAt: walkStartedAt,
         orderItemId: orderItem.id,
-        quantity: pickedDelta
+        quantity: pickedDelta,
+        pickKind: normalizedStatus === 'substituted' ? 'substituted' : 'original'
       });
     }
 
@@ -753,9 +910,26 @@ const updateOrderItem = async (req, res) => {
         orderItemId: orderItem.id,
         quantity: mistakeQty
       });
+
+      recordFtprMistake({
+        employeeId: assignedPickerId,
+        commodity: walkCommodity,
+        startedAt: walkStartedAt,
+        orderItemId: orderItem.id,
+        quantity: mistakeQty
+      });
     }
 
     const order = await finalizeOrderIfResolved(id);
+
+    if (assignedPickerId && walkCommodity) {
+      await closeWalkIfCommodityResolved({
+        employeeId: assignedPickerId,
+        storeId: Number(order?.storeId || orderItem?.order?.storeId || 0),
+        commodity: walkCommodity,
+        startedAt: walkStartedAt
+      });
+    }
 
     if (order && order.assignedPickerId) {
       await updateEmployeeMetrics(order.assignedPickerId);
@@ -861,7 +1035,25 @@ const getCommodityQueueForPicking = async (req, res) => {
       order: [['scheduledPickupTime', 'ASC']]
     });
 
-    const activeCommodity = normalizeCommodity(getLatestOpenWalk({ employeeId, storeId })?.commodity);
+    const activeCommodities = new Set();
+
+    for (const openWalk of getOpenWalks({ employeeId, storeId })) {
+      const openCommodity = normalizeCommodity(openWalk?.commodity);
+      if (!openCommodity) {
+        continue;
+      }
+
+      const closedWalk = await closeWalkIfCommodityResolved({
+        employeeId,
+        storeId,
+        commodity: openCommodity,
+        startedAt: openWalk?.startedAt
+      });
+
+      if (!closedWalk) {
+        activeCommodities.add(openCommodity);
+      }
+    }
 
     const commodityMap = new Map();
 
@@ -872,7 +1064,7 @@ const getCommodityQueueForPicking = async (req, res) => {
           return;
         }
 
-        if (activeCommodity && commodityKey === activeCommodity) {
+        if (activeCommodities.has(commodityKey)) {
           return;
         }
 
@@ -969,68 +1161,82 @@ const getCurrentPickWalk = async (req, res) => {
       return res.status(400).json({ message: 'storeId is required' });
     }
 
-    const activeWalk = getLatestOpenWalk({ employeeId, storeId });
-    const activeCommodity = normalizeCommodity(activeWalk?.commodity);
+    const openWalks = getOpenWalks({ employeeId, storeId });
 
-    if (!activeCommodity) {
+    if (openWalks.length === 0) {
       return res.json({
         success: true,
         hasActiveWalk: false
       });
     }
 
-    const activeOrders = await Order.findAll({
-      where: {
-        storeId,
-        status: 'picking',
-        assignedPickerId: employeeId
-      },
-      attributes: ['id', 'orderNumber'],
-      include: [
-        {
-          model: OrderItem,
-          as: 'items',
-          required: true,
-          where: {
-            status: 'pending'
-          },
-          attributes: ['id', 'quantity', 'pickedQuantity'],
-          include: [
-            {
-              model: Item,
-              as: 'item',
-              required: true,
-              where: {
-                commodity: activeCommodity
-              },
-              attributes: ['id', 'commodity']
-            }
-          ]
-        }
-      ]
-    });
+    for (const openWalk of openWalks) {
+      const activeCommodity = normalizeCommodity(openWalk?.commodity);
+      if (!activeCommodity) {
+        continue;
+      }
 
-    if (activeOrders.length === 0) {
+      const activeOrders = await Order.findAll({
+        where: {
+          storeId,
+          status: 'picking',
+          assignedPickerId: employeeId
+        },
+        attributes: ['id', 'orderNumber'],
+        include: [
+          {
+            model: OrderItem,
+            as: 'items',
+            required: true,
+            where: {
+              status: 'pending'
+            },
+            attributes: ['id', 'quantity', 'pickedQuantity'],
+            include: [
+              {
+                model: Item,
+                as: 'item',
+                required: true,
+                where: {
+                  commodity: activeCommodity
+                },
+                attributes: ['id', 'commodity']
+              }
+            ]
+          }
+        ]
+      });
+
+      if (activeOrders.length === 0) {
+        await closeWalkIfCommodityResolved({
+          employeeId,
+          storeId,
+          commodity: activeCommodity,
+          startedAt: openWalk?.startedAt
+        });
+        continue;
+      }
+
+      const totalItems = activeOrders.reduce((sum, order) => (
+        sum + order.items.reduce((itemSum, orderItem) => {
+          const remainingQuantity = Math.max(0, Number(orderItem.quantity || 0) - Number(orderItem.pickedQuantity || 0));
+          return itemSum + remainingQuantity;
+        }, 0)
+      ), 0);
+
       return res.json({
         success: true,
-        hasActiveWalk: false
+        hasActiveWalk: true,
+        commodity: activeCommodity,
+        displayName: COMMODITY_DISPLAY_NAMES[activeCommodity] || activeCommodity,
+        totalItems,
+        orderCount: activeOrders.length
       });
     }
 
-    const totalItems = activeOrders.reduce((sum, order) => (
-      sum + order.items.reduce((itemSum, orderItem) => {
-        const remainingQuantity = Math.max(0, Number(orderItem.quantity || 0) - Number(orderItem.pickedQuantity || 0));
-        return itemSum + remainingQuantity;
-      }, 0)
-    ), 0);
-
-    res.json({
+    return res.json({
       success: true,
-      hasActiveWalk: true,
-      commodity: activeCommodity,
-      displayName: COMMODITY_DISPLAY_NAMES[activeCommodity] || activeCommodity,
-      totalItems,
-      orderCount: activeOrders.length
+      hasActiveWalk: false
     });
   } catch (error) {
     console.error('Get current pick walk error:', error);
@@ -1038,16 +1244,112 @@ const getCurrentPickWalk = async (req, res) => {
   }
 };
 
-const startPickWalk = async (req, res) => {
+const getPickWalkList = async (req, res) => {
   try {
     const employeeId = req.user?.id;
-    const { storeId, commodity } = req.body;
+    const storeId = req.params.storeId;
+    const requestedCommodity = normalizeCommodity(req.query?.commodity);
 
     if (!employeeId) {
       return res.status(401).json({ message: 'Employee authentication is required' });
     }
 
-    if (!storeId || !commodity) {
+    if (!storeId) {
+      return res.status(400).json({ message: 'storeId is required' });
+    }
+
+    const openWalks = getOpenWalks({
+      employeeId,
+      storeId,
+      commodity: requestedCommodity || undefined
+    });
+
+    if (openWalks.length === 0) {
+      return res.json({
+        success: true,
+        hasActiveWalk: false,
+        queue: []
+      });
+    }
+
+    for (const activeWalk of openWalks) {
+      const activeCommodity = normalizeCommodity(activeWalk?.commodity);
+      const activeOrderIds = Array.isArray(activeWalk?.orderIds) ? activeWalk.orderIds : [];
+
+      if (!activeCommodity || activeOrderIds.length === 0) {
+        continue;
+      }
+
+      const activeOrders = await Order.findAll({
+        where: {
+          id: activeOrderIds,
+          storeId
+        },
+        attributes: ['id', 'orderNumber', 'scheduledPickupTime', 'notes', 'pickingStartTime'],
+        include: walkOrdersInclude(activeCommodity, { onlyPending: false }),
+        order: [['scheduledPickupTime', 'ASC']]
+      });
+
+      if (activeOrders.length === 0) {
+        await closeWalkIfCommodityResolved({
+          employeeId,
+          storeId,
+          commodity: activeCommodity,
+          startedAt: activeWalk?.startedAt
+        });
+        continue;
+      }
+
+      const pathIndexMap = await getPathIndexMap(storeId, activeCommodity);
+      const queue = buildPickQueue(
+        activeOrders,
+        pathIndexMap,
+        activeWalk?.orderSymbolsByOrderId,
+        { includeResolved: true }
+      );
+      const completedUnits = activeWalk?.pickedQuantity ?? queue.reduce(
+        (sum, row) => sum + clampNonNegativeInt(row?.pickedQuantity),
+        0
+      );
+      const totalItems = activeWalk?.totalQuantity ?? queue.reduce(
+        (sum, row) => sum + clampNonNegativeInt(row?.quantity),
+        0
+      );
+
+      return res.json({
+        success: true,
+        hasActiveWalk: true,
+        commodity: activeCommodity,
+        displayName: COMMODITY_DISPLAY_NAMES[activeCommodity] || activeCommodity,
+        walkStartedAt: activeWalk?.startedAt || null,
+        completedUnits: clampNonNegativeInt(completedUnits),
+        totalItems: clampNonNegativeInt(totalItems),
+        queue
+      });
+    }
+
+    return res.json({
+      success: true,
+      hasActiveWalk: false,
+      queue: []
+    });
+  } catch (error) {
+    console.error('Get pick walk list error:', error);
+    return res.status(500).json({ message: 'Server error retrieving pick walk list' });
+  }
+};
+
+const startPickWalk = async (req, res) => {
+  try {
+    const employeeId = req.user?.id;
+    const { storeId, commodity } = req.body;
+    const normalizedCommodity = normalizeCommodity(commodity);
+
+    if (!employeeId) {
+      return res.status(401).json({ message: 'Employee authentication is required' });
+    }
+
+    if (!storeId || !normalizedCommodity) {
       return res.status(400).json({ message: 'storeId and commodity are required' });
     }
 
@@ -1064,30 +1366,34 @@ const startPickWalk = async (req, res) => {
         }
       },
       attributes: ['id', 'orderNumber', 'scheduledPickupTime', 'notes', 'pickingStartTime'],
-      include: walkOrdersInclude(commodity),
+      include: walkOrdersInclude(normalizedCommodity),
       order: [['scheduledPickupTime', 'ASC']]
     });
 
-    const pathIndexMap = await getPathIndexMap(storeId, commodity);
+    const pathIndexMap = await getPathIndexMap(storeId, normalizedCommodity);
 
     if (resumedOrders.length > 0) {
-      const resumedQueue = buildPickQueue(resumedOrders, pathIndexMap);
-      const resumedStartedAt = resumedOrders[0]?.pickingStartTime || new Date().toISOString();
+      const activeWalk = getLatestOpenWalk({ employeeId, storeId, commodity: normalizedCommodity });
+      const orderSymbolsByOrderId = buildOrderSymbolAssignments(resumedOrders, activeWalk?.orderSymbolsByOrderId);
+      const resumedQueue = buildPickQueue(resumedOrders, pathIndexMap, orderSymbolsByOrderId);
+      const resumedStartedAt = activeWalk?.startedAt || resumedOrders[0]?.pickingStartTime || new Date().toISOString();
 
-      ensureWalk({
+      const persistedWalk = ensureWalk({
         employeeId,
         storeId,
-        commodity,
+        commodity: normalizedCommodity,
         startedAt: resumedStartedAt,
-        queueItems: resumedQueue
+        queueItems: resumedQueue,
+        orderSymbolsByOrderId
       });
 
       return res.json({
         success: true,
         resumed: true,
-        commodity,
-        displayName: COMMODITY_DISPLAY_NAMES[commodity] || commodity,
+        commodity: normalizedCommodity,
+        displayName: COMMODITY_DISPLAY_NAMES[normalizedCommodity] || normalizedCommodity,
         walkStartedAt: resumedStartedAt,
+        completedUnits: clampNonNegativeInt(activeWalk?.pickedQuantity ?? persistedWalk?.pickedQuantity),
         totalItems: resumedQueue.reduce((sum, row) => sum + Number(row.quantityToPick || 0), 0),
         queue: resumedQueue
       });
@@ -1102,7 +1408,7 @@ const startPickWalk = async (req, res) => {
         }
       },
       attributes: ['id', 'orderNumber', 'scheduledPickupTime', 'notes'],
-      include: walkOrdersInclude(commodity),
+      include: walkOrdersInclude(normalizedCommodity),
       order: [['scheduledPickupTime', 'ASC']]
     });
 
@@ -1110,8 +1416,8 @@ const startPickWalk = async (req, res) => {
       return res.json({
         success: true,
         resumed: false,
-        commodity,
-        displayName: COMMODITY_DISPLAY_NAMES[commodity] || commodity,
+        commodity: normalizedCommodity,
+        displayName: COMMODITY_DISPLAY_NAMES[normalizedCommodity] || normalizedCommodity,
         totalItems: 0,
         queue: []
       });
@@ -1120,27 +1426,40 @@ const startPickWalk = async (req, res) => {
     const pendingOrderIds = pendingOrders.map((order) => order.id);
     const transaction = await Order.sequelize.transaction();
 
-    let claimedOrderIds = [];
+    const claimedOrderIdSet = new Set();
+    let candidateIndex = 0;
 
     try {
-      const [updatedCount, updatedRows] = await Order.update(
-        {
-          status: 'picking',
-          assignedPickerId: employeeId,
-          pickingStartTime: now
-        },
-        {
-          where: {
-            id: pendingOrderIds,
-            status: 'pending'
-          },
-          returning: true,
-          transaction
-        }
-      );
+      while (candidateIndex < pendingOrderIds.length && claimedOrderIdSet.size < MAX_ORDERS_PER_WALK) {
+        const remainingSlots = MAX_ORDERS_PER_WALK - claimedOrderIdSet.size;
+        const nextCandidateIds = pendingOrderIds.slice(candidateIndex, candidateIndex + remainingSlots);
+        candidateIndex += remainingSlots;
 
-      if (updatedCount > 0) {
-        claimedOrderIds = (updatedRows || []).map((row) => row.id);
+        if (nextCandidateIds.length === 0) {
+          break;
+        }
+
+        const [updatedCount, updatedRows] = await Order.update(
+          {
+            status: 'picking',
+            assignedPickerId: employeeId,
+            pickingStartTime: now
+          },
+          {
+            where: {
+              id: nextCandidateIds,
+              status: 'pending'
+            },
+            returning: true,
+            transaction
+          }
+        );
+
+        if (updatedCount > 0) {
+          (updatedRows || []).forEach((row) => {
+            claimedOrderIdSet.add(row.id);
+          });
+        }
       }
 
       await transaction.commit();
@@ -1149,25 +1468,27 @@ const startPickWalk = async (req, res) => {
       throw error;
     }
 
-    const claimedOrderIdSet = new Set(claimedOrderIds);
     const claimedOrders = pendingOrders.filter((order) => claimedOrderIdSet.has(order.id));
-    const queue = buildPickQueue(claimedOrders, pathIndexMap);
+    const orderSymbolsByOrderId = buildOrderSymbolAssignments(claimedOrders);
+    const queue = buildPickQueue(claimedOrders, pathIndexMap, orderSymbolsByOrderId);
 
-    ensureWalk({
+    const persistedWalk = ensureWalk({
       employeeId,
       storeId,
-      commodity,
+      commodity: normalizedCommodity,
       startedAt: now,
-      queueItems: queue
+      queueItems: queue,
+      orderSymbolsByOrderId
     });
 
     res.json({
       success: true,
       resumed: false,
-      commodity,
-      displayName: COMMODITY_DISPLAY_NAMES[commodity] || commodity,
+      commodity: normalizedCommodity,
+      displayName: COMMODITY_DISPLAY_NAMES[normalizedCommodity] || normalizedCommodity,
       walkStartedAt: now.toISOString(),
-      claimedOrders: claimedOrderIds.length,
+      claimedOrders: claimedOrders.length,
+      completedUnits: clampNonNegativeInt(persistedWalk?.pickedQuantity),
       totalItems: queue.reduce((sum, row) => sum + Number(row.quantityToPick || 0), 0),
       queue
     });
@@ -1231,7 +1552,8 @@ const recordPick = async (req, res) => {
         commodity: walkCommodity,
         startedAt: walkStartedAt,
         orderItemId,
-        quantity: qtyPicked
+        quantity: qtyPicked,
+        pickKind: 'original'
       });
     }
 
@@ -1252,6 +1574,15 @@ const recordPick = async (req, res) => {
     }
 
     const order = await finalizeOrderIfResolved(orderId);
+
+    if (orderItem?.order?.assignedPickerId && walkCommodity) {
+      await closeWalkIfCommodityResolved({
+        employeeId: Number(orderItem.order.assignedPickerId),
+        storeId: Number(order?.storeId || orderItem?.order?.storeId || 0),
+        commodity: walkCommodity,
+        startedAt: walkStartedAt
+      });
+    }
 
     if (order && order.assignedPickerId) {
       await updateEmployeeMetrics(order.assignedPickerId);
@@ -1384,6 +1715,14 @@ const endPickWalk = async (req, res) => {
       });
     }
 
+    if (walkCommodity) {
+      closeRemainingOpenCommodityWalks({
+        employeeId,
+        storeId,
+        commodity: walkCommodity
+      });
+    }
+
     res.json({
       success: true,
       releasedOrders: orderIdsToRelease.length,
@@ -1448,13 +1787,25 @@ const recordWalkMistake = async (req, res) => {
       return res.status(400).json({ message: 'No active walk is associated with this order item.' });
     }
 
-    recordMistakeQuantity({
-      employeeId,
-      commodity: walkCommodity,
-      startedAt: walkStartedAt,
-      orderItemId,
-      quantity: mistakeQty
-    });
+    if (normalizedReason === 'not_found') {
+      recordMistakeQuantity({
+        employeeId,
+        commodity: walkCommodity,
+        startedAt: walkStartedAt,
+        orderItemId,
+        quantity: mistakeQty
+      });
+    }
+
+    if (['skip', 'error', 'not_found'].includes(normalizedReason)) {
+      recordFtprMistake({
+        employeeId,
+        commodity: walkCommodity,
+        startedAt: walkStartedAt,
+        orderItemId,
+        quantity: mistakeQty
+      });
+    }
 
     return res.json({ success: true });
   } catch (error) {
@@ -1655,6 +2006,7 @@ module.exports = {
   getOrdersForPicking,
   getCommodityQueueForPicking,
   getCurrentPickWalk,
+  getPickWalkList,
   startPickWalk,
   recordPick,
   recordWalkMistake,

@@ -102,7 +102,7 @@ describe('stagingLocationController temperature-based staging groups', () => {
 
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
       success: true,
-      count: 3,
+      count: 2,
       totes: [
         expect.objectContaining({
           commodity: 'ambient',
@@ -113,17 +113,12 @@ describe('stagingLocationController temperature-based staging groups', () => {
           commodity: 'chilled',
           commodityLabel: 'Chilled',
           status: 'unstaged'
-        }),
-        expect.objectContaining({
-          commodity: 'oversized',
-          commodityLabel: 'Oversized',
-          status: 'unstaged'
         })
       ]
     }));
   });
 
-  test('allows admins to create oversized staging locations', async () => {
+  test('rejects oversized staging locations', async () => {
     const req = {
       user: { storeId: 1 },
       body: {
@@ -133,24 +128,16 @@ describe('stagingLocationController temperature-based staging groups', () => {
     };
     const res = createMockRes();
 
-    StagingLocation.findOne.mockResolvedValue(null);
-    StagingLocationSetting.findOrCreate.mockResolvedValue([{ stagingLimit: 10 }]);
-    StagingLocation.create.mockResolvedValue({
-      id: 20,
-      name: 'Oversized Bay 1',
-      itemType: 'oversized',
-      stagingLimit: 10
-    });
-
     await createLocation(req, res);
 
-    expect(StagingLocation.create).toHaveBeenCalledWith(expect.objectContaining({
-      itemType: 'oversized'
-    }));
-    expect(res.status).toHaveBeenCalledWith(201);
+    expect(StagingLocation.create).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      message: 'itemType must be one of ambient, chilled, frozen, or hot.'
+    });
   });
 
-  test('keeps explicitly oversized picked items in an oversized tote even below the weight threshold', async () => {
+  test('stages explicitly oversized picked items by temperature instead of oversized tote type', async () => {
     const req = {
       params: { orderId: '11' },
       user: { storeId: 1 }
@@ -187,15 +174,15 @@ describe('stagingLocationController temperature-based staging groups', () => {
       count: 1,
       totes: [
         expect.objectContaining({
-          commodity: 'oversized',
-          commodityLabel: 'Oversized',
+          commodity: 'ambient',
+          commodityLabel: 'Ambient',
           status: 'unstaged'
         })
       ]
     }));
   });
 
-  test('uses order notes staging overrides to keep a specific order item in an oversized tote', async () => {
+  test('ignores oversized order notes staging overrides and stages by temperature', async () => {
     const req = {
       params: { orderId: '12' },
       user: { storeId: 1 }
@@ -237,8 +224,8 @@ describe('stagingLocationController temperature-based staging groups', () => {
       count: 1,
       totes: [
         expect.objectContaining({
-          commodity: 'oversized',
-          commodityLabel: 'Oversized',
+          commodity: 'ambient',
+          commodityLabel: 'Ambient',
           status: 'unstaged'
         })
       ]

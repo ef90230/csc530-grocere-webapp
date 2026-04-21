@@ -107,15 +107,6 @@
   background: #b10d0d;
 }
 
-.staging-location-main--oversized {
-  background: #6950a6;
-  color: #fff;
-}
-
-.staging-location-main--oversized:hover {
-  background: #5b4492;
-}
-
 .staging-location-name {
   display: block;
   font-size: 1.13rem;
