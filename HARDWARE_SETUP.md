@@ -1,346 +1,208 @@
-# Grocer-E Hardware Setup & Physical Accessories Guide
-
-## 🖥️ System Requirements
-
-### Minimum Hardware Specifications
-- **CPU**: Intel Core i5 or equivalent (2.4 GHz or higher)
-- **RAM**: 8 GB minimum
-- **Storage**: 256 GB SSD
-- **Network**: WiFi 5 (802.11ac) or Ethernet (100 Mbps+)
-- **Display**: 7" minimum (tablets/mobile devices acceptable)
-
-### Recommended Hardware
-- **CPU**: Intel Core i7 or AMD Ryzen 7
-- **RAM**: 16 GB
-- **Storage**: 512 GB SSD
-- **Network**: WiFi 6 (802.11ax) or Gigabit Ethernet
-- **Display**: 10"+ touchscreen for optimal ergonomics
-
----
-
-## 📱 Mobile & Handheld Devices
-
-### Supported Platforms
-- **iOS**: 13.0 or later (iPhone 8+, iPad Air 2+)
-- **Android**: 9 (API 28) or later
-
-### Required Permissions
-The app requests and requires these device permissions:
-
-| Permission | Purpose | Mobile | Tablet |
-|-----------|---------|--------|--------|
-| **Camera** | Barcode/UPC scanning during picking | ✓ | ✓ |
-| **Microphone** | (Optional) Voice commands future feature | — | — |
-| **Storage** | Offline sync and caching | ✓ | ✓ |
-| **Network** | API communication with backend | ✓ | ✓ |
-
-### Camera Hardware Compatibility
-
-#### Barcode Detection APIs Supported
-The application uses two barcode detection technologies:
-
-1. **Native BarcodeDetector API** (Preferred)
-   - Built into modern browsers (Chrome 81+, Edge 81+)
-   - No additional installation required
-   - Supported formats:
-     - UPC-A (standard retail barcodes)
-     - UPC-E (compressed UPC)
-     - EAN-13 (European barcodes)
-     - EAN-8 (European compact)
-     - Code 128 (logistics, warehouse)
-     - Code 39 (industrial use)
-     - QR Codes (future features)
-
-2. **ZXing.js Library** (Fallback)
-   - Provides broader device compatibility
-   - Used when native API unavailable
-   - Same barcode format support
-   - Slightly slower processing (~50-100ms)
-
-#### Recommended Camera Devices
-- **1080p minimum** resolution (1920×1080)
-- **Auto-focus** capability essential for varying distances
-- **60 FPS minimum** frame rate for smooth detection
-- **Wide angle lens** (80°+) to capture barcodes from different angles
-
-##### Device Examples
-| Device | Camera | Auto-focus | FPS | Notes |
-|--------|--------|-----------|-----|-------|
-| iPhone 11/12+ | 12MP wide | Yes | 30+ | Excellent for scanning |
-| Samsung Galaxy S10+ | 16MP wide | Yes | 30+ | Good performance |
-| iPad Pro (2020+) | 12MP wide | Yes | 30+ | Ideal for tablets |
-| Google Pixel 5+ | 12.2MP | Yes | 30+ | Fast processing |
-
----
-
-## 🏪 Store Hardware Setup
-
-### Central Backend Server
-- **Processor**: Multi-core (8+ cores recommended)
-- **RAM**: 32 GB minimum
-- **Storage**: 1 TB SSD (for database and logs)
-- **Networking**: 1 Gbps Ethernet connection
-- **Power**: UPS with 2+ hour backup
-- **OS**: Linux (Ubuntu 20.04 LTS+) or Windows Server 2019+
-
-### Database Server (PostgreSQL)
-- **Dedicated hardware** recommended for stores with 100+ daily orders
-- **16 GB+ RAM** for query caching
-- **Fast I/O** (NVMe SSD or RAID-configured drives)
-- **Backup solution**: Daily automated backups to external storage
-
-### Network Infrastructure
-- **WiFi 6 (802.11ax)** access points:
-  - One per 1500-2000 sq ft of warehouse
-  - Minimum 100 Mbps throughput per device
-  - Minimum 50 Mbps upload speed
-  - 5 GHz band preferred for stability
-
-- **Wired Ethernet** (preferred for stationary devices):
-  - Backroom/staging area servers
-  - Check-in kiosks
-  - Manager stations
-
-### Environmental Conditions
-- **Temperature**: 60-75°F (15-24°C)
-- **Humidity**: 30-60% relative humidity
-- **Lighting**: Adequate lighting for barcode scanning (500+ lux recommended)
-
----
-
-## 🔧 Scanner Devices & Accessories
-
-### Handheld Barcode Scanners
-Used for manual item entry and fallback when camera scanning unavailable.
-
-#### Recommended Models
-| Model | Type | Price | Best For |
-|-------|------|-------|----------|
-| Symbol LS2208 | 1D Laser | ~$100 | Budget option |
-| Honeywell Voyager 1602 | 2D Imager | ~$200 | Excellent range |
-| Zebra DS3678 | 2D Industrial | ~$400 | Rugged use |
-| Datalogic Gryphon | 2D Presentation | ~$300 | Checkout-style |
-
-#### Connection Types
-- **USB Wired**: Direct connection (most reliable)
-- **Bluetooth**: 30-50 ft range, easier mobility
-- **2.4 GHz Wireless**: Medium reliability, good range
-
-### Mobile Device Mounting
-- **Adjustable tablet holders** for stationary work (picking carts)
-- **Arm-mounted brackets** for hands-free operation
-- **Lanyard/harness systems** for personal carry during walking
-- **Anti-drop cases** with reinforced corners
-
-#### Recommended Mounting Solutions
-- RAM Mounts (adjustable, durable)
-- Manfrotto grips (professional-grade)
-- Vehicle/cart-specific mounts
-- Protective cases with raised bezels
-
----
-
-## 🎯 Optimal Setup Configurations
-
-### Small Store (< 50 daily orders)
-- **1-2 tablets** (10" iPad or Android tablet)
-- **1 WiFi 5 router** (central location)
-- **Backup barcode scanner** (USB connected)
-- **Server**: Can run on single modest machine or cloud instance
-
-### Medium Store (50-500 daily orders)
-- **3-4 tablets/mobile devices** (mixed iPhone/Android)
-- **2-3 WiFi 6 access points** (distributed)
-- **3-4 stationary barcode scanners** (Bluetooth)
-- **Dedicated backend server** (8-core, 16 GB RAM)
-- **Database server** (PostgreSQL on separate hardware)
-
-### Large Store (500+ daily orders)
-- **6-10 dedicated handheld devices**
-- **Comprehensive WiFi 6 mesh network** (coverage throughout store)
-- **Redundant network connections** (multiple ISPs)
-- **High-performance backend** (16+ core, 64 GB RAM)
-- **Enterprise database setup** (replicated, backed up)
-- **Load balancer** for multiple backend instances
-- **Redundant UPS systems** (zero downtime)
-
----
-
-## 🚀 Setup Checklist
-
-### Pre-Deployment
-- [ ] Test camera permissions on all intended devices
-- [ ] Verify WiFi signal strength throughout store (minimum -70 dBm)
-- [ ] Confirm barcode scanner compatibility with iOS/Android
-- [ ] Establish backup internet connection plan
-- [ ] Configure mobile device MDM (Mobile Device Management) for enterprise
-
-### Deployment Day
-- [ ] Install and configure backend server
-- [ ] Set up PostgreSQL database with backups
-- [ ] Configure WiFi network and test coverage
-- [ ] Test barcode scanning on all planned devices
-- [ ] Verify camera permissions on all test devices
-- [ ] Conduct full picking workflow test with live users
-- [ ] Train employees on device use and scanning techniques
-
-### Post-Deployment
-- [ ] Monitor network performance and latency
-- [ ] Collect feedback on camera/scanner reliability
-- [ ] Document any device-specific issues
-- [ ] Schedule weekly network performance reviews
-- [ ] Establish device maintenance schedule
-
----
-
-## 🎥 Camera Operation Best Practices
-
-### Optimal Scanning Technique
-1. **Distance**: Hold device 4-12 inches from barcode
-2. **Angle**: Keep barcode parallel to camera lens
-3. **Lighting**: Ensure adequate ambient lighting (avoid glare)
-4. **Stability**: Hold device steady for 1-2 seconds
-5. **Feedback**: Listen for scan confirmation sound/vibration
-
-### Troubleshooting Camera Issues
-
-| Issue | Solution |
-|-------|----------|
-| Barcode not detecting | Clean camera lens; increase lighting; ensure barcode visible |
-| Slow detection | Reduce background motion; improve lighting; update app |
-| Permission errors | Go to Settings > App Permissions > enable Camera |
-| Focus issues | Ensure device auto-focus enabled; not too close to barcode |
-
----
-
-## 🔌 Power & Charging
-
-### Device Charging Strategy
-- **Quick-charge capable chargers** (30W+) for tablets
-- **Charging dock stations** in backroom (4-8 device capacity)
-- **Battery packs** (20,000 mAh+) for extended picking walks
-- **Wireless charging pads** for convenience
-
-### Power Consumption
-- Tablet (continuous use): 15-20W
-- Mobile phone: 5-10W
-- WiFi router: 10-15W
-- Backend server: 200-400W
-
-### Typical Battery Life
-- iPad (full brightness, camera active): 6-8 hours
-- Android tablet: 8-10 hours
-- Mobile phone: 4-6 hours (with active scanning)
-
----
-
-## 🛡️ Security Considerations
-
-### Network Security
-- Enable WPA3 encryption on WiFi network
-- Isolate backend server on secure subnet
-- Use VPN for remote access
-- Implement firewall rules restricting access
-
-### Device Security
-- Enable device lock screens (biometric/PIN)
-- Install mobile device management (MDM) for corporate devices
-- Regular security updates (weekly recommended)
-- Disable non-essential features (Bluetooth when not needed)
-
-### Data Protection
-- All API communication uses HTTPS/TLS encryption
-- JWT tokens expire after 30 minutes (configurable)
-- Local data cached only while employee logged in
-- Automatic logout on app background (5 minute idle)
-
----
-
-## 📊 Performance Monitoring
-
-### Key Metrics to Track
-- **Network latency**: Target < 100ms to backend
-- **Camera detection speed**: Target < 500ms per scan
-- **WiFi signal strength**: Minimum -70 dBm throughout store
-- **Device battery**: Monitor hourly usage patterns
-- **API response time**: Target < 200ms for order retrieval
-
-### Monitoring Tools
-- Built-in app diagnostics (shown in settings)
-- Network analyzer apps (WiFi Analyzer, NetSpot)
-- Server monitoring dashboard (Grafana/Prometheus)
-- Database performance monitoring (pgAdmin for PostgreSQL)
-
----
-
-## 🆘 Support & Troubleshooting
-
-### Common Issues
-
-**"Camera permission denied"**
-- Navigate to device Settings > App Permissions
-- Ensure camera permission set to "Allow"
-- Restart app after granting permission
-
-**"WiFi connection drops"**
-- Move closer to router
-- Check for interference (microwaves, cordless phones)
-- Reboot router and device
-- Contact IT for signal strength analysis
-
-**"Barcode won't scan"**
-- Ensure adequate lighting (avoid direct sunlight)
-- Clean camera lens with soft cloth
-- Verify barcode is not damaged
-- Try alternate scanner if available
-
-**"Slow app performance"**
-- Check WiFi signal strength
-- Restart device (clears cache)
-- Check available device storage (need 500MB+ free)
-- Restart backend server if API calls slow
-
-### Support Contact
-For hardware-specific issues:
-- Email: tech-support@grocere.local
-- Phone: 1-800-GROCERE
-- Hours: Monday-Friday, 8 AM - 5 PM EST
-
----
-
-## 📋 Hardware Inventory Template
-
-```
-Store: _________________
-Date: __________________
+# Grocer-E Hardware Setup and Physical Accessories Guide
+
+This document reflects what the app actually needs today: a browser-based frontend (React), a Node/Express API, PostgreSQL, and camera barcode scanning from mobile/tablet devices.
+
+## 1. What This App Requires
+
+Grocer-E does not require specialized enterprise hardware to run reliably for most stores. Core requirements are:
+
+- Stable local network coverage in picking and staging areas
+- Mobile devices with decent camera autofocus
+- A backend host for Node + PostgreSQL (local server or cloud VM)
+- Charging and device protection for daily operations
+
+## 2. Client Device Requirements (Pickers, Stagers, Leads)
+
+### Minimum practical device spec
+
+- CPU: modern mid-range phone/tablet processor (last 4-5 years)
+- RAM: 3 GB minimum (4 GB preferred)
+- Camera: rear camera with autofocus
+- Battery: enough for 4-6 hour active shift use, or swap/charge plan
+- Display: 6.1" phone or 8" in tablet minimum
+
+### Recommended for smoother scanning
+
+- RAM: 4-8 GB
+- Camera: 1080p+ rear camera with fast autofocus
+- Display: 8-11" tablet if device is cart-mounted
+- Rugged case and screen protector
+
+### Supported browser/runtime targets
+
+- iOS Safari 15+ (or Chrome on iOS)
+- Android Chrome 110+
+- Desktop Chrome/Edge for manager/admin screens
+
+## 3. Permissions Actually Needed
+
+The app currently needs:
+
+- Camera: required for barcode scan flows
+- Network access: required for API calls
+
+Not currently required by core workflows:
+
+- Microphone
+- Background location
+- Bluetooth (unless using external scanner hardware)
+
+## 4. Barcode Scanning Reality
+
+The app uses:
+
+- Native BarcodeDetector API when available
+- ZXing fallback for compatibility
+
+Supported formats in current flows include UPC/EAN and common 1D warehouse formats.
+
+Practical scanning guidance:
+
+- Distance: roughly 4-12 inches
+- Keep barcode flat to camera
+- Ensure aisle lighting is sufficient and avoid glare
+- Clean camera lens regularly
+
+## 5. Backend Host Requirements
+
+These specs are realistic for this app's current load pattern (HTTP APIs + periodic polling; no heavy streaming).
+
+### Small deployment (single store, low to moderate traffic)
+
+- 2 vCPU
+- 4 GB RAM
+- 60-100 GB SSD
+- Ubuntu 22.04 LTS (recommended) or similar Linux
+- PostgreSQL on same host is acceptable
+
+### Recommended baseline (most stores)
+
+- 4 vCPU
+- 8 GB RAM
+- 100-200 GB SSD
+- Daily backups for PostgreSQL
+- Node process manager (pm2/systemd) and restart policy
+
+### High-volume / multi-store backend
+
+- 8+ vCPU
+- 16+ GB RAM
+- 250+ GB SSD
+- Separate managed PostgreSQL instance
+- Reverse proxy + TLS termination (Nginx or cloud load balancer)
+
+## 6. Network Requirements
+
+### Practical targets
+
+- API roundtrip in-store: usually under 200 ms
+- WiFi signal in work zones: at least -67 dBm preferred
+- Consistent 5 GHz coverage in picking/staging areas
+
+### Throughput
+
+- App traffic is light to moderate; reliability matters more than peak bandwidth
+- 50-100 Mbps internet is typically sufficient for one store if backend is remote
+- If backend is on local LAN, prioritize LAN stability over internet speed
+
+## 7. Physical Accessories That Matter Most
+
+- Rugged case with hand strap for phones/tablets
+- Cart mount for tablet workflows
+- Multi-bay charging dock in backroom
+- 1 spare charged device per shift for continuity
+- Optional Bluetooth scanner for fallback in poor camera conditions
+
+## 8. Store Size Planning
+
+### Small store (up to ~75 active fulfillment orders/day)
+
+- 2-3 mobile devices
+- 1-2 spare chargers/battery packs
+- 1 backend host (or cloud VM)
+
+### Medium store (~75-300 orders/day)
+
+- 4-8 mobile devices
+- At least 2 APs with overlap in staging/picking zones
+- Recommended baseline backend (4 vCPU/8 GB)
+
+### Larger operation (300+ orders/day)
+
+- 8+ mobile devices
+- Full coverage WiFi plan and channel tuning
+- 8 vCPU/16 GB backend and separate PostgreSQL
+
+## 9. Reliability Checklist
+
+### Before go-live
+
+- [ ] Confirm camera permission on each device
+- [ ] Walk test WiFi in every pick aisle and staging area
+- [ ] Validate barcode scan speed on representative products
+- [ ] Verify backend auto-restart after reboot/crash
+- [ ] Configure DB backups and restore test
+
+### Ongoing operations
+
+- [ ] Weekly check of failed API requests and slow endpoints
+- [ ] Battery health check for devices used on shift
+- [ ] Camera lens cleaning routine
+- [ ] Verify available storage on backend host
+
+## 10. Common Hardware/Environment Issues
+
+### Slow or failed scans
+
+- Improve aisle lighting
+- Clean lens and remove worn screen protectors over camera
+- Reduce motion blur by stabilizing device
+- Use fallback external scanner if needed
+
+### Intermittent "Failed to fetch"
+
+- Confirm backend process is running and listening
+- Confirm API URL points to correct host/port
+- Check WiFi handoff/dead zones in aisles
+- Check firewall or VPN rules blocking API
+
+### Device drains before shift ends
+
+- Reduce brightness where possible
+- Add mid-shift charging rotation
+- Keep backup power bank or spare device ready
+
+## 11. Hardware Inventory Template
+
+```txt
+Store: __________________
+Date: ___________________
 
 MOBILE DEVICES
-[ ] Device 1: Brand/Model: __________ Serial: __________
-[ ] Device 2: Brand/Model: __________ Serial: __________
-
-SCANNERS
-[ ] Scanner 1: Type: __________ Connection: __________
-[ ] Scanner 2: Type: __________ Connection: __________
-
-NETWORK
-[ ] Router 1: Model: __________ Location: __________
-[ ] Router 2: Model: __________ Location: __________
-
-SERVERS
-[ ] Backend: CPU/RAM: __________ OS: __________
-[ ] Database: Storage: __________ Backup: __________
+[ ] Device 1: Model __________ Serial __________
+[ ] Device 2: Model __________ Serial __________
+[ ] Device 3: Model __________ Serial __________
 
 ACCESSORIES
-[ ] Mobile mounts: Qty: __________ Locations: __________
-[ ] Charging dock: Qty: __________ Location: __________
-[ ] Battery packs: Qty: __________ Capacity: __________
+[ ] Rugged cases qty _____
+[ ] Cart mounts qty _____
+[ ] Charging dock bays _____
+[ ] Spare power banks qty _____
+[ ] External scanners qty _____
+
+NETWORK
+[ ] AP 1 location __________
+[ ] AP 2 location __________
+[ ] Signal verified in picking aisles
+
+BACKEND
+[ ] Host type: local server / cloud VM
+[ ] CPU/RAM: __________
+[ ] PostgreSQL backup configured
 ```
 
----
+## 12. Related Docs
 
-## 📞 Contact & Resources
-
-- **Documentation**: See BACKEND_SETUP.md for server configuration
-- **API Docs**: See backend/README.md for detailed API specifications
-- **Frontend Setup**: See frontend/README.md for web app installation
-- **Support**: Post issues to internal tech support system
+- BACKEND_SETUP.md
+- backend/README.md
+- frontend/README.md
