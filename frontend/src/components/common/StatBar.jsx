@@ -9,6 +9,7 @@ import {
   getStoredEmployeeId,
   readEmployeeSettingsFromCache
 } from '../../utils/employeeSettings';
+import { fetchWithRetry, isRetryableNetworkError } from '../../utils/fetchWithRetry';
 import './StatBar.css';
 
 const TARGET_PICK_RATE = 100;
@@ -97,11 +98,14 @@ const StatBar = ({
 
     const loadEmployeeProfile = async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/auth/me`, {
+        const response = await fetchWithRetry(`${API_BASE}/api/auth/me`, {
           headers: {
             Authorization: `Bearer ${token}`
           },
           signal: controller.signal
+        }, {
+          retries: 4,
+          baseDelayMs: 500
         });
 
         if (!response.ok) {
@@ -132,11 +136,14 @@ const StatBar = ({
 
         const employeeStoreId = Number(payload?.user?.storeId);
         if (Number.isInteger(employeeStoreId) && employeeStoreId > 0) {
-          const settingsResponse = await fetch(`${API_BASE}/api/employees/store-settings`, {
+          const settingsResponse = await fetchWithRetry(`${API_BASE}/api/employees/store-settings`, {
             headers: {
               Authorization: `Bearer ${token}`
             },
             signal: controller.signal
+          }, {
+            retries: 2,
+            baseDelayMs: 350
           });
 
           if (settingsResponse.ok) {
@@ -148,6 +155,9 @@ const StatBar = ({
         }
       } catch (error) {
         if (error.name !== 'AbortError') {
+          if (isRetryableNetworkError(error)) {
+            return;
+          }
           console.error('Unable to load employee profile for StatBar', error);
         }
       }
@@ -223,6 +233,8 @@ const StatBar = ({
       );
     }
 
+    const todayPickRateLabel = formatPickRate(resolvedPickRate);
+
     return (
       <>
         <section className={`statbar statbar--${rateState}`} aria-label="Current pick walk stats">
@@ -232,7 +244,7 @@ const StatBar = ({
               <div className="statbar-walk-fill" style={{ width: `${walkProgressPercent}%` }} />
             </div>
           </div>
-          <span className="statbar-rate">Live Pick Rate: {formatPickRate(walkPickRate)}</span>
+          <span className="statbar-rate">Live: {formatPickRate(walkPickRate)} | Today: {todayPickRateLabel}</span>
         </section>
         <div className="statbar-spacer" />
       </>

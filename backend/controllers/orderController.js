@@ -857,7 +857,31 @@ const getCommodityQueueForPicking = async (req, res) => {
             {
               model: Item,
               as: 'item',
-              attributes: ['id', 'name', 'commodity']
+              attributes: ['id', 'name', 'commodity'],
+              include: [
+                {
+                  model: ItemLocation,
+                  as: 'locations',
+                  required: false,
+                  attributes: ['id', 'locationId', 'storeId', 'quantityOnHand'],
+                  include: [
+                    {
+                      model: Location,
+                      as: 'location',
+                      required: false,
+                      attributes: ['id', 'aisleId', 'section', 'shelf'],
+                      include: [
+                        {
+                          model: Aisle,
+                          as: 'aisle',
+                          required: false,
+                          attributes: ['id', 'aisleNumber', 'aisleName']
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
             }
           ]
         }
@@ -869,15 +893,30 @@ const getCommodityQueueForPicking = async (req, res) => {
 
     const commodityMap = new Map();
 
-    orders.forEach((order) => {
-      order.items.forEach((orderItem) => {
-        const commodityKey = orderItem?.item?.commodity;
+    const pathIndexMapCache = new Map();
+    const getPathIndexForCommodity = async (commodityValue) => {
+      const normalizedCommodity = normalizeCommodity(commodityValue);
+      if (!normalizedCommodity) {
+        return new Map();
+      }
+
+      if (!pathIndexMapCache.has(normalizedCommodity)) {
+        const pathIndexMap = await getPathIndexMap(storeId, normalizedCommodity);
+        pathIndexMapCache.set(normalizedCommodity, pathIndexMap);
+      }
+
+      return pathIndexMapCache.get(normalizedCommodity);
+    };
+
+    for (const order of orders) {
+      for (const orderItem of order.items) {
+        const commodityKey = normalizeCommodity(orderItem?.item?.commodity);
         if (!commodityKey) {
-          return;
+          continue;
         }
 
         if (activeCommodity && commodityKey === activeCommodity) {
-          return;
+          continue;
         }
 
         const orderedQuantity = Number(orderItem.quantity || 0);
@@ -885,7 +924,22 @@ const getCommodityQueueForPicking = async (req, res) => {
         const remainingQuantity = Math.max(0, orderedQuantity - alreadyPickedQuantity);
 
         if (remainingQuantity <= 0) {
-          return;
+          continue;
+        }
+
+        const pathIndexMap = await getPathIndexForCommodity(commodityKey);
+        const candidateLocations = Array.isArray(orderItem?.item?.locations)
+          ? orderItem.item.locations
+          : [];
+
+        const hasPickableLocation = candidateLocations.some((locationRow) => {
+          const quantityOnHand = Number(locationRow?.quantityOnHand || 0);
+          const locationId = Number(locationRow?.locationId);
+          return quantityOnHand > 0 && Number.isInteger(locationId) && pathIndexMap.has(locationId);
+        });
+
+        if (!hasPickableLocation) {
+          continue;
         }
 
         const currentEntry = commodityMap.get(commodityKey) || {
@@ -917,8 +971,8 @@ const getCommodityQueueForPicking = async (req, res) => {
         }
 
         commodityMap.set(commodityKey, currentEntry);
-      });
-    });
+      }
+    }
 
     const commodities = Array.from(commodityMap.values())
       .map((commodity) => ({

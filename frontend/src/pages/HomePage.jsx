@@ -6,6 +6,7 @@ import pickingButtonSymbol from '../assets/home-buttons/picking-button-symbol.pn
 import stagingButtonSymbol from '../assets/home-buttons/staging-button-symbol.png';
 import ordersButtonSymbol from '../assets/home-buttons/orders-button-symbol.png';
 import storeManagementButtonSymbol from '../assets/home-buttons/store-management-button-symbol.png';
+import { fetchWithRetry, isRetryableNetworkError } from '../utils/fetchWithRetry';
 import './HomePage.css';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
@@ -171,7 +172,11 @@ const HomePage = () => {
       return;
     }
 
+    const controller = new AbortController();
+    let reconnectTimerId = null;
+
     const loadHomeStats = async () => {
+      let shouldFinalizeLoading = true;
       setIsLoading(true);
 
       try {
@@ -180,9 +185,27 @@ const HomePage = () => {
         };
 
         const [ordersResponse, assignmentsResponse, statsResponse] = await Promise.all([
-          fetch(`${API_BASE}/api/orders`, { headers }),
-          fetch(`${API_BASE}/api/staging-locations/assignments`, { headers }),
-          fetch(`${API_BASE}/api/employees/stats/summary`, { headers })
+          fetchWithRetry(`${API_BASE}/api/orders`, {
+            headers,
+            signal: controller.signal
+          }, {
+            retries: 8,
+            baseDelayMs: 450
+          }),
+          fetchWithRetry(`${API_BASE}/api/staging-locations/assignments`, {
+            headers,
+            signal: controller.signal
+          }, {
+            retries: 8,
+            baseDelayMs: 450
+          }),
+          fetchWithRetry(`${API_BASE}/api/employees/stats/summary`, {
+            headers,
+            signal: controller.signal
+          }, {
+            retries: 8,
+            baseDelayMs: 450
+          })
         ]);
 
         if (ordersResponse.ok) {
@@ -205,16 +228,38 @@ const HomePage = () => {
         } else {
           setStorePickRate(0);
         }
-      } catch {
+      } catch (error) {
+        if (error?.name === 'AbortError') {
+          return;
+        }
+
+        if (isRetryableNetworkError(error)) {
+          shouldFinalizeLoading = false;
+          setIsLoading(true);
+          reconnectTimerId = window.setTimeout(loadHomeStats, 1500);
+          return;
+        }
+
         setOrders([]);
         setStagingAssignments([]);
         setStorePickRate(0);
       } finally {
-        setIsLoading(false);
+        if (!controller.signal.aborted && shouldFinalizeLoading) {
+          setIsLoading(false);
+        }
       }
     };
 
     loadHomeStats();
+    const refreshIntervalId = window.setInterval(loadHomeStats, 30000);
+
+    return () => {
+      controller.abort();
+      if (reconnectTimerId) {
+        window.clearTimeout(reconnectTimerId);
+      }
+      window.clearInterval(refreshIntervalId);
+    };
   }, []);
 
   const dashboardStats = useMemo(() => {

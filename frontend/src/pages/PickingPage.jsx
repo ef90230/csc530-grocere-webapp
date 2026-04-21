@@ -2,11 +2,72 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import TopBar from '../components/common/TopBar';
 import StoreMapPreview from '../components/common/StoreMapPreview';
-import StatBar from '../components/common/StatBar';
+import { fetchWithRetry } from '../utils/fetchWithRetry';
 import './PickingPage.css';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+const WALK_PROGRESS_CACHE_PREFIX = 'pickWalkProgress';
+
+const getWalkProgressCacheKey = ({ employeeId, commodity, walkStartedAt }) => {
+    const normalizedEmployeeId = String(employeeId || '').trim();
+    const normalizedCommodity = String(commodity || '').trim().toLowerCase();
+    const startedAtDate = new Date(walkStartedAt || '');
+
+    if (!normalizedEmployeeId || !normalizedCommodity || Number.isNaN(startedAtDate.getTime())) {
+        return '';
+    }
+
+    const normalizedStartedAt = startedAtDate.toISOString();
+
+    return `${WALK_PROGRESS_CACHE_PREFIX}:${normalizedEmployeeId}:${normalizedCommodity}:${normalizedStartedAt}`;
+};
+
+const readWalkProgressCache = (key) => {
+    if (!key) {
+        return null;
+    }
+
+    try {
+        const raw = window.localStorage.getItem(key);
+        if (!raw) {
+            return null;
+        }
+
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') {
+            return null;
+        }
+
+        return parsed;
+    } catch {
+        return null;
+    }
+};
+
+const writeWalkProgressCache = (key, payload) => {
+    if (!key || !payload) {
+        return;
+    }
+
+    try {
+        window.localStorage.setItem(key, JSON.stringify(payload));
+    } catch {
+        // Ignore cache write failures so picking flow is not blocked.
+    }
+};
+
+const clearWalkProgressCache = (key) => {
+    if (!key) {
+        return;
+    }
+
+    try {
+        window.localStorage.removeItem(key);
+    } catch {
+        // Ignore cache remove failures.
+    }
+};
 
 const REPORT_TYPE_OPTIONS = [
     { id: 'item_cannot_fit', label: 'Item cannot fit' },
@@ -58,6 +119,8 @@ const PickingPage = () => {
     const [isEndPromptOpen, setIsEndPromptOpen] = useState(false);
     const [isEndingWalk, setIsEndingWalk] = useState(false);
     const [walkStartedAt, setWalkStartedAt] = useState(null);
+    const [walkInitialUnits, setWalkInitialUnits] = useState(0);
+    const [walkProgressCacheKey, setWalkProgressCacheKey] = useState('');
     // substituteMode is null (normal) or { originalEntry } when showing a substitute item
     const [substituteMode, setSubstituteMode] = useState(null);
     const [completedUnits, setCompletedUnits] = useState(0);
@@ -109,12 +172,18 @@ const PickingPage = () => {
             try {
                 setErrorMessage('');
                 setIsLoading(true);
+                setCompletedUnits(0);
+                setWalkInitialUnits(0);
+                setWalkProgressCacheKey('');
 
-                const profileResponse = await fetch(`${API_BASE}/api/auth/me`, {
+                const profileResponse = await fetchWithRetry(`${API_BASE}/api/auth/me`, {
                     headers: {
                         Authorization: `Bearer ${token}`
                     },
                     signal: controller.signal
+                }, {
+                    retries: 4,
+                    baseDelayMs: 500
                 });
 
                 if (!profileResponse.ok) {
@@ -123,6 +192,7 @@ const PickingPage = () => {
 
                 const profilePayload = await profileResponse.json();
                 const resolvedStoreId = profilePayload?.user?.storeId;
+                const resolvedEmployeeId = profilePayload?.user?.id;
 
                 if (!resolvedStoreId) {
                     throw new Error('No store is assigned to this employee.');
@@ -131,7 +201,7 @@ const PickingPage = () => {
                 setStoreId(resolvedStoreId);
 
                 const [walkResponse, aislesResponse] = await Promise.all([
-                    fetch(`${API_BASE}/api/orders/picking/walk/start`, {
+                    fetchWithRetry(`${API_BASE}/api/orders/picking/walk/start`, {
                         method: 'POST',
                         headers: {
                             Authorization: `Bearer ${token}`,
@@ -142,12 +212,18 @@ const PickingPage = () => {
                             commodity: selectedCommodity
                         }),
                         signal: controller.signal
+                    }, {
+                        retries: 4,
+                        baseDelayMs: 500
                     }),
-                    fetch(`${API_BASE}/api/aisles/store/${resolvedStoreId}`, {
+                    fetchWithRetry(`${API_BASE}/api/aisles/store/${resolvedStoreId}`, {
                         headers: {
                             Authorization: `Bearer ${token}`
                         },
                         signal: controller.signal
+                    }, {
+                        retries: 2,
+                        baseDelayMs: 350
                     })
                 ]);
 
@@ -157,8 +233,30 @@ const PickingPage = () => {
 
                 const walkPayload = await walkResponse.json();
                 const resolvedQueue = Array.isArray(walkPayload?.queue) ? walkPayload.queue : [];
+                const walkRemainingUnits = resolvedQueue.reduce((sum, row) => sum + Number(row?.quantityToPick || 0), 0);
+                const resolvedWalkStartedAt = walkPayload?.walkStartedAt || new Date().toISOString();
+                const progressKey = getWalkProgressCacheKey({
+                    employeeId: resolvedEmployeeId,
+                    commodity: selectedCommodity,
+                    walkStartedAt: resolvedWalkStartedAt
+                });
+                const cachedProgress = readWalkProgressCache(progressKey);
+                const cachedTotalUnits = Number(cachedProgress?.totalUnits || 0);
+                const serverTotalUnits = Number(walkPayload?.totalItems || 0);
+                const restoredTotalUnits = Math.max(walkRemainingUnits, serverTotalUnits, Number.isFinite(cachedTotalUnits) ? cachedTotalUnits : 0);
+                const restoredCompletedUnits = Math.max(0, restoredTotalUnits - walkRemainingUnits);
+
                 setQueue(resolvedQueue);
-                setWalkStartedAt(walkPayload?.walkStartedAt || new Date().toISOString());
+                setWalkStartedAt(resolvedWalkStartedAt);
+                setWalkInitialUnits(restoredTotalUnits);
+                setCompletedUnits(restoredCompletedUnits);
+                setWalkProgressCacheKey(progressKey);
+
+                writeWalkProgressCache(progressKey, {
+                    totalUnits: restoredTotalUnits,
+                    remainingUnits: walkRemainingUnits,
+                    updatedAt: Date.now()
+                });
 
                 if (aislesResponse.ok) {
                     const aislesPayload = await aislesResponse.json().catch(() => ({}));
@@ -183,10 +281,25 @@ const PickingPage = () => {
         return () => controller.abort();
     }, [navigate, selectedCommodity]);
 
+    useEffect(() => {
+        if (!walkProgressCacheKey) {
+            return;
+        }
+
+        const remainingUnits = queue.reduce((sum, row) => sum + Number(row?.quantityToPick || 0), 0);
+        const totalUnits = Math.max(Number(walkInitialUnits || 0), Number(completedUnits || 0) + remainingUnits);
+
+        writeWalkProgressCache(walkProgressCacheKey, {
+            totalUnits,
+            remainingUnits,
+            updatedAt: Date.now()
+        });
+    }, [walkProgressCacheKey, walkInitialUnits, completedUnits, queue]);
+
     const remainingUnits = useMemo(() => (
         queue.reduce((sum, row) => sum + Number(row?.quantityToPick || 0), 0)
     ), [queue]);
-    const totalUnits = completedUnits + remainingUnits;
+    const totalUnits = Math.max(walkInitialUnits, completedUnits + remainingUnits);
 
     const currentItem = queue[0] || null;
     const currentQuantity = Number(currentItem?.quantityToPick || 0);
@@ -737,6 +850,7 @@ const PickingPage = () => {
                 throw new Error(payload?.message || 'Unable to end walk cleanly.');
             }
 
+            clearWalkProgressCache(walkProgressCacheKey);
             walkEndedCleanly = true;
         } catch (error) {
             console.error('Unable to end walk cleanly', error);
@@ -776,9 +890,6 @@ const PickingPage = () => {
                 walkTotalUnits={totalUnits}
                 walkStartedAt={walkStartedAt}
             />
-            
-            {/* Daily Pick Rate Summary - shows picker's efficiency for the day */}
-            <StatBar mode="default" />
 
             <main className={`picking-page-content ${shouldAllowMobileScroll ? 'picking-page-content--allow-scroll' : ''}`}>
                 {errorMessage ? (
