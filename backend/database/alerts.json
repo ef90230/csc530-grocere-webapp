@@ -1,6 +1,52 @@
 {
   "alerts": [
     {
+      "id": "alert_1776785418634_tg1t4f",
+      "type": "picks_overdue",
+      "subtype": "frozen",
+      "title": "Picks went overdue",
+      "subject": "frozen",
+      "message": "frozen",
+      "actionLabel": "Pick List",
+      "actionTarget": {
+        "path": "/commodityselect"
+      },
+      "icon": "warning",
+      "severity": "critical",
+      "storeId": 1,
+      "itemId": null,
+      "orderId": null,
+      "employeeId": null,
+      "employeeName": "",
+      "metadata": {},
+      "sourceKey": "picks_overdue:1:frozen",
+      "createdAt": "2026-04-21T15:30:18.634Z",
+      "updatedAt": "2026-04-21T15:30:28.361Z"
+    },
+    {
+      "id": "alert_1776785361639_l85dfw",
+      "type": "picker_alert",
+      "subtype": "walk_ended_early",
+      "title": "Picker exited walk early",
+      "subject": "Koen Tanner",
+      "message": "Koen Tanner",
+      "actionLabel": "Leaderboard",
+      "actionTarget": {
+        "path": "/leaderboard"
+      },
+      "icon": "",
+      "severity": "warning",
+      "storeId": 1,
+      "itemId": null,
+      "orderId": null,
+      "employeeId": 2,
+      "employeeName": "Koen Tanner",
+      "metadata": {},
+      "sourceKey": "",
+      "createdAt": "2026-04-21T15:29:21.639Z",
+      "updatedAt": "2026-04-21T15:29:21.639Z"
+    },
+    {
       "id": "alert_1776782243815_87zxak",
       "type": "picker_alert",
       "subtype": "walk_ended_early",
@@ -389,7 +435,7 @@
       "metadata": {},
       "sourceKey": "picks_overdue:1:ambient",
       "createdAt": "2026-04-20T15:14:04.651Z",
-      "updatedAt": "2026-04-21T14:37:25.800Z"
+      "updatedAt": "2026-04-21T15:30:28.361Z"
     },
     {
       "id": "alert_1776698044650_oq5igk",
@@ -412,7 +458,7 @@
       "metadata": {},
       "sourceKey": "picks_overdue:1:chilled",
       "createdAt": "2026-04-20T15:14:04.650Z",
-      "updatedAt": "2026-04-20T21:35:06.943Z"
+      "updatedAt": "2026-04-21T15:30:28.360Z"
     },
     {
       "id": "alert_1776534376790_nniooy",
