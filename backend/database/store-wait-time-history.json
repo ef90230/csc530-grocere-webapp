@@ -35,8 +35,12 @@
           "orderCount": 8
         },
         "2026-04-21": {
-          "totalMinutes": 12.832533333333332,
-          "orderCount": 15
+          "totalMinutes": 19.90215,
+          "orderCount": 16
+        },
+        "2026-04-22": {
+          "totalMinutes": 1.6002333333333336,
+          "orderCount": 4
         }
       }
     }

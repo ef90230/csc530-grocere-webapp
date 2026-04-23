@@ -1,16 +1,31 @@
 jest.mock('../../../models', () => ({
   Employee: {
     findOne: jest.fn(),
-    create: jest.fn()
+    create: jest.fn(),
+    findByPk: jest.fn(),
+    sequelize: {
+      transaction: jest.fn()
+    }
   },
   Customer: {
     findOne: jest.fn(),
-    create: jest.fn()
+    create: jest.fn(),
+    findByPk: jest.fn()
   },
   Store: {
     findOne: jest.fn(),
     findByPk: jest.fn(),
     create: jest.fn()
+  },
+  Order: {
+    findAll: jest.fn(),
+    update: jest.fn()
+  },
+  OrderItem: {
+    update: jest.fn()
+  },
+  StagingAssignment: {
+    destroy: jest.fn()
   }
 }));
 
@@ -31,7 +46,15 @@ jest.mock('../../../utils/storeAdminAssignmentStore', () => ({
   isStoreAdminEmployee: jest.fn(() => false)
 }));
 
-const { Employee, Customer, Store } = require('../../../models');
+const { Op } = require('sequelize');
+const {
+  Employee,
+  Customer,
+  Store,
+  Order,
+  OrderItem,
+  StagingAssignment
+} = require('../../../models');
 const { generateToken } = require('../../../middleware/auth');
 const {
   getEmployeeTimeframeStats
@@ -46,7 +69,8 @@ const {
   registerEmployee,
   registerCustomer,
   registerAdmin,
-  getMe
+  getMe,
+  deleteMe
 } = require('../../../controllers/authController');
 
 const createMockRes = () => {
@@ -63,6 +87,10 @@ describe('authController', () => {
     getEmployeeTimeframeStats.mockResolvedValue({ today: { pickRate: 72.5 } });
     getStoreAdminEmployeeId.mockReturnValue(null);
     isStoreAdminEmployee.mockReturnValue(false);
+    Employee.sequelize.transaction.mockResolvedValue({
+      commit: jest.fn(),
+      rollback: jest.fn()
+    });
   });
 
   test('login returns 401 when credentials are invalid', async () => {
@@ -307,7 +335,7 @@ describe('authController', () => {
 
     await getMe(req, res);
 
-    expect(getEmployeeTimeframeStats).toHaveBeenCalledWith(1);
+    expect(getEmployeeTimeframeStats).toHaveBeenCalledWith(1, { timeZone: 'UTC' });
     expect(res.json).toHaveBeenCalledWith({
       success: true,
       userType: 'employee',
@@ -331,5 +359,87 @@ describe('authController', () => {
       userType: 'customer',
       user: { id: 1, email: 'alex@example.com' }
     });
+  });
+
+  test('deleteMe cancels open customer orders using only valid order status enums', async () => {
+    const transaction = {
+      commit: jest.fn(),
+      rollback: jest.fn()
+    };
+    const customer = {
+      id: 17,
+      update: jest.fn().mockResolvedValue()
+    };
+
+    Employee.sequelize.transaction.mockResolvedValue(transaction);
+    Customer.findByPk.mockResolvedValue(customer);
+    Order.findAll
+      .mockResolvedValueOnce([{ id: 41, storeId: 3, orderNumber: 'ORD-41' }])
+      .mockResolvedValueOnce([{ id: 41, storeId: 3 }, { id: 42, storeId: 3 }]);
+    Order.update.mockResolvedValue([1]);
+    OrderItem.update.mockResolvedValue([1]);
+    StagingAssignment.destroy.mockResolvedValue(1);
+
+    const req = {
+      userType: 'customer',
+      user: { id: 17 }
+    };
+    const res = createMockRes();
+
+    await deleteMe(req, res);
+
+    expect(Order.findAll).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      where: expect.objectContaining({
+        customerId: 17,
+        status: {
+          [Op.notIn]: ['completed', 'cancelled']
+        }
+      }),
+      attributes: ['id', 'storeId', 'orderNumber'],
+      transaction
+    }));
+    expect(Order.findAll).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      where: {
+        orderNumber: ['ORD-41'],
+        status: {
+          [Op.notIn]: ['completed', 'cancelled']
+        }
+      },
+      attributes: ['id', 'storeId'],
+      transaction
+    }));
+    expect(Order.update).toHaveBeenCalledWith(
+      { status: 'cancelled' },
+      expect.objectContaining({
+        where: {
+          id: [41, 42],
+          status: {
+            [Op.notIn]: ['completed', 'cancelled']
+          }
+        },
+        transaction
+      })
+    );
+    expect(OrderItem.update).toHaveBeenCalledWith(
+      { status: 'canceled' },
+      expect.objectContaining({
+        where: {
+          orderId: [41, 42],
+          status: 'pending'
+        },
+        transaction
+      })
+    );
+    expect(StagingAssignment.destroy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          storeId: 3,
+          orderId: [41, 42]
+        },
+        transaction
+      })
+    );
+    expect(transaction.commit).toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
   });
 });

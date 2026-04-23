@@ -361,6 +361,22 @@ const ensureItemUnassignedQuantityColumn = async () => {
   }
 };
 
+const ensureItemUpcConstraintRelaxed = async () => {
+  try {
+    await sequelize.query(
+      'ALTER TABLE "items" DROP CONSTRAINT IF EXISTS items_upc_key;'
+    );
+  } catch (error) {
+    if (error?.original?.code === '42501') {
+      console.warn(
+        'Skipping items UPC constraint relaxation due to insufficient DB permissions (code 42501).'
+      );
+      return;
+    }
+    throw error;
+  }
+};
+
 const syncDatabase = async (force = false) => {
   try {
     await sequelize.sync({ force });
@@ -370,6 +386,7 @@ const syncDatabase = async (force = false) => {
     await ensureOrderItemCanceledStatus();
     await ensureStagingLocationCodeColumn();
     await ensureItemUnassignedQuantityColumn();
+    await ensureItemUpcConstraintRelaxed();
     console.log('Database synchronized successfully');
   } catch (error) {
     console.error('Error synchronizing database:', error);

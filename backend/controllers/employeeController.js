@@ -293,8 +293,7 @@ const getMyAndStoreStats = async (req, res) => {
 
     const storeEmployees = await Employee.findAll({
       where: {
-        storeId: currentEmployee.storeId,
-        isActive: true
+        storeId: currentEmployee.storeId
       },
       attributes: ['id']
     });

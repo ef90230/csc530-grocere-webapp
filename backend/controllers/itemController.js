@@ -1,6 +1,11 @@
 const { Item, ItemLocation, Location, Aisle, Store, Order, OrderItem, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const { syncItemOutOfStockAlerts } = require('./alertController');
+const {
+  assignItemToStore,
+  getAssignedStoreIdForItem,
+  clearItemAssignment
+} = require('../utils/itemStoreAssignmentStore');
 
 const TERMINAL_ORDER_STATUSES = new Set(['completed', 'complete', 'cancelled', 'canceled', 'deleted']);
 const CANCELED_ORDER_ITEM_STATUSES = new Set(['canceled', 'cancelled', 'out_of_stock', 'skipped', 'not_found']);
@@ -104,6 +109,20 @@ const recalculateOrderTotalAmount = async (orderId, transaction) => {
   );
 };
 
+const resolveStoreIdFromRequest = (req) => {
+  const bodyStoreId = Number(req.body?.storeId);
+  if (Number.isInteger(bodyStoreId) && bodyStoreId > 0) {
+    return bodyStoreId;
+  }
+
+  const userStoreId = Number(req.user?.storeId);
+  if (Number.isInteger(userStoreId) && userStoreId > 0) {
+    return userStoreId;
+  }
+
+  return null;
+};
+
 const getItems = async (req, res) => {
   try {
     const {
@@ -118,6 +137,8 @@ const getItems = async (req, res) => {
       sortBy,
       includeInactive
     } = req.query;
+    const parsedStoreId = Number(storeId);
+    const scopedStoreId = Number.isInteger(parsedStoreId) && parsedStoreId > 0 ? parsedStoreId : null;
 
     const where = {};
     if (includeInactive !== 'true') {
@@ -149,7 +170,7 @@ const getItems = async (req, res) => {
       {
         model: ItemLocation,
         as: 'locations',
-        required: noLocation === 'true' ? false : false,
+        required: false,
         include: [
           {
             model: Location,
@@ -165,8 +186,8 @@ const getItems = async (req, res) => {
         ]
       }
     ];
-    if (storeId) {
-      includeOptions[0].where = { storeId };
+    if (scopedStoreId) {
+      includeOptions[0].where = { storeId: scopedStoreId };
     }
 
     const items = await Item.findAll({
@@ -175,10 +196,16 @@ const getItems = async (req, res) => {
       order
     });
 
-    let filteredItems = items;
+    let filteredItems = scopedStoreId
+      ? items.filter((item) => {
+        const hasStoreLocation = Array.isArray(item.locations) && item.locations.length > 0;
+        const assignedStoreId = getAssignedStoreIdForItem(item?.id);
+        return hasStoreLocation || assignedStoreId === scopedStoreId;
+      })
+      : items;
     if (noLocation === 'true') {
       // "No Location" means no location rows assigned at all (regardless of stock).
-      filteredItems = items.filter((item) => (item.locations || []).length === 0);
+      filteredItems = filteredItems.filter((item) => (item.locations || []).length === 0);
     }
 
     res.json({
@@ -195,12 +222,14 @@ const getItems = async (req, res) => {
 const getItem = async (req, res) => {
   try {
     const { storeId } = req.query;
+    const parsedStoreId = Number(storeId);
+    const scopedStoreId = Number.isInteger(parsedStoreId) && parsedStoreId > 0 ? parsedStoreId : null;
 
-    const includeOptions = storeId ? [
+    const includeOptions = scopedStoreId ? [
       {
         model: ItemLocation,
         as: 'locations',
-        where: { storeId },
+        where: { storeId: scopedStoreId },
         required: false,
         include: [
           {
@@ -226,6 +255,14 @@ const getItem = async (req, res) => {
       return res.status(404).json({ message: 'Item not found' });
     }
 
+    if (scopedStoreId) {
+      const hasStoreLocation = Array.isArray(item.locations) && item.locations.length > 0;
+      const assignedStoreId = getAssignedStoreIdForItem(item?.id);
+      if (!hasStoreLocation && assignedStoreId !== scopedStoreId) {
+        return res.status(404).json({ message: 'Item not found' });
+      }
+    }
+
     res.json({
       success: true,
       item
@@ -238,7 +275,39 @@ const getItem = async (req, res) => {
 
 const createItem = async (req, res) => {
   try {
+    const storeId = resolveStoreIdFromRequest(req);
+    if (!Number.isInteger(storeId) || storeId < 1) {
+      return res.status(400).json({ message: 'storeId is required.' });
+    }
+
+    const upc = String(req.body?.upc || '').trim();
+    if (!upc) {
+      return res.status(400).json({ message: 'UPC is required.' });
+    }
+
+    const duplicateInStore = await Item.findOne({
+      where: { upc },
+      include: [
+        {
+          model: ItemLocation,
+          as: 'locations',
+          where: { storeId },
+          required: false,
+          attributes: ['id', 'storeId']
+        }
+      ]
+    });
+
+    if (duplicateInStore) {
+      const hasStoreLocation = Array.isArray(duplicateInStore.locations) && duplicateInStore.locations.length > 0;
+      const assignedStoreId = getAssignedStoreIdForItem(duplicateInStore.id);
+      if (hasStoreLocation || assignedStoreId === storeId) {
+        return res.status(400).json({ message: 'Item with this UPC already exists in this store' });
+      }
+    }
+
     const item = await Item.create(buildItemWritePayload(req.body));
+    assignItemToStore(item.id, storeId);
 
     res.status(201).json({
       success: true,
@@ -395,6 +464,8 @@ const deleteItem = async (req, res) => {
         },
         { transaction }
       );
+
+      clearItemAssignment(itemId);
 
       return {
         notFound: false,

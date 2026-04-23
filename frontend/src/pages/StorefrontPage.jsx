@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import CustomerPopupMenu from '../components/customer/CustomerPopupMenu';
 import CustomerItemDetailCard from '../components/customer/CustomerItemDetailCard';
+import cartELogo from '../assets/cart-e-logo.png';
 import {
   deriveCustomerOrderStatus,
   isCustomerOrderActive,
@@ -130,9 +131,14 @@ const StorefrontPage = () => {
       return;
     }
 
+    if (!preferredStoreId) {
+      setItems([]);
+      return;
+    }
+
     const loadItems = async () => {
       try {
-        const query = preferredStoreId ? `?storeId=${preferredStoreId}` : '';
+        const query = `?storeId=${preferredStoreId}`;
         const response = await fetch(`${API_BASE}/api/items${query}`);
         if (!response.ok) {
           return;
@@ -207,14 +213,13 @@ const StorefrontPage = () => {
         return;
       }
 
-      const storeId = selectedItem?.locations?.[0]?.storeId;
-      if (!storeId) {
+      if (!preferredStoreId) {
         setStoreAisles([]);
         return;
       }
 
       try {
-        const response = await fetch(`${API_BASE}/api/aisles/store/${storeId}`);
+        const response = await fetch(`${API_BASE}/api/aisles/store/${preferredStoreId}`);
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || !payload.success) {
           setStoreAisles([]);
@@ -227,7 +232,7 @@ const StorefrontPage = () => {
     };
 
     loadAislesForSelectedItem();
-  }, [selectedItem]);
+  }, [preferredStoreId, selectedItem]);
 
   const visibleItems = useMemo(() => (
     items.filter((item) => item?.isActive !== false)
@@ -320,9 +325,9 @@ const StorefrontPage = () => {
     const token = localStorage.getItem('authToken');
     const quantity = quantityByItemId[item.id] || 1;
     const onHandTotal = getOnHandTotal(item);
-    const resolvedStoreId = preferredStoreId || item?.locations?.[0]?.storeId;
+    const resolvedStoreId = preferredStoreId;
 
-    if (!token || !customerId || onHandTotal <= 0) {
+    if (!token || !customerId || !resolvedStoreId || onHandTotal <= 0) {
       return;
     }
 
@@ -430,7 +435,12 @@ const StorefrontPage = () => {
           aria-label="Go to cart"
           onClick={() => navigate('/cart')}
         >
-          <span aria-hidden="true">🛒</span>
+          <img
+            src={cartELogo}
+            alt=""
+            aria-hidden="true"
+            className="storefront-cart-icon"
+          />
           {cartItemCount > 0 && <span className="storefront-cart-badge">{cartItemCount}</span>}
         </button>
         <button

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import TopBar from '../components/common/TopBar';
 import { getOrderItemStatus } from '../utils/orderItemStatus';
+import { clearActiveWalkTimeLimit, isTimeLimitedCommodity, setActiveWalkTimeLimit } from '../utils/walkTimeLimit';
 import './PickListPage.css';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
@@ -71,9 +72,24 @@ const PickListPage = () => {
 
         setQueue(Array.isArray(pickListPayload?.queue) ? pickListPayload.queue : []);
         setCompletedUnits(Math.max(0, Number(pickListPayload?.completedUnits || 0)));
-        setCommodity(String(pickListPayload?.commodity || location.state?.commodity || ''));
-        setCommodityLabel(String(pickListPayload?.displayName || location.state?.commodityLabel || 'Pick'));
-        setWalkStartedAt(pickListPayload?.walkStartedAt || null);
+        const resolvedCommodity = String(pickListPayload?.commodity || location.state?.commodity || '');
+        const resolvedCommodityLabel = String(pickListPayload?.displayName || location.state?.commodityLabel || 'Pick');
+        const resolvedWalkStartedAt = pickListPayload?.walkStartedAt || null;
+
+        setCommodity(resolvedCommodity);
+        setCommodityLabel(resolvedCommodityLabel);
+        setWalkStartedAt(resolvedWalkStartedAt);
+
+        if (isTimeLimitedCommodity(resolvedCommodity) && resolvedWalkStartedAt) {
+          setActiveWalkTimeLimit({
+            commodity: resolvedCommodity,
+            commodityLabel: resolvedCommodityLabel,
+            storeId: resolvedStoreId,
+            walkStartedAt: resolvedWalkStartedAt
+          });
+        } else {
+          clearActiveWalkTimeLimit();
+        }
       } catch (error) {
         if (error.name !== 'AbortError') {
           console.error('Unable to load pick list', error);

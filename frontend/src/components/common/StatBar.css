@@ -39,6 +39,17 @@
   text-align: right;
 }
 
+.statbar-walk-timer {
+  min-width: 3.5rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.statbar-walk-timer--urgent {
+  color: #7a0000;
+}
+
 .statbar-walk-progress {
   display: flex;
   align-items: center;

@@ -17,9 +17,6 @@ const COMMODITY_COLORS = {
 const COMMODITY_LABELS = { ambient: 'Ambient', chilled: 'Chilled', frozen: 'Frozen', hot: 'Hot' };
 const TEMPERATURE_OPTIONS = ['ambient', 'chilled', 'frozen', 'hot'];
 
-const DEFAULT_STORE_ID = 1; // TODO: get from auth context or URL param
-const DEFAULT_USER_ID = 1; // TODO: get from auth context
-
 const compareAisleNumbers = (left, right) => String(left || '').localeCompare(String(right || ''), undefined, { numeric: true, sensitivity: 'base' });
 
 const parseSectionOrdinal = (value) => {
@@ -83,6 +80,8 @@ const MapScreen = () => {
   const navigate = useNavigate();
   const userType = window.localStorage.getItem('userType');
   const isAdmin = userType === 'admin';
+  const [storeId, setStoreId] = useState(null);
+  const [currentUserId, setCurrentUserId] = useState(null);
   const [aisles, setAisles] = useState([]);
   const [originalAisles, setOriginalAisles] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -126,10 +125,33 @@ const MapScreen = () => {
   const [deletingPathId, setDeletingPathId] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
 
-  // Fetch on mount
   useEffect(() => {
-    fetchAisles();
-    fetchPickPaths();
+    const token = window.localStorage.getItem('authToken');
+    if (!token) {
+      return;
+    }
+
+    const loadAuthContext = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/auth/me`, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = await response.json();
+        const user = payload?.user || {};
+        setCurrentUserId(Number(user?.id) || null);
+        setStoreId(Number(user?.storeId || user?.preferredStoreId) || null);
+      } catch {
+      }
+    };
+
+    loadAuthContext();
   }, []);
 
   useEffect(() => {
@@ -152,11 +174,15 @@ const MapScreen = () => {
     };
   };
 
-  const fetchAisles = async () => {
+  const fetchAisles = useCallback(async () => {
+    if (!storeId) {
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/aisles/store/${DEFAULT_STORE_ID}`);
+      const res = await fetch(`${API_BASE}/api/aisles/store/${storeId}`);
       if (!res.ok) {
         throw new Error('Failed to load aisles');
       }
@@ -175,18 +201,31 @@ const MapScreen = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [storeId]);
 
-  const fetchPickPaths = async () => {
+  const fetchPickPaths = useCallback(async () => {
+    if (!storeId) {
+      return;
+    }
+
     try {
-      const res = await fetch(`${API_BASE}/api/pickpaths/store/${DEFAULT_STORE_ID}`);
+      const res = await fetch(`${API_BASE}/api/pickpaths/store/${storeId}`);
       if (!res.ok) return;
       const data = await res.json();
       if (data.success) setPickPaths(data.pickPaths || []);
     } catch (err) {
       console.error('Fetch pick paths error:', err);
     }
-  };
+  }, [storeId]);
+
+  useEffect(() => {
+    if (!storeId) {
+      return;
+    }
+
+    fetchAisles();
+    fetchPickPaths();
+  }, [storeId, fetchAisles, fetchPickPaths]);
 
   const buildLocationToAisleId = () => {
     const map = {};
@@ -362,7 +401,7 @@ const MapScreen = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          storeId: DEFAULT_STORE_ID,
+          storeId,
           coordinates
         })
       });
@@ -1067,11 +1106,11 @@ const MapScreen = () => {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
-                        storeId: DEFAULT_STORE_ID,
+                        storeId,
                         commodity: addCommodity,
                         pathName: `${COMMODITY_LABELS[addCommodity]} Path`,
                         pathSequence: aisleIdsToPathSequence(addAisleOrder, addCommodity),
-                        userId: DEFAULT_USER_ID
+                        userId: currentUserId || undefined
                       })
                     });
                     if (!res.ok) {

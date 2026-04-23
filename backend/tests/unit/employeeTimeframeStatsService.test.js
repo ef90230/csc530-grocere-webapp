@@ -251,4 +251,26 @@ describe('employeeTimeframeStatsService.aggregateStoreStats', () => {
     expect(stats.today.postSubstitutionPercent).toBe(75);
     expect(stats.today.percentNotFound).toBe(25);
   });
+
+  test('getEmployeeTimeframeStats sets day percent-not-found to 100 minus pre-substitution percent', async () => {
+    getWalkSummariesForEmployee.mockReturnValue([
+      {
+        startedAt: '2026-04-19T08:00:00.000Z',
+        totalQuantity: 4,
+        pickedQuantity: 4,
+        originalPickedQuantity: 2,
+        substitutedQuantity: 2,
+        ftprMistakeQuantity: 0,
+        mistakeQuantity: 0,
+        firstTimePickRate: 100
+      }
+    ]);
+    getCompletedPickWalkHistory.mockResolvedValue([]);
+    Order.findAll.mockResolvedValue([]);
+
+    const stats = await getEmployeeTimeframeStats(9);
+
+    expect(stats.today.preSubstitutionPercent).toBe(50);
+    expect(stats.today.percentNotFound).toBe(50);
+  });
 });

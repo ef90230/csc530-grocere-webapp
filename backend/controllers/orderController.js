@@ -43,6 +43,75 @@ const RESOLVED_NON_PICKABLE_STATUSES = new Set(['out_of_stock', 'skipped', 'not_
 const normalizeCommodity = (value) => String(value || '').trim().toLowerCase();
 const clampNonNegativeInt = (value) => Math.max(0, Math.round(Number(value) || 0));
 
+const toPositiveInteger = (value) => {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+};
+
+const getScopedStoreIdFromRequest = (req) => {
+  if (req.userType === 'customer') {
+    return toPositiveInteger(req?.user?.preferredStoreId);
+  }
+
+  if (req.userType === 'employee') {
+    return toPositiveInteger(req?.user?.storeId);
+  }
+
+  return null;
+};
+
+const resolveAuthorizedStoreId = (req, requestedStoreId) => {
+  const normalizedRequestedStoreId = toPositiveInteger(requestedStoreId);
+  const scopedStoreId = getScopedStoreIdFromRequest(req);
+
+  if (scopedStoreId) {
+    if (normalizedRequestedStoreId && normalizedRequestedStoreId !== scopedStoreId) {
+      return {
+        ok: false,
+        status: 403,
+        message: 'You are not authorized to access another store.'
+      };
+    }
+
+    return {
+      ok: true,
+      storeId: scopedStoreId
+    };
+  }
+
+  if (!normalizedRequestedStoreId) {
+    return {
+      ok: false,
+      status: 400,
+      message: 'A valid storeId is required.'
+    };
+  }
+
+  return {
+    ok: true,
+    storeId: normalizedRequestedStoreId
+  };
+};
+
+const isOrderAccessibleByRequestUser = (req, order) => {
+  if (!order) {
+    return false;
+  }
+
+  const orderStoreId = toPositiveInteger(order.storeId);
+  const scopedStoreId = getScopedStoreIdFromRequest(req);
+
+  if (scopedStoreId && orderStoreId !== scopedStoreId) {
+    return false;
+  }
+
+  if (req.userType === 'customer') {
+    return Number(order.customerId) === Number(req?.user?.id);
+  }
+
+  return true;
+};
+
 const normalizeOrderIdKey = (value) => {
   const normalized = Number(value);
   return Number.isInteger(normalized) && normalized > 0 ? String(normalized) : '';
@@ -469,8 +538,34 @@ const getOrders = async (req, res) => {
     const { storeId, customerId, status, date } = req.query;
 
     const where = {};
-    if (storeId) where.storeId = storeId;
-    if (customerId) where.customerId = customerId;
+    const requestedStoreId = toPositiveInteger(storeId);
+    const requestedCustomerId = toPositiveInteger(customerId);
+    const scopedStoreId = getScopedStoreIdFromRequest(req);
+
+    if (scopedStoreId) {
+      if (requestedStoreId && requestedStoreId !== scopedStoreId) {
+        return res.status(403).json({ message: 'You are not authorized to access another store.' });
+      }
+      where.storeId = scopedStoreId;
+    } else if (requestedStoreId) {
+      where.storeId = requestedStoreId;
+    }
+
+    if (req.userType === 'customer') {
+      const authenticatedCustomerId = toPositiveInteger(req?.user?.id);
+      if (!authenticatedCustomerId) {
+        return res.status(401).json({ message: 'Customer authentication is required.' });
+      }
+
+      if (requestedCustomerId && requestedCustomerId !== authenticatedCustomerId) {
+        return res.status(403).json({ message: 'You can only view your own orders.' });
+      }
+
+      where.customerId = authenticatedCustomerId;
+    } else if (requestedCustomerId) {
+      where.customerId = requestedCustomerId;
+    }
+
     if (status) where.status = status;
     if (date) {
       const startOfDay = new Date(date);
@@ -633,6 +728,10 @@ const getOrder = async (req, res) => {
       return res.status(404).json({ message: 'Order not found' });
     }
 
+    if (!isOrderAccessibleByRequestUser(req, order)) {
+      return res.status(403).json({ message: 'You are not authorized to access this order.' });
+    }
+
     const orderJson = order.toJSON();
     const checkIn = extractOrderCheckIn(orderJson.notes);
 
@@ -666,9 +765,39 @@ const createOrder = async (req, res) => {
       return res.status(400).json({ message: 'scheduledPickupTime is required' });
     }
 
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: 'At least one order item is required.' });
+    }
+
+    const authorizedStore = resolveAuthorizedStoreId(req, storeId);
+    if (!authorizedStore.ok) {
+      return res.status(authorizedStore.status).json({ message: authorizedStore.message });
+    }
+
+    const resolvedStoreId = authorizedStore.storeId;
+    const requestedCustomerId = toPositiveInteger(customerId);
+
+    let resolvedCustomerId = requestedCustomerId;
+    if (req.userType === 'customer') {
+      const authenticatedCustomerId = toPositiveInteger(req?.user?.id);
+      if (!authenticatedCustomerId) {
+        return res.status(401).json({ message: 'Customer authentication is required.' });
+      }
+
+      if (requestedCustomerId && requestedCustomerId !== authenticatedCustomerId) {
+        return res.status(403).json({ message: 'You can only create orders for your own account.' });
+      }
+
+      resolvedCustomerId = authenticatedCustomerId;
+    }
+
+    if (!resolvedCustomerId) {
+      return res.status(400).json({ message: 'customerId is required' });
+    }
+
     // Validate scheduling constraints
     const scheduledTime = new Date(scheduledPickupTime);
-    const validation = await validateScheduleTime(scheduledTime, storeId, new Date());
+    const validation = await validateScheduleTime(scheduledTime, resolvedStoreId, new Date());
 
     if (!validation.isValid) {
       return res.status(400).json({
@@ -690,8 +819,8 @@ const createOrder = async (req, res) => {
 
     const order = await Order.create({
       orderNumber,
-      customerId,
-      storeId,
+      customerId: resolvedCustomerId,
+      storeId: resolvedStoreId,
       scheduledPickupTime: scheduledTime,
       totalAmount: totalAmount.toFixed(2)
     });
@@ -774,6 +903,10 @@ const updateOrderStatus = async (req, res) => {
 
     if (!order) {
       return res.status(404).json({ message: 'Order not found' });
+    }
+
+    if (!isOrderAccessibleByRequestUser(req, order)) {
+      return res.status(403).json({ message: 'You are not authorized to update this order.' });
     }
 
     const { status, assignedPickerId, assignedDispenserId } = req.body;
@@ -867,6 +1000,10 @@ const updateOrderItem = async (req, res) => {
       return res.status(404).json({ message: 'Order item not found' });
     }
 
+    if (!isOrderAccessibleByRequestUser(req, orderItem.order)) {
+      return res.status(403).json({ message: 'You are not authorized to update this order item.' });
+    }
+
     const previousPickedQuantity = Number(orderItem.pickedQuantity || 0);
     const normalizedStatus = String(status || '').toLowerCase();
     const updateData = { status };
@@ -947,7 +1084,16 @@ const updateOrderItem = async (req, res) => {
 
 const getOrdersForPicking = async (req, res) => {
   try {
-    const storeId = req.params.storeId;
+    if (req.userType !== 'employee') {
+      return res.status(403).json({ message: 'Only employees can access picking queues.' });
+    }
+
+    const authorizedStore = resolveAuthorizedStoreId(req, req.params.storeId);
+    if (!authorizedStore.ok) {
+      return res.status(authorizedStore.status).json({ message: authorizedStore.message });
+    }
+
+    const storeId = authorizedStore.storeId;
     const { commodity } = req.query;
 
     const orders = await Order.findAll({
@@ -995,7 +1141,11 @@ const getOrdersForPicking = async (req, res) => {
 const getCommodityQueueForPicking = async (req, res) => {
   try {
     const employeeId = req.user?.id;
-    const storeId = req.params.storeId;
+    const authorizedStore = resolveAuthorizedStoreId(req, req.params.storeId);
+    if (!authorizedStore.ok) {
+      return res.status(authorizedStore.status).json({ message: authorizedStore.message });
+    }
+    const storeId = authorizedStore.storeId;
     const now = new Date();
     const threeHoursFromNow = new Date(now.getTime() + 3 * 60 * 60 * 1000);
 
@@ -1151,14 +1301,16 @@ const getCommodityQueueForPicking = async (req, res) => {
 const getCurrentPickWalk = async (req, res) => {
   try {
     const employeeId = req.user?.id;
-    const storeId = req.params.storeId;
+    const authorizedStore = resolveAuthorizedStoreId(req, req.params.storeId);
+
+    if (!authorizedStore.ok) {
+      return res.status(authorizedStore.status).json({ message: authorizedStore.message });
+    }
+
+    const storeId = authorizedStore.storeId;
 
     if (!employeeId) {
       return res.status(401).json({ message: 'Employee authentication is required' });
-    }
-
-    if (!storeId) {
-      return res.status(400).json({ message: 'storeId is required' });
     }
 
     const openWalks = getOpenWalks({ employeeId, storeId });
@@ -1247,15 +1399,15 @@ const getCurrentPickWalk = async (req, res) => {
 const getPickWalkList = async (req, res) => {
   try {
     const employeeId = req.user?.id;
-    const storeId = req.params.storeId;
+    const authorizedStore = resolveAuthorizedStoreId(req, req.params.storeId);
+    if (!authorizedStore.ok) {
+      return res.status(authorizedStore.status).json({ message: authorizedStore.message });
+    }
+    const storeId = authorizedStore.storeId;
     const requestedCommodity = normalizeCommodity(req.query?.commodity);
 
     if (!employeeId) {
       return res.status(401).json({ message: 'Employee authentication is required' });
-    }
-
-    if (!storeId) {
-      return res.status(400).json({ message: 'storeId is required' });
     }
 
     const openWalks = getOpenWalks({
@@ -1353,12 +1505,19 @@ const startPickWalk = async (req, res) => {
       return res.status(400).json({ message: 'storeId and commodity are required' });
     }
 
+    const authorizedStore = resolveAuthorizedStoreId(req, storeId);
+    if (!authorizedStore.ok) {
+      return res.status(authorizedStore.status).json({ message: authorizedStore.message });
+    }
+
+    const resolvedStoreId = authorizedStore.storeId;
+
     const now = new Date();
     const threeHoursFromNow = new Date(now.getTime() + WALK_LOOKAHEAD_HOURS * 60 * 60 * 1000);
 
     const resumedOrders = await Order.findAll({
       where: {
-        storeId,
+        storeId: resolvedStoreId,
         status: 'picking',
         assignedPickerId: employeeId,
         scheduledPickupTime: {
@@ -1370,17 +1529,17 @@ const startPickWalk = async (req, res) => {
       order: [['scheduledPickupTime', 'ASC']]
     });
 
-    const pathIndexMap = await getPathIndexMap(storeId, normalizedCommodity);
+    const pathIndexMap = await getPathIndexMap(resolvedStoreId, normalizedCommodity);
 
     if (resumedOrders.length > 0) {
-      const activeWalk = getLatestOpenWalk({ employeeId, storeId, commodity: normalizedCommodity });
+      const activeWalk = getLatestOpenWalk({ employeeId, storeId: resolvedStoreId, commodity: normalizedCommodity });
       const orderSymbolsByOrderId = buildOrderSymbolAssignments(resumedOrders, activeWalk?.orderSymbolsByOrderId);
       const resumedQueue = buildPickQueue(resumedOrders, pathIndexMap, orderSymbolsByOrderId);
       const resumedStartedAt = activeWalk?.startedAt || resumedOrders[0]?.pickingStartTime || new Date().toISOString();
 
       const persistedWalk = ensureWalk({
         employeeId,
-        storeId,
+        storeId: resolvedStoreId,
         commodity: normalizedCommodity,
         startedAt: resumedStartedAt,
         queueItems: resumedQueue,
@@ -1401,7 +1560,7 @@ const startPickWalk = async (req, res) => {
 
     const pendingOrders = await Order.findAll({
       where: {
-        storeId,
+        storeId: resolvedStoreId,
         status: 'pending',
         scheduledPickupTime: {
           [Op.lte]: threeHoursFromNow
@@ -1474,7 +1633,7 @@ const startPickWalk = async (req, res) => {
 
     const persistedWalk = ensureWalk({
       employeeId,
-      storeId,
+      storeId: resolvedStoreId,
       commodity: normalizedCommodity,
       startedAt: now,
       queueItems: queue,
@@ -1609,13 +1768,16 @@ const endPickWalk = async (req, res) => {
       return res.status(401).json({ message: 'Employee authentication is required' });
     }
 
-    if (!storeId) {
-      return res.status(400).json({ message: 'storeId is required' });
+    const authorizedStore = resolveAuthorizedStoreId(req, storeId);
+    if (!authorizedStore.ok) {
+      return res.status(authorizedStore.status).json({ message: authorizedStore.message });
     }
+
+    const resolvedStoreId = authorizedStore.storeId;
 
     const claimedOrders = await Order.findAll({
       where: {
-        storeId,
+        storeId: resolvedStoreId,
         status: 'picking',
         assignedPickerId: employeeId
       },
@@ -1681,7 +1843,7 @@ const endPickWalk = async (req, res) => {
       await createPickerExitedWalkAlert({
         employeeId,
         employeeName,
-        storeId
+        storeId: resolvedStoreId
       });
     }
 
@@ -1718,7 +1880,7 @@ const endPickWalk = async (req, res) => {
     if (walkCommodity) {
       closeRemainingOpenCommodityWalks({
         employeeId,
-        storeId,
+        storeId: resolvedStoreId,
         commodity: walkCommodity
       });
     }
@@ -1824,6 +1986,11 @@ const cancelOrder = async (req, res) => {
     if (!order) {
       await transaction.rollback();
       return res.status(404).json({ message: 'Order not found' });
+    }
+
+    if (!isOrderAccessibleByRequestUser(req, order)) {
+      await transaction.rollback();
+      return res.status(403).json({ message: 'You are not authorized to cancel this order.' });
     }
 
     if (['dispensing', 'completed'].includes(order.status)) {

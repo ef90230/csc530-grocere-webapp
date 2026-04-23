@@ -191,7 +191,7 @@ const TopBar = ({
           onParkingLot={() => handleNavigate('/parking-lot')}
           onCommentsAndAlerts={() => handleNavigate('/alerts')}
           onMyStats={() => handleNavigate('/stats')}
-          onMySettings={() => handleNavigate('/employee-settings')}
+          onMySettings={() => handleNavigate('/my-settings')}
           onStoreSettings={() => handleNavigate('/store-settings')}
           onLogout={handleLogout}
           showBackroomLocations={isEmployee}

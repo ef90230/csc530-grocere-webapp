@@ -18,6 +18,7 @@ const CartScreen = () => {
     const [isMenuVisible, setIsMenuVisible] = useState(false);
     const [isMenuClosing, setIsMenuClosing] = useState(false);
     const [isEstimatedTotalInfoOpen, setIsEstimatedTotalInfoOpen] = useState(false);
+    const [isEmptyCartConfirmOpen, setIsEmptyCartConfirmOpen] = useState(false);
     const [itemOptionsState, setItemOptionsState] = useState(null);
     const [substitutionItems, setSubstitutionItems] = useState([]);
     const [substitutionSearch, setSubstitutionSearch] = useState('');
@@ -288,18 +289,18 @@ const CartScreen = () => {
         }
     };
 
-    const handleEmptyCart = async () => {
+    const handleEmptyCart = () => {
         if (!customerId || isClearingCart) {
             return;
         }
+        setIsEmptyCartConfirmOpen(true);
+    };
 
-        const confirmed = window.confirm('Are you sure?');
-        if (!confirmed) {
-            return;
-        }
+    const handleConfirmEmptyCart = async () => {
+        setIsEmptyCartConfirmOpen(false);
 
         const token = localStorage.getItem('authToken');
-        if (!token) {
+        if (!token || !customerId) {
             return;
         }
 
@@ -710,6 +711,30 @@ const CartScreen = () => {
                     </section>
                 </div>
             )}
+        {isEmptyCartConfirmOpen && (
+            <div className="cart-confirm-overlay" onClick={() => setIsEmptyCartConfirmOpen(false)}>
+                <section className="cart-confirm-card" onClick={(event) => event.stopPropagation()}>
+                    <h2 className="cart-confirm-card__title">Empty Cart</h2>
+                    <p className="cart-confirm-card__message">Are you sure you want to remove all items from your cart?</p>
+                    <div className="cart-confirm-card__actions">
+                        <button
+                            type="button"
+                            className="cart-confirm-card__button cart-confirm-card__button--cancel"
+                            onClick={() => setIsEmptyCartConfirmOpen(false)}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            className="cart-confirm-card__button cart-confirm-card__button--confirm"
+                            onClick={handleConfirmEmptyCart}
+                        >
+                            Empty Cart
+                        </button>
+                    </div>
+                </section>
+            </div>
+        )}
         </div>
     );
 };

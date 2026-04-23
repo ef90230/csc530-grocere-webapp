@@ -1643,6 +1643,570 @@
       "originalPickedQuantity": 4,
       "substitutedQuantity": 0,
       "totalQuantity": 4
+    },
+    "6::2026-04-22T02:32:45.727Z::chilled": {
+      "key": "6::2026-04-22T02:32:45.727Z::chilled",
+      "employeeId": 6,
+      "storeId": 1,
+      "commodity": "chilled",
+      "startedAt": "2026-04-22T02:32:45.727Z",
+      "endedAt": "2026-04-22T02:35:01.159Z",
+      "closed": true,
+      "orderIds": [
+        67,
+        69,
+        71
+      ],
+      "orderSymbolsByOrderId": {
+        "67": "C",
+        "69": "B",
+        "71": "A"
+      },
+      "itemTotals": {
+        "245": 1,
+        "252": 5,
+        "256": 1,
+        "262": 1
+      },
+      "itemMistakes": {},
+      "itemMistakeFlags": {
+        "244": true,
+        "253": true,
+        "254": true,
+        "255": true,
+        "257": true,
+        "258": true,
+        "259": true,
+        "260": true
+      },
+      "itemFtprMistakeFlags": {},
+      "itemFtprAttemptedFlags": {
+        "245": true,
+        "252": true,
+        "256": true,
+        "262": true
+      },
+      "extraMistakes": 8,
+      "pickedQuantity": 8,
+      "originalPickedQuantity": 8,
+      "substitutedQuantity": 0,
+      "totalQuantity": 8
+    },
+    "6::2026-04-22T03:46:26.713Z::frozen": {
+      "key": "6::2026-04-22T03:46:26.713Z::frozen",
+      "employeeId": 6,
+      "storeId": 1,
+      "commodity": "frozen",
+      "startedAt": "2026-04-22T03:46:26.713Z",
+      "endedAt": "2026-04-22T03:46:33.468Z",
+      "closed": true,
+      "orderIds": [
+        68
+      ],
+      "orderSymbolsByOrderId": {
+        "68": "A"
+      },
+      "itemTotals": {
+        "250": 1
+      },
+      "itemMistakes": {},
+      "itemMistakeFlags": {
+        "246": true,
+        "247": true,
+        "248": true,
+        "249": true,
+        "251": true
+      },
+      "itemFtprMistakeFlags": {},
+      "itemFtprAttemptedFlags": {
+        "250": true
+      },
+      "extraMistakes": 1,
+      "pickedQuantity": 1,
+      "originalPickedQuantity": 1,
+      "substitutedQuantity": 0,
+      "totalQuantity": 1
+    },
+    "6::2026-04-22T03:46:35.582Z::restricted": {
+      "key": "6::2026-04-22T03:46:35.582Z::restricted",
+      "employeeId": 6,
+      "storeId": 1,
+      "commodity": "restricted",
+      "startedAt": "2026-04-22T03:46:35.582Z",
+      "endedAt": "2026-04-22T03:46:41.561Z",
+      "closed": true,
+      "orderIds": [
+        69
+      ],
+      "orderSymbolsByOrderId": {
+        "69": "A"
+      },
+      "itemTotals": {
+        "254": 1
+      },
+      "itemMistakes": {},
+      "itemMistakeFlags": {
+        "253": true,
+        "255": true,
+        "257": true,
+        "258": true,
+        "259": true,
+        "260": true
+      },
+      "itemFtprMistakeFlags": {},
+      "itemFtprAttemptedFlags": {
+        "254": true
+      },
+      "extraMistakes": 1,
+      "pickedQuantity": 1,
+      "originalPickedQuantity": 1,
+      "substitutedQuantity": 0,
+      "totalQuantity": 1
+    },
+    "6::2026-04-22T03:47:56.068Z::ambient": {
+      "key": "6::2026-04-22T03:47:56.068Z::ambient",
+      "employeeId": 6,
+      "storeId": 1,
+      "commodity": "ambient",
+      "startedAt": "2026-04-22T03:47:56.068Z",
+      "endedAt": "2026-04-22T03:49:32.987Z",
+      "closed": true,
+      "orderIds": [
+        67,
+        68,
+        69,
+        70
+      ],
+      "orderSymbolsByOrderId": {
+        "67": "D",
+        "68": "C",
+        "69": "B",
+        "70": "A"
+      },
+      "itemTotals": {
+        "244": 1,
+        "246": 1,
+        "247": 1,
+        "248": 1,
+        "249": 1,
+        "251": 3,
+        "253": 3,
+        "255": 3,
+        "257": 1,
+        "258": 1,
+        "259": 1,
+        "260": 3,
+        "261": 1
+      },
+      "itemMistakes": {},
+      "itemMistakeFlags": {},
+      "itemFtprMistakeFlags": {},
+      "itemFtprAttemptedFlags": {
+        "244": true,
+        "246": true,
+        "247": true,
+        "248": true,
+        "249": true,
+        "251": true,
+        "253": true,
+        "255": true,
+        "257": true,
+        "258": true,
+        "259": true,
+        "260": true,
+        "261": true
+      },
+      "extraMistakes": 0,
+      "pickedQuantity": 21,
+      "originalPickedQuantity": 21,
+      "substitutedQuantity": 0,
+      "totalQuantity": 21
+    },
+    "6::2026-04-22T20:05:58.183Z::frozen": {
+      "key": "6::2026-04-22T20:05:58.183Z::frozen",
+      "employeeId": 6,
+      "storeId": 1,
+      "commodity": "frozen",
+      "startedAt": "2026-04-22T20:05:58.183Z",
+      "endedAt": "2026-04-22T20:51:16.423Z",
+      "closed": true,
+      "orderIds": [
+        72
+      ],
+      "orderSymbolsByOrderId": {
+        "72": "A"
+      },
+      "itemTotals": {
+        "264": 1
+      },
+      "itemMistakes": {},
+      "itemMistakeFlags": {
+        "263": true,
+        "264": true
+      },
+      "itemFtprMistakeFlags": {},
+      "itemFtprAttemptedFlags": {},
+      "extraMistakes": 1,
+      "pickedQuantity": 0,
+      "originalPickedQuantity": 0,
+      "substitutedQuantity": 0,
+      "totalQuantity": 1
+    },
+    "6::2026-04-22T20:51:22.102Z::chilled": {
+      "key": "6::2026-04-22T20:51:22.102Z::chilled",
+      "employeeId": 6,
+      "storeId": 1,
+      "commodity": "chilled",
+      "startedAt": "2026-04-22T20:51:22.102Z",
+      "endedAt": "2026-04-22T20:51:29.325Z",
+      "closed": true,
+      "orderIds": [
+        72
+      ],
+      "orderSymbolsByOrderId": {
+        "72": "A"
+      },
+      "itemTotals": {
+        "263": 1
+      },
+      "itemMistakes": {},
+      "itemMistakeFlags": {
+        "263": true,
+        "264": true
+      },
+      "itemFtprMistakeFlags": {},
+      "itemFtprAttemptedFlags": {},
+      "extraMistakes": 1,
+      "pickedQuantity": 0,
+      "originalPickedQuantity": 0,
+      "substitutedQuantity": 0,
+      "totalQuantity": 1
+    },
+    "6::2026-04-22T20:51:31.195Z::frozen": {
+      "key": "6::2026-04-22T20:51:31.195Z::frozen",
+      "employeeId": 6,
+      "storeId": 1,
+      "commodity": "frozen",
+      "startedAt": "2026-04-22T20:51:31.195Z",
+      "endedAt": "2026-04-22T20:51:39.962Z",
+      "closed": true,
+      "orderIds": [
+        72
+      ],
+      "orderSymbolsByOrderId": {
+        "72": "A"
+      },
+      "itemTotals": {
+        "264": 1
+      },
+      "itemMistakes": {},
+      "itemMistakeFlags": {
+        "263": true
+      },
+      "itemFtprMistakeFlags": {},
+      "itemFtprAttemptedFlags": {
+        "264": true
+      },
+      "extraMistakes": 1,
+      "pickedQuantity": 1,
+      "originalPickedQuantity": 1,
+      "substitutedQuantity": 0,
+      "totalQuantity": 1
+    },
+    "6::2026-04-22T20:51:41.481Z::chilled": {
+      "key": "6::2026-04-22T20:51:41.481Z::chilled",
+      "employeeId": 6,
+      "storeId": 1,
+      "commodity": "chilled",
+      "startedAt": "2026-04-22T20:51:41.481Z",
+      "endedAt": "2026-04-22T20:51:50.103Z",
+      "closed": true,
+      "orderIds": [
+        72
+      ],
+      "orderSymbolsByOrderId": {
+        "72": "A"
+      },
+      "itemTotals": {
+        "263": 1
+      },
+      "itemMistakes": {
+        "263": 1
+      },
+      "itemMistakeFlags": {
+        "263": true
+      },
+      "itemFtprMistakeFlags": {
+        "263": true
+      },
+      "itemFtprAttemptedFlags": {
+        "263": true
+      },
+      "extraMistakes": 0,
+      "pickedQuantity": 0,
+      "originalPickedQuantity": 0,
+      "substitutedQuantity": 0,
+      "totalQuantity": 1
+    },
+    "6::2026-04-22T21:24:13.621Z::ambient": {
+      "key": "6::2026-04-22T21:24:13.621Z::ambient",
+      "employeeId": 6,
+      "storeId": 1,
+      "commodity": "ambient",
+      "startedAt": "2026-04-22T21:24:13.621Z",
+      "endedAt": "2026-04-22T21:26:11.311Z",
+      "closed": true,
+      "orderIds": [
+        73
+      ],
+      "orderSymbolsByOrderId": {
+        "73": "A"
+      },
+      "itemTotals": {
+        "265": 1,
+        "268": 1,
+        "269": 1,
+        "270": 1,
+        "271": 1,
+        "276": 1,
+        "277": 1,
+        "278": 1,
+        "280": 1,
+        "281": 1,
+        "282": 1,
+        "283": 1,
+        "285": 1
+      },
+      "itemMistakes": {
+        "265": 1,
+        "271": 1,
+        "276": 1
+      },
+      "itemMistakeFlags": {
+        "265": true,
+        "266": true,
+        "267": true,
+        "271": true,
+        "272": true,
+        "273": true,
+        "274": true,
+        "275": true,
+        "276": true,
+        "279": true,
+        "284": true
+      },
+      "itemFtprMistakeFlags": {
+        "265": true,
+        "271": true,
+        "276": true
+      },
+      "itemFtprAttemptedFlags": {
+        "265": true,
+        "268": true,
+        "269": true,
+        "270": true,
+        "271": true,
+        "276": true,
+        "277": true,
+        "278": true,
+        "280": true,
+        "281": true,
+        "282": true,
+        "283": true,
+        "285": true
+      },
+      "extraMistakes": 8,
+      "pickedQuantity": 11,
+      "originalPickedQuantity": 11,
+      "substitutedQuantity": 0,
+      "totalQuantity": 13
+    },
+    "6::2026-04-22T21:26:39.410Z::frozen": {
+      "key": "6::2026-04-22T21:26:39.410Z::frozen",
+      "employeeId": 6,
+      "storeId": 1,
+      "commodity": "frozen",
+      "startedAt": "2026-04-22T21:26:39.410Z",
+      "endedAt": "2026-04-22T22:11:45.749Z",
+      "closed": true,
+      "orderIds": [
+        73
+      ],
+      "orderSymbolsByOrderId": {
+        "73": "A"
+      },
+      "itemTotals": {
+        "284": 1
+      },
+      "itemMistakes": {},
+      "itemMistakeFlags": {
+        "266": true,
+        "267": true,
+        "272": true,
+        "273": true,
+        "274": true,
+        "275": true,
+        "279": true,
+        "284": true
+      },
+      "itemFtprMistakeFlags": {},
+      "itemFtprAttemptedFlags": {},
+      "extraMistakes": 1,
+      "pickedQuantity": 0,
+      "originalPickedQuantity": 0,
+      "substitutedQuantity": 0,
+      "totalQuantity": 1
+    },
+    "6::2026-04-22T22:12:09.711Z::restricted": {
+      "key": "6::2026-04-22T22:12:09.711Z::restricted",
+      "employeeId": 6,
+      "storeId": 1,
+      "commodity": "restricted",
+      "startedAt": "2026-04-22T22:12:09.711Z",
+      "endedAt": "2026-04-22T22:12:17.703Z",
+      "closed": true,
+      "orderIds": [
+        73
+      ],
+      "orderSymbolsByOrderId": {
+        "73": "A"
+      },
+      "itemTotals": {
+        "279": 1
+      },
+      "itemMistakes": {},
+      "itemMistakeFlags": {
+        "266": true,
+        "267": true,
+        "272": true,
+        "273": true,
+        "274": true,
+        "275": true,
+        "284": true
+      },
+      "itemFtprMistakeFlags": {},
+      "itemFtprAttemptedFlags": {
+        "279": true
+      },
+      "extraMistakes": 1,
+      "pickedQuantity": 1,
+      "originalPickedQuantity": 1,
+      "substitutedQuantity": 0,
+      "totalQuantity": 1
+    },
+    "6::2026-04-22T22:12:19.672Z::frozen": {
+      "key": "6::2026-04-22T22:12:19.672Z::frozen",
+      "employeeId": 6,
+      "storeId": 1,
+      "commodity": "frozen",
+      "startedAt": "2026-04-22T22:12:19.672Z",
+      "endedAt": "2026-04-22T22:12:27.108Z",
+      "closed": true,
+      "orderIds": [
+        73
+      ],
+      "orderSymbolsByOrderId": {
+        "73": "A"
+      },
+      "itemTotals": {
+        "284": 1
+      },
+      "itemMistakes": {},
+      "itemMistakeFlags": {
+        "266": true,
+        "267": true,
+        "272": true,
+        "273": true,
+        "274": true,
+        "275": true
+      },
+      "itemFtprMistakeFlags": {},
+      "itemFtprAttemptedFlags": {
+        "284": true
+      },
+      "extraMistakes": 1,
+      "pickedQuantity": 1,
+      "originalPickedQuantity": 1,
+      "substitutedQuantity": 0,
+      "totalQuantity": 1
+    },
+    "6::2026-04-22T22:12:28.633Z::chilled": {
+      "key": "6::2026-04-22T22:12:28.633Z::chilled",
+      "employeeId": 6,
+      "storeId": 1,
+      "commodity": "chilled",
+      "startedAt": "2026-04-22T22:12:28.633Z",
+      "endedAt": "2026-04-22T22:12:36.356Z",
+      "closed": true,
+      "orderIds": [
+        73
+      ],
+      "orderSymbolsByOrderId": {
+        "73": "A"
+      },
+      "itemTotals": {
+        "266": 1,
+        "267": 1,
+        "272": 1,
+        "273": 1,
+        "274": 1,
+        "275": 1
+      },
+      "itemMistakes": {},
+      "itemMistakeFlags": {
+        "266": true,
+        "267": true,
+        "272": true,
+        "273": true,
+        "274": true,
+        "275": true
+      },
+      "itemFtprMistakeFlags": {},
+      "itemFtprAttemptedFlags": {},
+      "extraMistakes": 6,
+      "pickedQuantity": 0,
+      "originalPickedQuantity": 0,
+      "substitutedQuantity": 0,
+      "totalQuantity": 6
+    },
+    "6::2026-04-22T22:15:09.990Z::chilled": {
+      "key": "6::2026-04-22T22:15:09.990Z::chilled",
+      "employeeId": 6,
+      "storeId": 1,
+      "commodity": "chilled",
+      "startedAt": "2026-04-22T22:15:09.990Z",
+      "endedAt": "2026-04-22T22:15:52.014Z",
+      "closed": true,
+      "orderIds": [
+        73
+      ],
+      "orderSymbolsByOrderId": {
+        "73": "A"
+      },
+      "itemTotals": {
+        "266": 1,
+        "267": 1,
+        "272": 1,
+        "273": 1,
+        "274": 1,
+        "275": 1
+      },
+      "itemMistakes": {},
+      "itemMistakeFlags": {},
+      "itemFtprMistakeFlags": {},
+      "itemFtprAttemptedFlags": {
+        "266": true,
+        "267": true,
+        "272": true,
+        "273": true,
+        "274": true,
+        "275": true
+      },
+      "extraMistakes": 0,
+      "pickedQuantity": 6,
+      "originalPickedQuantity": 6,
+      "substitutedQuantity": 0,
+      "totalQuantity": 6
     }
   }
 }

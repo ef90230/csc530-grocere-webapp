@@ -247,7 +247,7 @@ const finalizeDayAccumulator = (dayData = {}) => {
   const preSubstitutionPercent = originalItemsTotal > 0
     ? (originalItemsPicked / originalItemsTotal) * 100
     : 0;
-  const percentNotFound = totalItems > 0 ? (notFound / totalItems) * 100 : 0;
+  const percentNotFound = 100 - preSubstitutionPercent;
   const onTimePercent = onTimeTotal > 0 ? (onTimeCount / onTimeTotal) * 100 : 0;
   const weightedEfficiency = totalPicks > 0
     ? (firstTimePickPercent + preSubstitutionPercent + (100 - percentNotFound)) / 3

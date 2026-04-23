@@ -8,6 +8,12 @@ const CustomerPopupMenu = ({ isClosing, onClose, onLogout, onNavigate }) => {
     }
   };
 
+  const handleMySettings = () => {
+    if (onNavigate) {
+      onNavigate('/my-settings');
+    }
+  };
+
   return (
     <div className="customer-popup-overlay" onClick={onClose}>
       <aside
@@ -29,6 +35,13 @@ const CustomerPopupMenu = ({ isClosing, onClose, onLogout, onNavigate }) => {
             onClick={handleMyOrders}
           >
             My Orders
+          </button>
+          <button
+            type="button"
+            className="customer-popup-menu-item"
+            onClick={handleMySettings}
+          >
+            My Settings
           </button>
           <button
             type="button"
