@@ -492,50 +492,6 @@ const StatisticsPage = () => {
                                 })}
                             </div>
 
-                            {activeScope === 'you' ? (
-                                <div className="walk-history-section">
-                                    <div className="walk-history-header-row">
-                                        <h3>Pick Walk History</h3>
-                                        <span>{walkHistory.length} walks</span>
-                                    </div>
-
-                                    {walkHistory.length > 0 ? (
-                                        <div className="walk-history-list" role="list" aria-label="Pick walk history">
-                                            {walkHistory.map((walk, index) => (
-                                                <article className="walk-history-card" key={`${walk.startedAt}-${walk.commodity}-${index}`} role="listitem">
-                                                    <div className="walk-history-card-top-row">
-                                                        <div>
-                                                            <p className="walk-history-commodity">{walk.commodityLabel || walk.commodity || 'Commodity'}</p>
-                                                            <p className="walk-history-date">{formatWalkStartedAt(walk.startedAt)}</p>
-                                                        </div>
-                                                        <div className="walk-history-rate-block">
-                                                            <strong>{toNumber(walk.pickRate).toFixed(2)}/hr</strong>
-                                                            <span>Pick rate</span>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="walk-history-metrics-row">
-                                                        <div>
-                                                            <span className="walk-history-metric-label">Items</span>
-                                                            <strong>{`${Math.round(toNumber(walk.itemsPicked))}/${Math.round(toNumber(walk.initialTotal))}`}</strong>
-                                                        </div>
-                                                        <div>
-                                                            <span className="walk-history-metric-label">Orders</span>
-                                                            <strong>{Math.round(toNumber(walk.orderCount))}</strong>
-                                                        </div>
-                                                        <div>
-                                                            <span className="walk-history-metric-label">FTPR</span>
-                                                            <strong>{`${toNumber(walk.firstTimePickRate).toFixed(1)}%`}</strong>
-                                                        </div>
-                                                    </div>
-                                                </article>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <p className="walk-history-empty">No completed pick walks yet.</p>
-                                    )}
-                                </div>
-                            ) : null}
                         </section>
 
                         <section className="stats-section" aria-label="Staging">
@@ -582,6 +538,55 @@ const StatisticsPage = () => {
                                 })}
                             </div>
                         </section>
+
+                        {activeScope === 'you' ? (
+                            <details className="walk-history-section">
+                                <summary className="walk-history-summary">
+                                    <div className="walk-history-header-row">
+                                        <h3>Pick Walk History</h3>
+                                        <span>{walkHistory.length} walks</span>
+                                    </div>
+                                </summary>
+
+                                <div className="walk-history-content">
+                                    {walkHistory.length > 0 ? (
+                                        <div className="walk-history-list" role="list" aria-label="Pick walk history">
+                                            {walkHistory.map((walk, index) => (
+                                                <article className="walk-history-card" key={`${walk.startedAt}-${walk.commodity}-${index}`} role="listitem">
+                                                    <div className="walk-history-card-top-row">
+                                                        <div>
+                                                            <p className="walk-history-commodity">{walk.commodityLabel || walk.commodity || 'Commodity'}</p>
+                                                            <p className="walk-history-date">{formatWalkStartedAt(walk.startedAt)}</p>
+                                                        </div>
+                                                        <div className="walk-history-rate-block">
+                                                            <strong>{toNumber(walk.pickRate).toFixed(2)}/hr</strong>
+                                                            <span>Pick rate</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="walk-history-metrics-row">
+                                                        <div>
+                                                            <span className="walk-history-metric-label">Items</span>
+                                                            <strong>{`${Math.round(toNumber(walk.itemsPicked))}/${Math.round(toNumber(walk.initialTotal))}`}</strong>
+                                                        </div>
+                                                        <div>
+                                                            <span className="walk-history-metric-label">Orders</span>
+                                                            <strong>{Math.round(toNumber(walk.orderCount))}</strong>
+                                                        </div>
+                                                        <div>
+                                                            <span className="walk-history-metric-label">FTPR</span>
+                                                            <strong>{`${toNumber(walk.firstTimePickRate).toFixed(1)}%`}</strong>
+                                                        </div>
+                                                    </div>
+                                                </article>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="walk-history-empty">No completed pick walks yet.</p>
+                                    )}
+                                </div>
+                            </details>
+                        ) : null}
                     </>
                 )}
             </div>

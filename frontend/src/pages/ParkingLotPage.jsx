@@ -5,13 +5,19 @@ import TopBar from '../components/common/TopBar';
 import './ParkingLotPage.css';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-const PARKING_SPACES_STORAGE_KEY = 'grocereParkingSpaces';
+const PARKING_SPACES_STORAGE_KEY_PREFIX = 'grocereParkingSpaces:store:';
 const WAIT_THRESHOLD_STORAGE_KEY = 'grocereWaitThresholdMinutes';
 const MAX_SPACES = 200;
 
-const getStoredSpaces = () => {
+const getParkingSpacesStorageKey = (storeId) => `${PARKING_SPACES_STORAGE_KEY_PREFIX}${storeId}`;
+
+const getStoredSpaces = (storeId) => {
+    if (!Number.isInteger(storeId) || storeId < 1) {
+        return [];
+    }
+
     try {
-        const parsed = JSON.parse(window.localStorage.getItem(PARKING_SPACES_STORAGE_KEY) || '[]');
+        const parsed = JSON.parse(window.localStorage.getItem(getParkingSpacesStorageKey(storeId)) || '[]');
         if (!Array.isArray(parsed)) {
             return [];
         }
@@ -48,7 +54,9 @@ const ParkingLotPage = () => {
     const navigate = useNavigate();
     const userType = window.localStorage.getItem('userType');
     const isAdmin = userType === 'admin';
-    const [spaces, setSpaces] = useState(getStoredSpaces);
+    const [currentStoreId, setCurrentStoreId] = useState(null);
+    const [hydratedStoreId, setHydratedStoreId] = useState(null);
+    const [spaces, setSpaces] = useState([]);
     const [orders, setOrders] = useState([]);
     const [sortMode, setSortMode] = useState('number');
     const [isLoading, setIsLoading] = useState(true);
@@ -60,8 +68,59 @@ const ParkingLotPage = () => {
     const waitThresholdMinutes = getStoredThreshold();
 
     useEffect(() => {
-        window.localStorage.setItem(PARKING_SPACES_STORAGE_KEY, JSON.stringify([...spaces].sort((left, right) => left - right)));
-    }, [spaces]);
+        if (!Number.isInteger(currentStoreId) || currentStoreId < 1) {
+            return;
+        }
+
+        if (hydratedStoreId !== currentStoreId) {
+            return;
+        }
+
+        window.localStorage.setItem(
+            getParkingSpacesStorageKey(currentStoreId),
+            JSON.stringify([...spaces].sort((left, right) => left - right))
+        );
+    }, [currentStoreId, hydratedStoreId, spaces]);
+
+    useEffect(() => {
+        if (!token) {
+            return;
+        }
+
+        const loadStoreContext = async () => {
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/me`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    return;
+                }
+
+                const payload = await response.json().catch(() => ({}));
+                const profileStoreId = Number(payload?.user?.storeId || payload?.user?.preferredStoreId);
+                if (Number.isInteger(profileStoreId) && profileStoreId > 0) {
+                    setCurrentStoreId(profileStoreId);
+                }
+            } catch {
+            }
+        };
+
+        loadStoreContext();
+    }, [token]);
+
+    useEffect(() => {
+        if (!Number.isInteger(currentStoreId) || currentStoreId < 1) {
+            setSpaces([]);
+            setHydratedStoreId(null);
+            return;
+        }
+
+        setSpaces(getStoredSpaces(currentStoreId));
+        setHydratedStoreId(currentStoreId);
+    }, [currentStoreId]);
 
     useEffect(() => {
         const userType = window.localStorage.getItem('userType');

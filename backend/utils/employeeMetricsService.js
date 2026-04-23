@@ -358,31 +358,24 @@ const calculateEmployeeMetrics = async (employeeId) => {
     ]
   });
 
-  const totalItems = orderItems.length;
   const pickedItems = orderItems.filter((item) => ['found', 'substituted'].includes(item.status));
-  const totalOriginalItems = orderItems.reduce((sum, item) => {
-    const quantity = Math.max(0, Math.round(toNumber(item?.quantity)));
-    return sum + (quantity > 0 ? quantity : 1);
-  }, 0);
-  const pickedOriginalItems = orderItems.reduce((sum, item) => {
-    return sum + resolveOriginalPickedQuantity(item);
-  }, 0);
-  const substitutedOriginalItems = orderItems.reduce((sum, item) => {
-    return sum + resolveOriginalSubstitutedQuantity(item);
-  }, 0);
   const totalPicks = pickedItems.length;
-  const firstTimePicks = pickedItems.filter((item) => item.foundOnFirstAttempt).length;
-  const firstTimePickPercent = totalPicks === 0 ? 0 : (firstTimePicks / totalPicks) * 100;
-  const postSubstitutionPercent = totalOriginalItems === 0
-    ? 0
-    : ((pickedOriginalItems + substitutedOriginalItems) / totalOriginalItems) * 100;
-  const preSubstitutionPercent = totalOriginalItems === 0
-    ? 0
-    : (pickedOriginalItems / totalOriginalItems) * 100;
   const walkSummaries = getWalkSummariesForEmployee(employeeId, { closedOnly: true });
-  const totalWalkItems = walkSummaries.reduce((sum, walk) => sum + toNumber(walk?.totalItems), 0);
-  const notFoundItems = walkSummaries.reduce((sum, walk) => sum + toNumber(walk?.mistakeItems), 0);
-  const percentNotFound = totalWalkItems === 0 ? 0 : (notFoundItems / totalWalkItems) * 100;
+  const totalWalkQuantity = walkSummaries.reduce((sum, walk) => sum + toNumber(walk?.totalQuantity), 0);
+  const originalPickedQuantity = walkSummaries.reduce((sum, walk) => sum + toNumber(walk?.originalPickedQuantity), 0);
+  const substitutedQuantity = walkSummaries.reduce((sum, walk) => sum + toNumber(walk?.substitutedQuantity), 0);
+  const ftprMistakeQuantity = walkSummaries.reduce((sum, walk) => sum + toNumber(walk?.ftprMistakeQuantity), 0);
+  const firstTimePickPercent = totalWalkQuantity === 0
+    ? 0
+    : ((Math.max(0, totalWalkQuantity - ftprMistakeQuantity)) / totalWalkQuantity) * 100;
+  const preSubstitutionPercent = totalWalkQuantity === 0
+    ? 0
+    : (originalPickedQuantity / totalWalkQuantity) * 100;
+  const postSubstitutionPercent = totalWalkQuantity === 0
+    ? 0
+    : ((originalPickedQuantity + substitutedQuantity) / totalWalkQuantity) * 100;
+  const notFoundQuantity = walkSummaries.reduce((sum, walk) => sum + toNumber(walk?.mistakeQuantity), 0);
+  const percentNotFound = totalWalkQuantity === 0 ? 0 : (notFoundQuantity / totalWalkQuantity) * 100;
 
   // On-time percentage: compare actual pickup vs scheduled pickup for orders that have been picked up.
   const orders = await Order.findAll({

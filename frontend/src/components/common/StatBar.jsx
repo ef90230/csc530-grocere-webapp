@@ -9,7 +9,11 @@ import {
   getStoredEmployeeId,
   readEmployeeSettingsFromCache
 } from '../../utils/employeeSettings';
-import { fetchWithRetry, isRetryableNetworkError } from '../../utils/fetchWithRetry';
+import {
+  getRemainingWalkTimeMs,
+  isTimeLimitedCommodity,
+  readActiveWalkTimeLimit
+} from '../../utils/walkTimeLimit';
 import './StatBar.css';
 
 const TARGET_PICK_RATE = 100;
@@ -47,6 +51,13 @@ const formatPickRate = (pickRate) => {
   return pickRate.toFixed(1);
 };
 
+const formatRemainingWalkTime = (remainingMs) => {
+  const totalSeconds = Math.max(0, Math.floor(Number(remainingMs || 0) / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+};
+
 const resolveStoredName = () => {
   if (typeof window === 'undefined') {
     return '';
@@ -81,7 +92,7 @@ const StatBar = ({
 
     const intervalId = window.setInterval(() => {
       setTick(Date.now());
-    }, 15000);
+    }, 1000);
 
     return () => window.clearInterval(intervalId);
   }, [mode]);
@@ -98,14 +109,11 @@ const StatBar = ({
 
     const loadEmployeeProfile = async () => {
       try {
-        const response = await fetchWithRetry(`${API_BASE}/api/auth/me`, {
+        const response = await fetch(`${API_BASE}/api/auth/me`, {
           headers: {
             Authorization: `Bearer ${token}`
           },
           signal: controller.signal
-        }, {
-          retries: 4,
-          baseDelayMs: 500
         });
 
         if (!response.ok) {
@@ -136,14 +144,11 @@ const StatBar = ({
 
         const employeeStoreId = Number(payload?.user?.storeId);
         if (Number.isInteger(employeeStoreId) && employeeStoreId > 0) {
-          const settingsResponse = await fetchWithRetry(`${API_BASE}/api/employees/store-settings`, {
+          const settingsResponse = await fetch(`${API_BASE}/api/employees/store-settings`, {
             headers: {
               Authorization: `Bearer ${token}`
             },
             signal: controller.signal
-          }, {
-            retries: 2,
-            baseDelayMs: 350
           });
 
           if (settingsResponse.ok) {
@@ -155,9 +160,6 @@ const StatBar = ({
         }
       } catch (error) {
         if (error.name !== 'AbortError') {
-          if (isRetryableNetworkError(error)) {
-            return;
-          }
           console.error('Unable to load employee profile for StatBar', error);
         }
       }
@@ -211,6 +213,14 @@ const StatBar = ({
 
     return walkCompleted / walkElapsedHours;
   }, [walkCompleted, walkElapsedHours]);
+  const activeWalkTimeLimit = mode === 'walk' ? readActiveWalkTimeLimit() : null;
+  const walkTimeRemainingMs = useMemo(() => {
+    if (!activeWalkTimeLimit || !isTimeLimitedCommodity(activeWalkTimeLimit.commodity)) {
+      return null;
+    }
+
+    return getRemainingWalkTimeMs(tick);
+  }, [activeWalkTimeLimit, tick]);
 
   const pickRateGoal = storeSettings?.goals?.pickRateGoal || { enabled: true, value: TARGET_PICK_RATE };
   const rateState = getRateState(
@@ -233,8 +243,6 @@ const StatBar = ({
       );
     }
 
-    const todayPickRateLabel = formatPickRate(resolvedPickRate);
-
     return (
       <>
         <section className={`statbar statbar--${rateState}`} aria-label="Current pick walk stats">
@@ -244,7 +252,12 @@ const StatBar = ({
               <div className="statbar-walk-fill" style={{ width: `${walkProgressPercent}%` }} />
             </div>
           </div>
-          <span className="statbar-rate">Live: {formatPickRate(walkPickRate)} | Today: {todayPickRateLabel}</span>
+          {walkTimeRemainingMs !== null ? (
+            <span className={`statbar-walk-timer ${walkTimeRemainingMs <= 5 * 60 * 1000 ? 'statbar-walk-timer--urgent' : ''}`}>
+              {formatRemainingWalkTime(walkTimeRemainingMs)}
+            </span>
+          ) : null}
+          <span className="statbar-rate">Live Pick Rate: {formatPickRate(walkPickRate)}</span>
         </section>
         <div className="statbar-spacer" />
       </>

@@ -1,7 +1,8 @@
 const fs = require('fs');
 const path = require('path');
+const { getRuntimeDataFilePath } = require('./runtimeDataPath');
 
-const STORE_PATH = path.join(__dirname, '..', 'database', 'alerts.json');
+const STORE_PATH = getRuntimeDataFilePath('alerts.json');
 
 const DEFAULT_STORE = {
   alerts: []

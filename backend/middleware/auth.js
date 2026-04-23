@@ -36,6 +36,11 @@ const protect = async (req, res, next) => {
         return res.status(401).json({ message: 'Not authorized' });
       }
 
+      if ((decoded.type === 'employee' || decoded.type === 'admin') && !req.user.isActive) {
+        console.log(`[Auth] Inactive employee access denied - userId: ${decoded.id}`);
+        return res.status(401).json({ message: 'Account is not active' });
+      }
+
       next();
     } catch (error) {
       console.error('[Auth] Token verification failed:', error.message);

@@ -6,7 +6,7 @@ import pickingButtonSymbol from '../assets/home-buttons/picking-button-symbol.pn
 import stagingButtonSymbol from '../assets/home-buttons/staging-button-symbol.png';
 import ordersButtonSymbol from '../assets/home-buttons/orders-button-symbol.png';
 import storeManagementButtonSymbol from '../assets/home-buttons/store-management-button-symbol.png';
-import { fetchWithRetry, isRetryableNetworkError } from '../utils/fetchWithRetry';
+import { getOrderToteCount } from '../utils/customerOrderStatus';
 import './HomePage.css';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
@@ -60,17 +60,6 @@ const getRemainingPickUnits = (order) => {
     const pickedQuantity = Math.max(0, toNumber(item?.pickedQuantity));
     return sum + Math.max(0, quantity - pickedQuantity);
   }, 0);
-};
-
-const getOrderToteCount = (order) => {
-  const items = Array.isArray(order?.items) ? order.items : [];
-  const commoditySet = new Set(
-    items
-      .map((item) => String(item?.item?.commodity || '').toLowerCase())
-      .filter(Boolean)
-  );
-
-  return commoditySet.size;
 };
 
 const formatPickRate = (value) => {
@@ -172,11 +161,7 @@ const HomePage = () => {
       return;
     }
 
-    const controller = new AbortController();
-    let reconnectTimerId = null;
-
     const loadHomeStats = async () => {
-      let shouldFinalizeLoading = true;
       setIsLoading(true);
 
       try {
@@ -185,27 +170,9 @@ const HomePage = () => {
         };
 
         const [ordersResponse, assignmentsResponse, statsResponse] = await Promise.all([
-          fetchWithRetry(`${API_BASE}/api/orders`, {
-            headers,
-            signal: controller.signal
-          }, {
-            retries: 8,
-            baseDelayMs: 450
-          }),
-          fetchWithRetry(`${API_BASE}/api/staging-locations/assignments`, {
-            headers,
-            signal: controller.signal
-          }, {
-            retries: 8,
-            baseDelayMs: 450
-          }),
-          fetchWithRetry(`${API_BASE}/api/employees/stats/summary`, {
-            headers,
-            signal: controller.signal
-          }, {
-            retries: 8,
-            baseDelayMs: 450
-          })
+          fetch(`${API_BASE}/api/orders`, { headers }),
+          fetch(`${API_BASE}/api/staging-locations/assignments`, { headers }),
+          fetch(`${API_BASE}/api/employees/stats/summary`, { headers })
         ]);
 
         if (ordersResponse.ok) {
@@ -228,38 +195,16 @@ const HomePage = () => {
         } else {
           setStorePickRate(0);
         }
-      } catch (error) {
-        if (error?.name === 'AbortError') {
-          return;
-        }
-
-        if (isRetryableNetworkError(error)) {
-          shouldFinalizeLoading = false;
-          setIsLoading(true);
-          reconnectTimerId = window.setTimeout(loadHomeStats, 1500);
-          return;
-        }
-
+      } catch {
         setOrders([]);
         setStagingAssignments([]);
         setStorePickRate(0);
       } finally {
-        if (!controller.signal.aborted && shouldFinalizeLoading) {
-          setIsLoading(false);
-        }
+        setIsLoading(false);
       }
     };
 
     loadHomeStats();
-    const refreshIntervalId = window.setInterval(loadHomeStats, 30000);
-
-    return () => {
-      controller.abort();
-      if (reconnectTimerId) {
-        window.clearTimeout(reconnectTimerId);
-      }
-      window.clearInterval(refreshIntervalId);
-    };
   }, []);
 
   const dashboardStats = useMemo(() => {

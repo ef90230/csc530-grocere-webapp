@@ -1,7 +1,7 @@
 const fs = require('fs');
-const path = require('path');
+const { getRuntimeDataFilePath } = require('./runtimeDataPath');
 
-const STORE_PATH = path.join(__dirname, '..', 'database', 'store-admin-assignments.json');
+const STORE_PATH = getRuntimeDataFilePath('store-admin-assignments.json');
 
 const ensureFile = () => {
   if (!fs.existsSync(STORE_PATH)) {

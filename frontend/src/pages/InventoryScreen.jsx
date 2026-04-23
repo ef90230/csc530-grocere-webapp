@@ -134,13 +134,24 @@ const InventoryScreen = () => {
   const scannerHandlingRef = useRef(false);
 
   const fetchItems = useCallback(async () => {
+    if (!Number.isInteger(currentStoreId) || currentStoreId < 1) {
+      setItems([]);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams();
+      params.append('storeId', String(currentStoreId));
       if (searchTerm) params.append('search', searchTerm);
 
-      const res = await fetch(`${API_BASE}/api/items?${params.toString()}`);
+      const token = localStorage.getItem('authToken');
+      const res = await fetch(`${API_BASE}/api/items?${params.toString()}`, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+      });
       if (!res.ok) {
         throw new Error('Failed to load items');
       }
@@ -155,7 +166,7 @@ const InventoryScreen = () => {
     } finally {
       setLoading(false);
     }
-  }, [searchTerm]);
+  }, [currentStoreId, searchTerm]);
 
   useEffect(() => {
     fetchItems();
@@ -391,6 +402,10 @@ const InventoryScreen = () => {
     setCreateError('');
 
     try {
+      if (!Number.isInteger(currentStoreId) || currentStoreId < 1) {
+        throw new Error('Unable to determine the current store for this item.');
+      }
+
       const token = localStorage.getItem('authToken');
       const response = await fetch(`${API_BASE}/api/items`, {
         method: 'POST',
@@ -406,6 +421,7 @@ const InventoryScreen = () => {
           category: createForm.category,
           department: createForm.category,
           price: Number(createForm.price),
+          storeId: currentStoreId,
           temperature: createForm.temperature,
           weight: createForm.weight === '' ? null : Number(createForm.weight),
           unassignedQuantity: createForm.initialQuantity === '' ? 0 : Math.max(0, Number(createForm.initialQuantity) || 0),

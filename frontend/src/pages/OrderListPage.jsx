@@ -136,6 +136,16 @@ const getCustomerName = (order) => {
     return resolvedName || 'Customer';
 };
 
+const getStagingCommodityForItem = (item) => {
+    const normalizedTemperature = String(item?.item?.temperature || '').toLowerCase();
+
+    if (normalizedTemperature === 'chilled' || normalizedTemperature === 'frozen' || normalizedTemperature === 'hot') {
+        return normalizedTemperature;
+    }
+
+    return 'ambient';
+};
+
 const getOrderIdSortValue = (order) => {
     const parsedNumber = Number(String(order.orderNumber || '').replace(/[^0-9]/g, ''));
     if (Number.isFinite(parsedNumber) && parsedNumber > 0) {
@@ -182,7 +192,7 @@ const deriveOrderPhase = (order, stagedToteCountByOrderId) => {
 
     const commoditySet = new Set(
         orderItems
-            .map((item) => String(item?.item?.commodity || '').toLowerCase())
+            .map((item) => getStagingCommodityForItem(item))
             .filter(Boolean)
     );
     const totalTotes = commoditySet.size;
@@ -348,7 +358,7 @@ const OrderListPage = () => {
 
             const commoditySet = new Set(
                 items
-                    .map((item) => String(item?.item?.commodity || '').toLowerCase())
+                    .map((item) => getStagingCommodityForItem(item))
                     .filter(Boolean)
             );
 

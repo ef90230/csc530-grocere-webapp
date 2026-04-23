@@ -23,6 +23,7 @@ const { Employee, Order, OrderItem } = require('../../models');
 const { getWalkSummariesForEmployee } = require('../../utils/walkPerformanceStore');
 const {
   calculateAverageWalkPickRate,
+  calculateEmployeeMetrics,
   getCompletedPickWalkHistory,
   updateEmployeeMetrics
 } = require('../../utils/employeeMetricsService');
@@ -129,8 +130,11 @@ describe('employeeMetricsService', () => {
     ]);
     getWalkSummariesForEmployee.mockReturnValue([
       {
-        totalItems: 3,
-        mistakeItems: 1,
+        totalQuantity: 3,
+        originalPickedQuantity: 1,
+        substitutedQuantity: 1,
+        ftprMistakeQuantity: 1,
+        mistakeQuantity: 1,
         firstTimePickRate: 66.67
       }
     ]);
@@ -174,10 +178,39 @@ describe('employeeMetricsService', () => {
 
     expect(metrics.pickRate).toBe(2.5);
     expect(metrics.itemsPicked).toBe(2);
-    expect(metrics.firstTimePickPercent).toBe(50);
-    expect(metrics.postSubstitutionPercent).toBe(50);
+    expect(metrics.firstTimePickPercent).toBeCloseTo(66.67, 2);
+    expect(metrics.preSubstitutionPercent).toBeCloseTo(33.33, 2);
+    expect(metrics.postSubstitutionPercent).toBeCloseTo(66.67, 2);
     expect(metrics.percentNotFound).toBeCloseTo(33.33, 2);
     expect(metrics.onTimePercent).toBe(50);
     expect(Employee.update).toHaveBeenCalledWith(metrics, { where: { id: 9 } });
+  });
+
+  test('calculateEmployeeMetrics keeps not-found quantity after the final item status changes', async () => {
+    Employee.findByPk.mockResolvedValue({ id: 11 });
+    OrderItem.findAll.mockResolvedValue([
+      { status: 'canceled', quantity: 2, pickedQuantity: 0, foundOnFirstAttempt: false },
+      { status: 'found', quantity: 2, pickedQuantity: 2, foundOnFirstAttempt: true }
+    ]);
+    getWalkSummariesForEmployee.mockReturnValue([
+      {
+        totalQuantity: 4,
+        originalPickedQuantity: 2,
+        substitutedQuantity: 0,
+        ftprMistakeQuantity: 2,
+        mistakeQuantity: 2,
+        firstTimePickRate: 50
+      }
+    ]);
+    Order.findAll
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+
+    const metrics = await calculateEmployeeMetrics(11);
+
+    expect(metrics.preSubstitutionPercent).toBe(50);
+    expect(metrics.postSubstitutionPercent).toBe(50);
+    expect(metrics.percentNotFound).toBe(50);
+    expect(metrics.firstTimePickPercent).toBe(50);
   });
 });

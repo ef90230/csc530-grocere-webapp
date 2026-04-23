@@ -1,5 +1,5 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 
 // Import pages
 import CartScreen from './pages/CartScreen';
@@ -14,6 +14,7 @@ import MapScreen from './pages/MapScreen';
 import OrderListPage from './pages/OrderListPage';
 import OrderSummary from './pages/OrderSummary';
 import ParkingLotPage from './pages/ParkingLotPage';
+import PickListPage from './pages/PickListPage';
 import PickingPage from './pages/PickingPage';
 import DispensePage from './pages/DispensePage';
 import SignupPage from './pages/SignupPage';
@@ -24,6 +25,14 @@ import LeaderboardPage from './pages/LeaderboardPage';
 import StoreSettingsPage from './pages/StoreSettingsPage';
 import EmployeeSettingsPage from './pages/EmployeeSettingsPage';
 import AlertManagementPage from './pages/AlertManagementPage';
+import {
+    clearWalkTimeoutDialogPending,
+    isTimeLimitedCommodity,
+    isWalkTimeExpired,
+    markWalkTimeoutDialogPending,
+    readActiveWalkTimeLimit,
+    readWalkTimeoutDialogPending
+} from './utils/walkTimeLimit';
 
 const getAuthState = () => {
     const token = localStorage.getItem('authToken');
@@ -61,9 +70,73 @@ const ProtectedRoute = ({ children, allowedRole }) => {
     return children;
 };
 
+const normalizeCommodity = (value) => String(value || '').trim().toLowerCase();
+
+const WalkTimeLimitManager = () => {
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    useEffect(() => {
+        const ensureOnPickingPage = (activeWalk) => {
+            const currentCommodity = normalizeCommodity(location?.state?.commodity);
+            const targetCommodity = normalizeCommodity(activeWalk?.commodity);
+            const shouldRedirect = location.pathname !== '/picking' || currentCommodity !== targetCommodity;
+
+            if (!shouldRedirect) {
+                return;
+            }
+
+            navigate('/picking', {
+                replace: true,
+                state: {
+                    commodity: activeWalk.commodity,
+                    commodityLabel: activeWalk.commodityLabel || activeWalk.commodity
+                }
+            });
+        };
+
+        const syncWalkTimeout = () => {
+            const userType = window.localStorage.getItem('userType');
+            if (userType !== 'employee' && userType !== 'admin') {
+                return;
+            }
+
+            const activeWalk = readActiveWalkTimeLimit();
+            const pendingDialog = readWalkTimeoutDialogPending();
+
+            if (!activeWalk || !isTimeLimitedCommodity(activeWalk.commodity)) {
+                if (pendingDialog) {
+                    clearWalkTimeoutDialogPending();
+                }
+                return;
+            }
+
+            if (pendingDialog) {
+                ensureOnPickingPage(activeWalk);
+                return;
+            }
+
+            if (!isWalkTimeExpired()) {
+                return;
+            }
+
+            markWalkTimeoutDialogPending();
+            ensureOnPickingPage(activeWalk);
+        };
+
+        syncWalkTimeout();
+        const intervalId = window.setInterval(syncWalkTimeout, 1000);
+
+        return () => window.clearInterval(intervalId);
+    }, [location.pathname, location.state, navigate]);
+
+    return null;
+};
+
 function App() {
     return (
         <Router>
+            <WalkTimeLimitManager />
             <div className="App">
                 <main className="main-content">
                     <Routes>
@@ -164,9 +237,17 @@ function App() {
                             }
                         />
                         <Route
+                            path="/my-settings"
+                            element={
+                                <ProtectedRoute>
+                                    <EmployeeSettingsPage />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
                             path="/employee-settings"
                             element={
-                                <ProtectedRoute allowedRole="employee">
+                                <ProtectedRoute>
                                     <EmployeeSettingsPage />
                                 </ProtectedRoute>
                             }
@@ -174,7 +255,7 @@ function App() {
                         <Route
                             path="/store-settings"
                             element={
-                                <ProtectedRoute allowedRole="employee">
+                                <ProtectedRoute allowedRole="admin">
                                     <StoreSettingsPage />
                                 </ProtectedRoute>
                             }
@@ -192,6 +273,14 @@ function App() {
                             element={
                                 <ProtectedRoute allowedRole="employee">
                                     <MapScreen />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="/pick-list"
+                            element={
+                                <ProtectedRoute allowedRole="employee">
+                                    <PickListPage />
                                 </ProtectedRoute>
                             }
                         />

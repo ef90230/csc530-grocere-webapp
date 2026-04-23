@@ -5,13 +5,18 @@ const {
   registerEmployee,
   registerAdmin,
   registerCustomer,
-  getMe
+  getMe,
+  updateMe,
+  deleteMe,
+  getAdminSlotStatus,
+  becomeAdmin
 } = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
 const {
   loginValidation,
   employeeRegistrationValidation,
   customerRegistrationValidation,
+  profileNameValidation,
   handleValidationErrors
 } = require('../middleware/validation');
 
@@ -44,5 +49,9 @@ router.post(
 );
 
 router.get('/me', protect, getMe);
+router.put('/me', protect, profileNameValidation(), handleValidationErrors, updateMe);
+router.delete('/me', protect, deleteMe);
+router.get('/admin-slot', protect, getAdminSlotStatus);
+router.post('/become-admin', protect, becomeAdmin);
 
 module.exports = router;

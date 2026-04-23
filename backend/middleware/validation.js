@@ -105,6 +105,23 @@ const customerRegistrationValidation = () => {
   ];
 };
 
+const profileNameValidation = () => {
+  return [
+    body('firstName')
+      .trim()
+      .notEmpty()
+      .withMessage('First name is required')
+      .isLength({ min: 2 })
+      .withMessage('First name must be at least 2 characters long'),
+    body('lastName')
+      .trim()
+      .notEmpty()
+      .withMessage('Last name is required')
+      .isLength({ min: 2 })
+      .withMessage('Last name must be at least 2 characters long')
+  ];
+};
+
 const orderValidation = () => {
   return [
     body('customerId')
@@ -179,6 +196,7 @@ module.exports = {
   loginValidation,
   employeeRegistrationValidation,
   customerRegistrationValidation,
+  profileNameValidation,
   orderValidation,
   itemValidation
 };

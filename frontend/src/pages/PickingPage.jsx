@@ -2,72 +2,17 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import TopBar from '../components/common/TopBar';
 import StoreMapPreview from '../components/common/StoreMapPreview';
-import { fetchWithRetry } from '../utils/fetchWithRetry';
 import './PickingPage.css';
 import { BrowserMultiFormatReader } from '@zxing/browser';
+import {
+    clearActiveWalkTimeLimit,
+    clearWalkTimeoutDialogPending,
+    isTimeLimitedCommodity,
+    readWalkTimeoutDialogPending,
+    setActiveWalkTimeLimit
+} from '../utils/walkTimeLimit';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-const WALK_PROGRESS_CACHE_PREFIX = 'pickWalkProgress';
-
-const getWalkProgressCacheKey = ({ employeeId, commodity, walkStartedAt }) => {
-    const normalizedEmployeeId = String(employeeId || '').trim();
-    const normalizedCommodity = String(commodity || '').trim().toLowerCase();
-    const startedAtDate = new Date(walkStartedAt || '');
-
-    if (!normalizedEmployeeId || !normalizedCommodity || Number.isNaN(startedAtDate.getTime())) {
-        return '';
-    }
-
-    const normalizedStartedAt = startedAtDate.toISOString();
-
-    return `${WALK_PROGRESS_CACHE_PREFIX}:${normalizedEmployeeId}:${normalizedCommodity}:${normalizedStartedAt}`;
-};
-
-const readWalkProgressCache = (key) => {
-    if (!key) {
-        return null;
-    }
-
-    try {
-        const raw = window.localStorage.getItem(key);
-        if (!raw) {
-            return null;
-        }
-
-        const parsed = JSON.parse(raw);
-        if (!parsed || typeof parsed !== 'object') {
-            return null;
-        }
-
-        return parsed;
-    } catch {
-        return null;
-    }
-};
-
-const writeWalkProgressCache = (key, payload) => {
-    if (!key || !payload) {
-        return;
-    }
-
-    try {
-        window.localStorage.setItem(key, JSON.stringify(payload));
-    } catch {
-        // Ignore cache write failures so picking flow is not blocked.
-    }
-};
-
-const clearWalkProgressCache = (key) => {
-    if (!key) {
-        return;
-    }
-
-    try {
-        window.localStorage.removeItem(key);
-    } catch {
-        // Ignore cache remove failures.
-    }
-};
 
 const REPORT_TYPE_OPTIONS = [
     { id: 'item_cannot_fit', label: 'Item cannot fit' },
@@ -78,6 +23,15 @@ const REPORT_TYPE_OPTIONS = [
     { id: 'incorrect_item_info', label: 'Incorrect item info' },
     { id: 'item_appeared_out_of_order', label: 'Item appeared out of order' }
 ];
+
+const normalizeHighlightedAisleNumber = (value) => {
+    const normalized = String(value || '').trim();
+    if (!normalized || /^unassigned$/i.test(normalized)) {
+        return '';
+    }
+
+    return normalized.replace(/^aisle\s+/i, '').trim();
+};
 
 const toCurrency = (value) => {
     const numeric = Number(value);
@@ -107,6 +61,28 @@ const formatLocationLabel = (location) => {
     return `Aisle ${aisle}${section}`;
 };
 
+const toAisleNumberValue = (aisleNumber) => {
+    const normalized = String(aisleNumber || '').trim();
+    const parsed = Number.parseFloat(normalized);
+    return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
+};
+
+const compareQueueEntriesByPath = (left, right) => {
+    const leftPathIndex = Number(left?.location?.pathIndex ?? Number.MAX_SAFE_INTEGER);
+    const rightPathIndex = Number(right?.location?.pathIndex ?? Number.MAX_SAFE_INTEGER);
+    if (leftPathIndex !== rightPathIndex) {
+        return leftPathIndex - rightPathIndex;
+    }
+
+    const leftAisle = toAisleNumberValue(left?.location?.aisleNumber);
+    const rightAisle = toAisleNumberValue(right?.location?.aisleNumber);
+    if (leftAisle !== rightAisle) {
+        return leftAisle - rightAisle;
+    }
+
+    return String(left?.item?.name || '').localeCompare(String(right?.item?.name || ''));
+};
+
 const PickingPage = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -119,8 +95,6 @@ const PickingPage = () => {
     const [isEndPromptOpen, setIsEndPromptOpen] = useState(false);
     const [isEndingWalk, setIsEndingWalk] = useState(false);
     const [walkStartedAt, setWalkStartedAt] = useState(null);
-    const [walkInitialUnits, setWalkInitialUnits] = useState(0);
-    const [walkProgressCacheKey, setWalkProgressCacheKey] = useState('');
     // substituteMode is null (normal) or { originalEntry } when showing a substitute item
     const [substituteMode, setSubstituteMode] = useState(null);
     const [completedUnits, setCompletedUnits] = useState(0);
@@ -138,6 +112,7 @@ const PickingPage = () => {
     const [selectedReportTypes, setSelectedReportTypes] = useState([]);
     const [isSubmittingReport, setIsSubmittingReport] = useState(false);
     const [reportDialogError, setReportDialogError] = useState('');
+    const [isTimeLimitDialogOpen, setIsTimeLimitDialogOpen] = useState(false);
 
     const videoRef = useRef(null);
     const zxingControlsRef = useRef(null);
@@ -151,6 +126,25 @@ const PickingPage = () => {
 
     const selectedCommodity = location?.state?.commodity;
     const selectedCommodityLabel = location?.state?.commodityLabel;
+
+    const syncWalkTimeLimit = ({ commodity, commodityLabel, storeId: activeStoreId, walkStartedAt: startedAt }) => {
+        if (!isTimeLimitedCommodity(commodity)) {
+            clearActiveWalkTimeLimit();
+            clearWalkTimeoutDialogPending();
+            return;
+        }
+
+        setActiveWalkTimeLimit({
+            commodity,
+            commodityLabel,
+            storeId: activeStoreId,
+            walkStartedAt: startedAt
+        });
+    };
+
+    const filterActionableQueue = (rows = []) => rows.filter(
+        (row) => Math.max(0, Number(row?.quantityToPick || 0)) > 0
+    );
 
     useEffect(() => {
         const token = window.localStorage.getItem('authToken');
@@ -172,18 +166,12 @@ const PickingPage = () => {
             try {
                 setErrorMessage('');
                 setIsLoading(true);
-                setCompletedUnits(0);
-                setWalkInitialUnits(0);
-                setWalkProgressCacheKey('');
 
-                const profileResponse = await fetchWithRetry(`${API_BASE}/api/auth/me`, {
+                const profileResponse = await fetch(`${API_BASE}/api/auth/me`, {
                     headers: {
                         Authorization: `Bearer ${token}`
                     },
                     signal: controller.signal
-                }, {
-                    retries: 4,
-                    baseDelayMs: 500
                 });
 
                 if (!profileResponse.ok) {
@@ -192,7 +180,6 @@ const PickingPage = () => {
 
                 const profilePayload = await profileResponse.json();
                 const resolvedStoreId = profilePayload?.user?.storeId;
-                const resolvedEmployeeId = profilePayload?.user?.id;
 
                 if (!resolvedStoreId) {
                     throw new Error('No store is assigned to this employee.');
@@ -200,8 +187,45 @@ const PickingPage = () => {
 
                 setStoreId(resolvedStoreId);
 
-                const [walkResponse, aislesResponse] = await Promise.all([
-                    fetchWithRetry(`${API_BASE}/api/orders/picking/walk/start`, {
+                const [activeWalkResponse, aislesResponse] = await Promise.all([
+                    fetch(`${API_BASE}/api/orders/picking/walk/list/${resolvedStoreId}?commodity=${encodeURIComponent(selectedCommodity)}`, {
+                        headers: {
+                            Authorization: `Bearer ${token}`
+                        },
+                        signal: controller.signal
+                    }),
+                    fetch(`${API_BASE}/api/aisles/store/${resolvedStoreId}`, {
+                        headers: {
+                            Authorization: `Bearer ${token}`
+                        },
+                        signal: controller.signal
+                    })
+                ]);
+
+                let walkPayload = null;
+
+                if (!activeWalkResponse.ok) {
+                    throw new Error('Unable to check for an active pick walk.');
+                }
+
+                const activeWalkPayload = await activeWalkResponse.json();
+                const hasMatchingActiveWalk = Boolean(activeWalkPayload?.hasActiveWalk)
+                    && String(activeWalkPayload?.commodity || '').toLowerCase() === String(selectedCommodity || '').toLowerCase();
+
+                if (hasMatchingActiveWalk) {
+                    const fullQueue = Array.isArray(activeWalkPayload?.queue) ? activeWalkPayload.queue : [];
+                    setQueue(filterActionableQueue(fullQueue));
+                    setCompletedUnits(Math.max(0, Number(activeWalkPayload?.completedUnits || 0)));
+                    const resolvedWalkStartedAt = activeWalkPayload?.walkStartedAt || new Date().toISOString();
+                    setWalkStartedAt(resolvedWalkStartedAt);
+                    syncWalkTimeLimit({
+                        commodity: activeWalkPayload?.commodity || selectedCommodity,
+                        commodityLabel: activeWalkPayload?.displayName || selectedCommodityLabel,
+                        storeId: resolvedStoreId,
+                        walkStartedAt: resolvedWalkStartedAt
+                    });
+                } else {
+                    const startWalkResponse = await fetch(`${API_BASE}/api/orders/picking/walk/start`, {
                         method: 'POST',
                         headers: {
                             Authorization: `Bearer ${token}`,
@@ -212,51 +236,25 @@ const PickingPage = () => {
                             commodity: selectedCommodity
                         }),
                         signal: controller.signal
-                    }, {
-                        retries: 4,
-                        baseDelayMs: 500
-                    }),
-                    fetchWithRetry(`${API_BASE}/api/aisles/store/${resolvedStoreId}`, {
-                        headers: {
-                            Authorization: `Bearer ${token}`
-                        },
-                        signal: controller.signal
-                    }, {
-                        retries: 2,
-                        baseDelayMs: 350
-                    })
-                ]);
+                    });
 
-                if (!walkResponse.ok) {
-                    throw new Error('Unable to start pick walk for the selected commodity.');
+                    if (!startWalkResponse.ok) {
+                        throw new Error('Unable to start pick walk for the selected commodity.');
+                    }
+
+                    walkPayload = await startWalkResponse.json();
+                    const resolvedQueue = Array.isArray(walkPayload?.queue) ? walkPayload.queue : [];
+                    setQueue(resolvedQueue);
+                    setCompletedUnits(Math.max(0, Number(walkPayload?.completedUnits || 0)));
+                    const resolvedWalkStartedAt = walkPayload?.walkStartedAt || new Date().toISOString();
+                    setWalkStartedAt(resolvedWalkStartedAt);
+                    syncWalkTimeLimit({
+                        commodity: walkPayload?.commodity || selectedCommodity,
+                        commodityLabel: walkPayload?.displayName || selectedCommodityLabel,
+                        storeId: resolvedStoreId,
+                        walkStartedAt: resolvedWalkStartedAt
+                    });
                 }
-
-                const walkPayload = await walkResponse.json();
-                const resolvedQueue = Array.isArray(walkPayload?.queue) ? walkPayload.queue : [];
-                const walkRemainingUnits = resolvedQueue.reduce((sum, row) => sum + Number(row?.quantityToPick || 0), 0);
-                const resolvedWalkStartedAt = walkPayload?.walkStartedAt || new Date().toISOString();
-                const progressKey = getWalkProgressCacheKey({
-                    employeeId: resolvedEmployeeId,
-                    commodity: selectedCommodity,
-                    walkStartedAt: resolvedWalkStartedAt
-                });
-                const cachedProgress = readWalkProgressCache(progressKey);
-                const cachedTotalUnits = Number(cachedProgress?.totalUnits || 0);
-                const serverTotalUnits = Number(walkPayload?.totalItems || 0);
-                const restoredTotalUnits = Math.max(walkRemainingUnits, serverTotalUnits, Number.isFinite(cachedTotalUnits) ? cachedTotalUnits : 0);
-                const restoredCompletedUnits = Math.max(0, restoredTotalUnits - walkRemainingUnits);
-
-                setQueue(resolvedQueue);
-                setWalkStartedAt(resolvedWalkStartedAt);
-                setWalkInitialUnits(restoredTotalUnits);
-                setCompletedUnits(restoredCompletedUnits);
-                setWalkProgressCacheKey(progressKey);
-
-                writeWalkProgressCache(progressKey, {
-                    totalUnits: restoredTotalUnits,
-                    remainingUnits: walkRemainingUnits,
-                    updatedAt: Date.now()
-                });
 
                 if (aislesResponse.ok) {
                     const aislesPayload = await aislesResponse.json().catch(() => ({}));
@@ -279,41 +277,58 @@ const PickingPage = () => {
         loadWalk();
 
         return () => controller.abort();
-    }, [navigate, selectedCommodity]);
+    }, [navigate, selectedCommodity, selectedCommodityLabel]);
 
     useEffect(() => {
-        if (!walkProgressCacheKey) {
+        if (!selectedCommodity) {
             return;
         }
 
-        const remainingUnits = queue.reduce((sum, row) => sum + Number(row?.quantityToPick || 0), 0);
-        const totalUnits = Math.max(Number(walkInitialUnits || 0), Number(completedUnits || 0) + remainingUnits);
+        if (!isTimeLimitedCommodity(selectedCommodity)) {
+            clearWalkTimeoutDialogPending();
+            return;
+        }
 
-        writeWalkProgressCache(walkProgressCacheKey, {
-            totalUnits,
-            remainingUnits,
-            updatedAt: Date.now()
-        });
-    }, [walkProgressCacheKey, walkInitialUnits, completedUnits, queue]);
+        if (!readWalkTimeoutDialogPending()) {
+            return;
+        }
+
+        setIsEndPromptOpen(false);
+        setIsPickDialogOpen(false);
+        setIsPickUpcMismatch(false);
+        setIsCameraOpen(false);
+        setIsReportDialogOpen(false);
+        setIsTimeLimitDialogOpen(true);
+    }, [selectedCommodity]);
 
     const remainingUnits = useMemo(() => (
         queue.reduce((sum, row) => sum + Number(row?.quantityToPick || 0), 0)
     ), [queue]);
-    const totalUnits = Math.max(walkInitialUnits, completedUnits + remainingUnits);
+    const totalUnits = completedUnits + remainingUnits;
 
     const currentItem = queue[0] || null;
     const currentQuantity = Number(currentItem?.quantityToPick || 0);
+    const currentOrderSymbol = String(currentItem?.orderSymbol || '').trim().toUpperCase();
     const currentItemHighlightedAisles = useMemo(() => {
-        const aisleNumbers = Object.entries(currentItem?.onHandByAisle || {})
-            .filter(([, quantity]) => Number(quantity) > 0)
-            .map(([aisleNumber]) => String(aisleNumber || '').trim())
+        const aisleNumbers = (currentItem?.allLocations || [])
+            .filter((itemLocation) => Number(itemLocation?.quantityOnHand) > 0)
+            .map((itemLocation) => normalizeHighlightedAisleNumber(itemLocation?.aisleNumber))
             .filter(Boolean);
 
         if (aisleNumbers.length > 0) {
-            return aisleNumbers;
+            return Array.from(new Set(aisleNumbers));
         }
 
-        const fallbackAisle = String(currentItem?.location?.aisleNumber || '').trim();
+        const onHandAisles = Object.entries(currentItem?.onHandByAisle || {})
+            .filter(([, quantity]) => Number(quantity) > 0)
+            .map(([aisleNumber]) => normalizeHighlightedAisleNumber(aisleNumber))
+            .filter(Boolean);
+
+        if (onHandAisles.length > 0) {
+            return Array.from(new Set(onHandAisles));
+        }
+
+        const fallbackAisle = normalizeHighlightedAisleNumber(currentItem?.location?.aisleNumber);
         return fallbackAisle ? [fallbackAisle] : [];
     }, [currentItem]);
     const onHandAisleCount = Object.keys(currentItem?.onHandByAisle || {}).length;
@@ -422,6 +437,17 @@ const PickingPage = () => {
         setSelectedReportTypes([]);
         setReportDialogError('');
         setIsReportDialogOpen(true);
+    };
+
+    const openPickListPage = () => {
+        setIsReportMenuOpen(false);
+        navigate('/pick-list', {
+            state: {
+                storeId,
+                commodity: selectedCommodity,
+                commodityLabel: commodityTitle
+            }
+        });
     };
 
     const sendItemReport = async () => {
@@ -789,6 +815,38 @@ const PickingPage = () => {
             return;
         }
 
+        const hasAlternateLocations = Array.isArray(item?.allLocations) && item.allLocations.length > 1;
+        if (hasAlternateLocations) {
+            await reportWalkMistake(item, 1, 'not_found');
+
+            setQueue((previousQueue) => {
+                if (!Array.isArray(previousQueue) || previousQueue.length === 0) {
+                    return previousQueue;
+                }
+
+                const [head, ...rest] = previousQueue;
+                const remainingLocations = Array.isArray(head?.allLocations)
+                    ? head.allLocations.slice(1)
+                    : [];
+
+                if (remainingLocations.length === 0) {
+                    return previousQueue;
+                }
+
+                const updatedHead = {
+                    ...head,
+                    location: remainingLocations[0],
+                    allLocations: remainingLocations,
+                    otherLocationsCount: Math.max(remainingLocations.length - 1, 0)
+                };
+
+                return [...rest, updatedHead].sort(compareQueueEntriesByPath);
+            });
+
+            setIsSubmittingNotFound(false);
+            return;
+        }
+
         if (item.substitute && Number(item.pickedQuantity || 0) === 0) {
             // Only enter substitute mode if nothing has been picked for this item yet
             setSubstituteMode({ originalEntry: item });
@@ -850,12 +908,13 @@ const PickingPage = () => {
                 throw new Error(payload?.message || 'Unable to end walk cleanly.');
             }
 
-            clearWalkProgressCache(walkProgressCacheKey);
             walkEndedCleanly = true;
         } catch (error) {
             console.error('Unable to end walk cleanly', error);
         } finally {
             if (walkEndedCleanly) {
+                clearActiveWalkTimeLimit();
+                clearWalkTimeoutDialogPending();
                 navigate('/commodityselect', {
                     state: {
                         completedWalk: true,
@@ -881,9 +940,14 @@ const PickingPage = () => {
                 onExtraAction={() => setIsReportMenuOpen((previous) => !previous)}
                 isExtraActionMenuOpen={isReportMenuOpen}
                 extraActionMenu={(
-                    <button type="button" className="picking-report-menu-button" onClick={openReportDialog}>
-                        Report Item
-                    </button>
+                    <div className="picking-report-menu-list">
+                        <button type="button" className="picking-report-menu-button" onClick={openPickListPage}>
+                            Pick List
+                        </button>
+                        <button type="button" className="picking-report-menu-button" onClick={openReportDialog}>
+                            Report Item
+                        </button>
+                    </div>
                 )}
                 statMode="walk"
                 walkCompletedUnits={completedUnits}
@@ -901,7 +965,7 @@ const PickingPage = () => {
 
                 {!errorMessage && isLoading ? (
                     <section className="picking-empty-state">
-                        <h2>Preparing your pick walkâ€¦</h2>
+                        <h2>Preparing your pick walk...</h2>
                     </section>
                 ) : null}
 
@@ -963,6 +1027,18 @@ const PickingPage = () => {
                             ) : (
                                 <div className="picking-image-placeholder">ITEM IMAGE HERE</div>
                             )}
+                        </div>
+
+                        <div className="picking-order-identity">
+                            {currentOrderSymbol ? (
+                                <span className={`picking-order-symbol picking-order-symbol--${currentOrderSymbol.toLowerCase()}`}>
+                                    {currentOrderSymbol}
+                                </span>
+                            ) : null}
+                            <div className="picking-order-identity-copy">
+                                <span className="picking-field-label">Order</span>
+                                <strong>{currentItem.orderNumber || 'No order number'}</strong>
+                            </div>
                         </div>
 
                         {substituteMode ? (
@@ -1043,6 +1119,30 @@ const PickingPage = () => {
                     </section>
                 ) : null}
             </main>
+
+            {isTimeLimitDialogOpen ? (
+                <div className="picking-modal-overlay">
+                    <section className="picking-confirm-modal" onClick={(event) => event.stopPropagation()}>
+                        <h3>Time&apos;s Up!</h3>
+                        <p>
+                            To protect the quality of temperature-controlled items, this walk has ended and remaining items
+                            will rejoin the pick queue. Return to your backroom immediately for staging.
+                        </p>
+                        <div className="picking-confirm-actions">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    clearWalkTimeoutDialogPending();
+                                    endWalk(true);
+                                }}
+                                disabled={isEndingWalk}
+                            >
+                                {isEndingWalk ? 'Ending…' : 'OK'}
+                            </button>
+                        </div>
+                    </section>
+                </div>
+            ) : null}
 
             {isMapOpen && currentItem ? (
                 <div className="picking-modal-overlay" onClick={() => setIsMapOpen(false)}>
