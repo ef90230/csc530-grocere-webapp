@@ -78,7 +78,6 @@ const Item = sequelize.define('Item', {
   },
   upc: {
     type: DataTypes.STRING,
-    unique: true,
     allowNull: false,
     validate: {
       isLegalUpcValue(value) {

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import grocerEWordmarkLogo from '../assets/CSC 530 Grocer-E wordmark logo.png';
 import './TitlePage.css';
 
 const TitlePage = () => {
@@ -7,14 +8,32 @@ const TitlePage = () => {
 
     return (
         <div className="title-page-container">
-            <h1 className="title-text">Grocer-E</h1>
-            <div className="button-group">
-                <button onClick={() => navigate('/login')} className="btn-primary">
-                    Sign In
-                </button>
-                <button onClick={() => navigate('/signup')} className="btn-secondary">
-                    Sign Up
-                </button>
+            <div className="title-page-panel">
+                <div className="title-page-main">
+                    <div className="title-page-hero">
+                        <img
+                            src={grocerEWordmarkLogo}
+                            alt="Grocer-E wordmark"
+                            className="title-page-logo"
+                        />
+                        <p className="title-page-tagline">
+                            The Technology Solution for Grocery
+                            <br />
+                            E-Commerce Fulfillment
+                        </p>
+                    </div>
+
+                    <div className="button-group">
+                        <button onClick={() => navigate('/login')} className="btn-primary">
+                            Log In
+                        </button>
+                        <button onClick={() => navigate('/signup')} className="btn-secondary">
+                            Sign Up
+                        </button>
+                    </div>
+                </div>
+
+                <p className="title-page-version">v0.0.0</p>
             </div>
         </div>
     );

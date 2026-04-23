@@ -84,6 +84,12 @@
   cursor: pointer;
 }
 
+.picking-report-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+}
+
 .picking-location-pill-group {
   flex: 1;
   display: grid;
@@ -202,6 +208,71 @@
   margin-top: 0.7rem;
   border-top: 1px solid #c8c8c8;
   padding-top: 0.55rem;
+}
+
+.picking-order-identity {
+  margin-top: 0.7rem;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.picking-order-symbol {
+  width: 54px;
+  height: 54px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #fff;
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+.picking-order-symbol--a {
+  background: #005b9a;
+}
+
+.picking-order-symbol--b {
+  background: #4d8125;
+}
+
+.picking-order-symbol--c {
+  background: #bf7400;
+}
+
+.picking-order-symbol--d {
+  background: #b00000;
+}
+
+.picking-order-symbol--e {
+  background: #4b2a88;
+}
+
+.picking-order-symbol--f {
+  background: #d1a700;
+}
+
+.picking-order-symbol--g {
+  background: #8d2a68;
+}
+
+.picking-order-symbol--h {
+  background: #7b7b7b;
+}
+
+.picking-order-identity-copy {
+  min-width: 0;
+}
+
+.picking-order-identity-copy strong {
+  display: block;
+  margin-top: 0.2rem;
+  color: #1b1d21;
+  font-size: 1rem;
 }
 
 .picking-original-item-section {
@@ -702,6 +773,23 @@
   .picking-original-item-section {
     margin-top: 0.42rem;
     padding-top: 0.35rem;
+  }
+
+  .picking-order-identity {
+    margin-top: 0.42rem;
+    gap: 0.45rem;
+  }
+
+  .picking-order-symbol {
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    font-size: 1.55rem;
+  }
+
+  .picking-order-identity-copy strong {
+    font-size: 0.82rem;
+    line-height: 1.1;
   }
 
   .picking-field-label {

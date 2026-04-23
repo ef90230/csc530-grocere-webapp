@@ -64,7 +64,18 @@ const {
   aggregateStoreStats,
   getStoreWaitTimeStats
 } = require('../../../utils/employeeTimeframeStatsService');
-const { getEmployeeMetrics, getMyAndStoreStats } = require('../../../controllers/employeeController');
+const {
+  getEmployeeMetrics,
+  getMyAndStoreStats,
+  getStoreSettings,
+  updateStoreSettings
+} = require('../../../controllers/employeeController');
+const {
+  normalizeStoreSettings,
+  getStoreSettingsFromStore,
+  buildBackroomDoorLocationWithStoreSettings,
+  getTimeslotKeyFromDate
+} = require('../../../utils/storeSettings');
 
 const createMockRes = () => {
   const res = {};
@@ -292,8 +303,8 @@ describe('employeeController.getMyAndStoreStats', () => {
     await getMyAndStoreStats(req, res);
 
     expect(getEmployeeTimeframeStats).toHaveBeenCalledTimes(2);
-    expect(getEmployeeTimeframeStats).toHaveBeenNthCalledWith(1, 3);
-    expect(getEmployeeTimeframeStats).toHaveBeenNthCalledWith(2, 4);
+    expect(getEmployeeTimeframeStats).toHaveBeenNthCalledWith(1, 3, { timeZone: undefined });
+    expect(getEmployeeTimeframeStats).toHaveBeenNthCalledWith(2, 4, { timeZone: undefined });
     expect(aggregateStoreStats).toHaveBeenNthCalledWith(1, [
       { employeeId: 3, today: myToday, allTime: myAllTime },
       {
@@ -408,5 +419,114 @@ describe('employeeController.getMyAndStoreStats', () => {
     expect(Employee.findByPk).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalledWith({ message: 'Only employees can access employee statistics' });
+  });
+});
+
+describe('employeeController store settings', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    normalizeStoreSettings.mockReturnValue({
+      goals: {
+        pickRateGoal: {
+          enabled: true,
+          value: 100
+        }
+      },
+      timeslot: {
+        defaultLimit: 20,
+        overrides: {}
+      },
+      scheduling: {
+        timeZone: 'UTC',
+        hoursByWeekday: {}
+      },
+      storePhone: ''
+    });
+    getStoreSettingsFromStore.mockReturnValue({
+      goals: {
+        pickRateGoal: {
+          enabled: true,
+          value: 100
+        }
+      },
+      timeslot: {
+        defaultLimit: 20,
+        overrides: {}
+      },
+      scheduling: {
+        timeZone: 'UTC',
+        hoursByWeekday: {}
+      },
+      storePhone: ''
+    });
+    buildBackroomDoorLocationWithStoreSettings.mockReturnValue({ __storeSettings: true });
+    getTimeslotKeyFromDate.mockReturnValue('2026-04-21T12:00:00.000Z');
+    Order.findAll.mockResolvedValue([]);
+  });
+
+  test('rejects non-admin access to store settings', async () => {
+    const req = {
+      userType: 'employee',
+      authType: 'employee',
+      user: { storeId: 1 }
+    };
+    const res = createMockRes();
+
+    await getStoreSettings(req, res);
+
+    expect(Store.findByPk).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({ message: 'Only admins can access store settings.' });
+  });
+
+  test('updates only the authenticated admin store name and settings', async () => {
+    const update = jest.fn().mockResolvedValue(undefined);
+    const storeRecord = {
+      id: 1,
+      storeNumber: '001',
+      name: 'Main Store',
+      phone: '(555) 123-4567',
+      backroomDoorLocation: { existing: true },
+      update
+    };
+
+    Store.findByPk.mockResolvedValue(storeRecord);
+
+    const req = {
+      userType: 'employee',
+      authType: 'admin',
+      user: { storeId: 1 },
+      body: {
+        store: {
+          name: 'Downtown Market'
+        },
+        settings: {
+          timeslot: {
+            defaultLimit: 20
+          }
+        }
+      }
+    };
+    const res = createMockRes();
+
+    await updateStoreSettings(req, res);
+
+    expect(Store.findByPk).toHaveBeenCalledWith(1, {
+      attributes: ['id', 'storeNumber', 'name', 'phone', 'backroomDoorLocation']
+    });
+    expect(update).toHaveBeenCalledWith({
+      name: 'Downtown Market',
+      backroomDoorLocation: { __storeSettings: true }
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      message: 'Store settings updated successfully.',
+      store: {
+        id: 1,
+        storeNumber: '001',
+        name: 'Downtown Market'
+      },
+      settings: normalizeStoreSettings.mock.results[0].value
+    });
   });
 });

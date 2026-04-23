@@ -535,3 +535,59 @@
     width: 100%;
   }
 }
+
+.cart-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 270;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.cart-confirm-card {
+  width: min(95vw, 380px);
+  background: #ececec;
+  border: 2px solid #222;
+  border-radius: 14px;
+  padding: 1.2rem;
+}
+
+.cart-confirm-card__title {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+}
+
+.cart-confirm-card__message {
+  margin: 0 0 1.1rem;
+  font-size: 0.97rem;
+  line-height: 1.45;
+  color: #2a2a2a;
+}
+
+.cart-confirm-card__actions {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: flex-end;
+}
+
+.cart-confirm-card__button {
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  padding: 0.6rem 1.1rem;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.cart-confirm-card__button--cancel {
+  background: #6f6f6f;
+  color: #fff;
+}
+
+.cart-confirm-card__button--confirm {
+  background: #ca1313;
+  color: #fff;
+}

@@ -44,6 +44,7 @@ const LoginForm = ({ onSubmit }) => {
                     type="email"
                     id="email"
                     data-testid="email-input"
+                    placeholder="Email"
                     {...register('email')}
                     className={errors.email ? 'input-error' : ''}
                 />
@@ -58,6 +59,7 @@ const LoginForm = ({ onSubmit }) => {
                     type="password"
                     id="password"
                     data-testid="password-input"
+                    placeholder="Password"
                     {...register('password')}
                     className={errors.password ? 'input-error' : ''}
                 />

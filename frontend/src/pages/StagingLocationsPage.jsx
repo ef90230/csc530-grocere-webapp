@@ -8,13 +8,12 @@ import { BrowserMultiFormatReader } from '@zxing/browser';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
-const TYPE_SORT_ORDER = ['ambient', 'chilled', 'frozen', 'hot', 'oversized'];
+const TYPE_SORT_ORDER = ['ambient', 'chilled', 'frozen', 'hot'];
 const ITEM_TYPE_LABELS = {
     ambient: 'Ambient',
     chilled: 'Chilled',
     frozen: 'Frozen',
-    hot: 'Hot',
-    oversized: 'Oversized'
+    hot: 'Hot'
 };
 
 const formatDueTime = (value) => {

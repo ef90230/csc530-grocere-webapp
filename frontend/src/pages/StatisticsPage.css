@@ -202,11 +202,45 @@
 }
 
 .walk-history-section {
-  margin-top: 0.85rem;
+  margin-top: 1rem;
   padding: 0.85rem;
   border: 1px solid #222;
   border-radius: 12px;
   background: linear-gradient(180deg, #e4e4e4 0%, #d0d0d0 100%);
+}
+
+.walk-history-summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.walk-history-summary::-webkit-details-marker {
+  display: none;
+}
+
+.walk-history-summary::marker {
+  content: '';
+}
+
+.walk-history-summary .walk-history-header-row {
+  margin-bottom: 0;
+}
+
+.walk-history-summary .walk-history-header-row::after {
+  content: '+';
+  margin-left: auto;
+  font-size: 1.3rem;
+  font-weight: 700;
+  line-height: 1;
+  color: #222;
+}
+
+.walk-history-section[open] .walk-history-summary .walk-history-header-row::after {
+  content: '\2212';
+}
+
+.walk-history-content {
+  margin-top: 0.65rem;
 }
 
 .walk-history-header-row {

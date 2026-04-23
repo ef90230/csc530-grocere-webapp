@@ -240,3 +240,6 @@ coverage/
 tmp/
 temp/
 frontend/cypress/screenshots/
+
+# Backend runtime data fallback
+backend/.runtime-data/

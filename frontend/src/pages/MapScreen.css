@@ -1,8 +1,7 @@
 .map-screen {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  overflow: hidden;
+  min-height: 100vh;
   background-color: #fff;
 }
 
@@ -11,6 +10,7 @@
   display: flex;
   flex-direction: column;
   padding: 2rem;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -19,7 +19,8 @@
 }
 
 .map-screen-employee .page-content {
-  padding-bottom: 90px; /* Leave room only for the navbar */
+  min-height: calc(100vh - 56px);
+  padding-bottom: calc(96px + env(safe-area-inset-bottom)); /* Leave room for the navbar and bottom legend */
 }
 
 .map-screen h1 {
@@ -215,6 +216,10 @@
 @media (max-width: 480px) {
   .map-screen .page-content {
     padding: 1rem 0.75rem;
+  }
+
+  .map-screen-employee .page-content {
+    padding-bottom: calc(112px + env(safe-area-inset-bottom));
   }
 
   .map-screen-admin .page-content {

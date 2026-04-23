@@ -74,6 +74,13 @@
   justify-content: center;
 }
 
+.storefront-cart-icon {
+  display: block;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
 .storefront-cart-button:hover {
   background-color: rgba(0, 0, 0, 0.08);
 }

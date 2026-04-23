@@ -2,6 +2,7 @@ import {
   calculateOrderTotalAtTimeOfOrdering,
   calculateCurrentEstimatedOrderTotal,
   deriveCustomerOrderStatus,
+  getOrderToteCount,
   CUSTOMER_ORDER_PHASE
 } from '../utils/customerOrderStatus';
 
@@ -175,5 +176,57 @@ describe('customer order total calculations', () => {
 
     const phase = deriveCustomerOrderStatus(order, { now: '2026-04-05T11:00:00.000Z' });
     expect(phase).toBe(CUSTOMER_ORDER_PHASE.PICKING_IN_PROGRESS);
+  });
+
+  test('uses staging temperature groups instead of raw commodity groups when deriving staged completion', () => {
+    const order = {
+      status: 'picked',
+      stagedToteCount: 1,
+      scheduledPickupTime: '2026-04-05T10:00:00.000Z',
+      items: [
+        {
+          quantity: 1,
+          pickedQuantity: 1,
+          status: 'found',
+          item: { price: 5, commodity: 'restricted', temperature: 'ambient' }
+        },
+        {
+          quantity: 1,
+          pickedQuantity: 1,
+          status: 'found',
+          item: { price: 6, commodity: 'oversized', temperature: 'ambient' }
+        }
+      ]
+    };
+
+    const phase = deriveCustomerOrderStatus(order, { now: '2026-04-05T10:30:00.000Z' });
+    expect(phase).toBe(CUSTOMER_ORDER_PHASE.READY_FOR_PICKUP);
+  });
+
+  test('counts ambient-like items as one tote for staging totals', () => {
+    const order = {
+      items: [
+        {
+          quantity: 1,
+          pickedQuantity: 1,
+          status: 'found',
+          item: { commodity: 'restricted', temperature: 'ambient' }
+        },
+        {
+          quantity: 1,
+          pickedQuantity: 1,
+          status: 'found',
+          item: { commodity: 'oversized', temperature: 'ambient' }
+        },
+        {
+          quantity: 1,
+          pickedQuantity: 1,
+          status: 'found',
+          item: { commodity: 'ambient', temperature: 'ambient' }
+        }
+      ]
+    };
+
+    expect(getOrderToteCount(order)).toBe(1);
   });
 });

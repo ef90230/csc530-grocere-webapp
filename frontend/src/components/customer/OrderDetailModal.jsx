@@ -13,6 +13,7 @@ import {
   getParkingSpaceOptions,
   toParkingSpaceNumber
 } from '../../utils/parkingSpaces';
+import { getOrderItemStatus } from '../../utils/orderItemStatus';
 import './OrderDetailModal.css';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
@@ -32,44 +33,6 @@ const getCanceledLabel = (canceledQuantity, orderedQuantity) => {
   }
 
   return `${canceled} of ${ordered} Canceled`;
-};
-
-const getItemStatus = (orderItem, options = {}) => {
-  const orderedQuantity = Number(orderItem?.quantity || 0);
-  const pickedQuantity = Math.max(0, Number(orderItem?.pickedQuantity || 0));
-  const normalizedStatus = String(orderItem?.status || '').toLowerCase();
-  const isOrderComplete = Boolean(options?.isOrderComplete);
-  const canceledQuantity = Math.max(0, orderedQuantity - pickedQuantity);
-
-  if (normalizedStatus === 'out_of_stock') {
-    return { label: 'Not Found', kind: 'not-found' };
-  }
-
-  if (normalizedStatus === 'canceled' || normalizedStatus === 'cancelled') {
-    return { label: 'Canceled', kind: 'canceled' };
-  }
-
-  if (isOrderComplete && canceledQuantity > 0 && normalizedStatus !== 'out_of_stock') {
-    return { label: getCanceledLabel(canceledQuantity, orderedQuantity), kind: 'canceled' };
-  }
-
-  if (normalizedStatus === 'found' || pickedQuantity >= orderedQuantity) {
-    return { label: 'Picked', kind: 'picked' };
-  }
-
-  if (normalizedStatus === 'substituted') {
-    return { label: 'Not Found', kind: 'not-found' };
-  }
-
-  if (pickedQuantity > 0 && pickedQuantity < orderedQuantity) {
-    return { label: `${pickedQuantity} of ${orderedQuantity} Picked`, kind: 'partial' };
-  }
-
-  if (normalizedStatus === 'out_of_stock' || normalizedStatus === 'skipped') {
-    return { label: 'Not Found', kind: 'not-found' };
-  }
-
-  return { label: 'Not Yet Picked', kind: 'pending' };
 };
 
 const getSubstituteStatus = (orderItem, options = {}) => {
@@ -281,7 +244,7 @@ const OrderDetailModal = ({ order, onClose, onOrderUpdated }) => {
                 const quantity = Number(orderItem?.quantity || 0);
                 const unitPrice = Number(item?.price || 0);
                 const subtotal = quantity * unitPrice;
-                const itemStatus = getItemStatus(orderItem, { isOrderComplete });
+                const itemStatus = getOrderItemStatus(orderItem, { isOrderComplete });
                 const shouldShowSubstituteStatus = Boolean(substitutedItem) && String(orderItem?.status || '').toLowerCase() !== 'found';
                 const substituteStatus = shouldShowSubstituteStatus ? getSubstituteStatus(orderItem, { isOrderComplete }) : null;
 

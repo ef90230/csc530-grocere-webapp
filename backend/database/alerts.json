@@ -1,6 +1,182 @@
 {
   "alerts": [
     {
+      "id": "alert_1776899893623_ctzzly",
+      "type": "order_canceled",
+      "subtype": "",
+      "title": "Order canceled",
+      "subject": "ORD-1776899098308-397",
+      "message": "ORD-1776899098308-397",
+      "actionLabel": "Order List",
+      "actionTarget": {
+        "path": "/orders",
+        "state": {
+          "focusOrderId": 74
+        }
+      },
+      "icon": "warning",
+      "severity": "critical",
+      "storeId": 1,
+      "itemId": null,
+      "orderId": 74,
+      "employeeId": null,
+      "employeeName": "",
+      "metadata": {},
+      "sourceKey": "",
+      "createdAt": "2026-04-22T23:18:13.623Z",
+      "updatedAt": "2026-04-22T23:18:13.623Z"
+    },
+    {
+      "id": "alert_1776899890383_fu9qo5",
+      "type": "order_canceled",
+      "subtype": "",
+      "title": "Order canceled",
+      "subject": "ORD-1776899124600-409",
+      "message": "ORD-1776899124600-409",
+      "actionLabel": "Order List",
+      "actionTarget": {
+        "path": "/orders",
+        "state": {
+          "focusOrderId": 75
+        }
+      },
+      "icon": "warning",
+      "severity": "critical",
+      "storeId": 1,
+      "itemId": null,
+      "orderId": 75,
+      "employeeId": null,
+      "employeeName": "",
+      "metadata": {},
+      "sourceKey": "",
+      "createdAt": "2026-04-22T23:18:10.383Z",
+      "updatedAt": "2026-04-22T23:18:10.383Z"
+    },
+    {
+      "id": "alert_1776896125809_hmkbau",
+      "type": "out_of_stock",
+      "subtype": "location_zero",
+      "title": "On Hand at Location 7 hit 0",
+      "subject": "Cheddar Cheese",
+      "message": "Cheddar Cheese",
+      "actionLabel": "Item Info",
+      "actionTarget": {
+        "path": "/inventory",
+        "state": {
+          "focusItemId": 9
+        }
+      },
+      "icon": "",
+      "severity": "critical",
+      "storeId": 1,
+      "itemId": 9,
+      "orderId": null,
+      "employeeId": null,
+      "employeeName": "",
+      "metadata": {},
+      "sourceKey": "out_of_stock:location:1:9:7",
+      "createdAt": "2026-04-22T22:15:25.809Z",
+      "updatedAt": "2026-04-22T22:15:25.809Z"
+    },
+    {
+      "id": "alert_1776895956339_12n353",
+      "type": "picker_alert",
+      "subtype": "walk_ended_early",
+      "title": "Picker exited walk early",
+      "subject": "Executive Admin",
+      "message": "Executive Admin",
+      "actionLabel": "Leaderboard",
+      "actionTarget": {
+        "path": "/leaderboard"
+      },
+      "icon": "",
+      "severity": "warning",
+      "storeId": 1,
+      "itemId": null,
+      "orderId": null,
+      "employeeId": 6,
+      "employeeName": "Executive Admin",
+      "metadata": {},
+      "sourceKey": "",
+      "createdAt": "2026-04-22T22:12:36.339Z",
+      "updatedAt": "2026-04-22T22:12:36.339Z"
+    },
+    {
+      "id": "alert_1776895905731_z2jt8b",
+      "type": "picker_alert",
+      "subtype": "walk_ended_early",
+      "title": "Picker exited walk early",
+      "subject": "Executive Admin",
+      "message": "Executive Admin",
+      "actionLabel": "Leaderboard",
+      "actionTarget": {
+        "path": "/leaderboard"
+      },
+      "icon": "",
+      "severity": "warning",
+      "storeId": 1,
+      "itemId": null,
+      "orderId": null,
+      "employeeId": 6,
+      "employeeName": "Executive Admin",
+      "metadata": {},
+      "sourceKey": "",
+      "createdAt": "2026-04-22T22:11:45.731Z",
+      "updatedAt": "2026-04-22T22:11:45.731Z"
+    },
+    {
+      "id": "alert_1776893138138_pdl8tr",
+      "type": "out_of_stock",
+      "subtype": "overall_zero",
+      "title": "On Hand overall hit 0",
+      "subject": "Canned Tomatoes",
+      "message": "Canned Tomatoes",
+      "actionLabel": "Item Info",
+      "actionTarget": {
+        "path": "/inventory",
+        "state": {
+          "focusItemId": 18
+        }
+      },
+      "icon": "",
+      "severity": "critical",
+      "storeId": 1,
+      "itemId": 18,
+      "orderId": null,
+      "employeeId": null,
+      "employeeName": "",
+      "metadata": {},
+      "sourceKey": "out_of_stock:overall:1:18",
+      "createdAt": "2026-04-22T21:25:38.138Z",
+      "updatedAt": "2026-04-22T21:25:38.138Z"
+    },
+    {
+      "id": "alert_1776893138110_xc2fa0",
+      "type": "out_of_stock",
+      "subtype": "location_zero",
+      "title": "On Hand at Location 21 hit 0",
+      "subject": "Canned Tomatoes",
+      "message": "Canned Tomatoes",
+      "actionLabel": "Item Info",
+      "actionTarget": {
+        "path": "/inventory",
+        "state": {
+          "focusItemId": 18
+        }
+      },
+      "icon": "",
+      "severity": "critical",
+      "storeId": 1,
+      "itemId": 18,
+      "orderId": null,
+      "employeeId": null,
+      "employeeName": "",
+      "metadata": {},
+      "sourceKey": "out_of_stock:location:1:18:21",
+      "createdAt": "2026-04-22T21:25:38.110Z",
+      "updatedAt": "2026-04-22T21:25:38.110Z"
+    },
+    {
       "id": "alert_1776534376790_nniooy",
       "type": "order_canceled",
       "subtype": "",

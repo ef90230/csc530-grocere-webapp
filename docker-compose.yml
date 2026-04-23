@@ -38,6 +38,7 @@ services:
       JWT_EXPIRE: ${JWT_EXPIRE:-30d}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
+      RUNTIME_DATA_DIR: /var/lib/grocere-runtime
     ports:
       - "5000:5000"
     depends_on:
@@ -48,6 +49,7 @@ services:
     volumes:
       - ./backend:/app
       - /app/node_modules
+      - backend_runtime_data:/var/lib/grocere-runtime
 
   # Frontend Service
   frontend:
@@ -69,6 +71,7 @@ services:
 
 volumes:
   postgres_data:
+  backend_runtime_data:
 
 networks:
   grocere-network:
