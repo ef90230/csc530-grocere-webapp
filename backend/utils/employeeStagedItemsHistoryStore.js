@@ -1,8 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 const { DEFAULT_TIME_ZONE, getTimeZoneDayKey, normalizeTimeZone } = require('./timeZone');
+const { getRuntimeDataFilePath } = require('./runtimeDataPath');
 
-const STORE_PATH = path.join(__dirname, '..', 'database', 'employee-staged-items-history.json');
+const STORE_PATH = getRuntimeDataFilePath('employee-staged-items-history.json');
 
 const normalizeDayKey = (value) => {
   if (typeof value !== 'string') {

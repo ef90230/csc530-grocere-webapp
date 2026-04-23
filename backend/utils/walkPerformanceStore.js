@@ -1,7 +1,8 @@
 const fs = require('fs');
 const path = require('path');
+const { getRuntimeDataFilePath } = require('./runtimeDataPath');
 
-const STORE_PATH = path.join(__dirname, '..', 'database', 'walk-performance-history.json');
+const STORE_PATH = getRuntimeDataFilePath('walk-performance-history.json');
 
 const toInt = (value, fallback = 0) => {
   const parsed = Number(value);
