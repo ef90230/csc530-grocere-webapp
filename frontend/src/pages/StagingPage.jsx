@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '../components/common/Navbar';
 import TopBar from '../components/common/TopBar';
+import { fetchWithRetry } from '../utils/fetchWithRetry';
 import './StagingPage.css';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
@@ -327,11 +328,14 @@ const StagingPage = () => {
                 setErrorMessage('');
                 setIsLoading(true);
 
-                const profileResponse = await fetch(`${API_BASE}/api/auth/me`, {
+                const profileResponse = await fetchWithRetry(`${API_BASE}/api/auth/me`, {
                     headers: {
                         Authorization: `Bearer ${token}`
                     },
                     signal: controller.signal
+                }, {
+                    retries: 4,
+                    baseDelayMs: 500
                 });
 
                 if (!profileResponse.ok) {
@@ -346,11 +350,14 @@ const StagingPage = () => {
                 }
 
                 const [ordersResponse] = await Promise.all([
-                    fetch(`${API_BASE}/api/orders?storeId=${storeId}`, {
+                    fetchWithRetry(`${API_BASE}/api/orders?storeId=${storeId}`, {
                         headers: {
                             Authorization: `Bearer ${token}`
                         },
                         signal: controller.signal
+                    }, {
+                        retries: 3,
+                        baseDelayMs: 450
                     }),
                     loadLocationData(token, controller.signal)
                 ]);

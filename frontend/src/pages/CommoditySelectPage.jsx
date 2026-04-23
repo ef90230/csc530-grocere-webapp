@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '../components/common/Navbar';
 import TopBar from '../components/common/TopBar';
+import { fetchWithRetry, isRetryableNetworkError } from '../utils/fetchWithRetry';
 import './CommoditySelectPage.css';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
@@ -45,16 +46,22 @@ const CommoditySelectPage = () => {
         }
 
         const controller = new AbortController();
+        let reconnectTimerId = null;
 
         const loadCommodityQueue = async () => {
+            let shouldFinalizeLoading = true;
+
             try {
                 setErrorMessage('');
 
-                const profileResponse = await fetch(`${API_BASE}/api/auth/me`, {
+                const profileResponse = await fetchWithRetry(`${API_BASE}/api/auth/me`, {
                     headers: {
                         Authorization: `Bearer ${token}`
                     },
                     signal: controller.signal
+                }, {
+                    retries: 10,
+                    baseDelayMs: 500
                 });
 
                 if (!profileResponse.ok) {
@@ -69,11 +76,14 @@ const CommoditySelectPage = () => {
                 }
 
                 if (!suppressAutoResume) {
-                    const activeWalkResponse = await fetch(`${API_BASE}/api/orders/picking/walk/current/${storeId}`, {
+                    const activeWalkResponse = await fetchWithRetry(`${API_BASE}/api/orders/picking/walk/current/${storeId}`, {
                         headers: {
                             Authorization: `Bearer ${token}`
                         },
                         signal: controller.signal
+                    }, {
+                        retries: 8,
+                        baseDelayMs: 450
                     });
 
                     if (!activeWalkResponse.ok) {
@@ -92,11 +102,14 @@ const CommoditySelectPage = () => {
                     }
                 }
 
-                const queueResponse = await fetch(`${API_BASE}/api/orders/commodities/${storeId}`, {
+                const queueResponse = await fetchWithRetry(`${API_BASE}/api/orders/commodities/${storeId}`, {
                     headers: {
                         Authorization: `Bearer ${token}`
                     },
                     signal: controller.signal
+                }, {
+                    retries: 8,
+                    baseDelayMs: 450
                 });
 
                 if (!queueResponse.ok) {
@@ -111,11 +124,18 @@ const CommoditySelectPage = () => {
                 }
             } catch (error) {
                 if (error.name !== 'AbortError') {
+                    if (isRetryableNetworkError(error)) {
+                        shouldFinalizeLoading = false;
+                        setIsLoading(true);
+                        reconnectTimerId = window.setTimeout(loadCommodityQueue, 1500);
+                        return;
+                    }
+
                     console.error('Unable to load commodity queue', error);
                     setErrorMessage(error.message || 'Unable to load commodities ready for picking.');
                 }
             } finally {
-                if (!controller.signal.aborted) {
+                if (!controller.signal.aborted && shouldFinalizeLoading) {
                     setIsLoading(false);
                 }
             }
@@ -127,6 +147,9 @@ const CommoditySelectPage = () => {
 
         return () => {
             controller.abort();
+            if (reconnectTimerId) {
+                window.clearTimeout(reconnectTimerId);
+            }
             window.clearInterval(intervalId);
         };
     }, [navigate, suppressAutoResume]);

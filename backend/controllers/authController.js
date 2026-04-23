@@ -154,10 +154,38 @@ const login = async (req, res) => {
       return res.status(401).json({ message: 'Account is not active' });
     }
 
-    const isAssignedStoreAdmin = isStoreAdminEmployee(user?.storeId, user?.id);
+    let isAssignedStoreAdmin = isStoreAdminEmployee(user?.storeId, user?.id);
 
+    // Recover gracefully when file-based admin assignment metadata is missing/stale.
     if (userType === 'admin' && !isAssignedStoreAdmin) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      const normalizedRole = String(user?.role || '').toLowerCase();
+
+      if (normalizedRole === 'manager' && user?.storeId) {
+        const existingAdminEmployeeId = getStoreAdminEmployeeId(user.storeId);
+
+        if (!existingAdminEmployeeId) {
+          assignStoreAdmin(user.storeId, user.id);
+          isAssignedStoreAdmin = true;
+        } else {
+          const existingAdmin = await Employee.findOne({
+            where: {
+              id: existingAdminEmployeeId,
+              isActive: true
+            },
+            attributes: ['id']
+          });
+
+          if (!existingAdmin) {
+            clearStoreAdmin(user.storeId);
+            assignStoreAdmin(user.storeId, user.id);
+            isAssignedStoreAdmin = true;
+          }
+        }
+      }
+
+      if (!isAssignedStoreAdmin) {
+        return res.status(401).json({ message: 'Invalid credentials' });
+      }
     }
 
     if (userType === 'employee' && isAssignedStoreAdmin) {
