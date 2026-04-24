@@ -1,8 +1,0 @@
-platform :ios, '13.0'
-
-target 'GrocereMobile' do
-  use_frameworks!
-
-  # ML Kit barcode scanner (UPC-A / UPC-E support)
-  pod 'GoogleMLKit/BarcodeScanning', '6.0.0'
-end

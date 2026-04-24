@@ -83,6 +83,15 @@ const compareQueueEntriesByPath = (left, right) => {
     return String(left?.item?.name || '').localeCompare(String(right?.item?.name || ''));
 };
 
+const getCameraUnavailableMessage = () => {
+    const isSecureContext = window.isSecureContext || window.location.protocol === 'https:';
+    if (!isSecureContext) {
+        return 'Live camera scanning requires HTTPS on mobile. Open this app using an HTTPS URL (for example, via ngrok).';
+    }
+
+    return 'Camera unavailable on this device/browser.';
+};
+
 const PickingPage = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -651,8 +660,11 @@ const PickingPage = () => {
     const handleOpenCamera = async () => {
         setCameraMessage('');
 
-        if (!navigator?.mediaDevices?.getUserMedia) {
-            setCameraMessage('Camera unavailable');
+        const supportsLiveCamera = Boolean(navigator?.mediaDevices?.getUserMedia);
+        const hasSecureContext = Boolean(window.isSecureContext || window.location.protocol === 'https:');
+
+        if (!supportsLiveCamera || !hasSecureContext) {
+            setCameraMessage(getCameraUnavailableMessage());
             return;
         }
 
@@ -693,7 +705,13 @@ const PickingPage = () => {
         const startReader = async () => {
             try {
                 const controls = await reader.decodeFromConstraints(
-                    { video: { facingMode: { ideal: 'environment' } } },
+                    {
+                        video: {
+                            facingMode: { ideal: 'environment' },
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        }
+                    },
                     videoElement,
                     (result) => {
                         if (!result || isHandlingScanRef.current) return;
@@ -727,7 +745,11 @@ const PickingPage = () => {
             } catch (error) {
                 console.error('Unable to start barcode scanner', error);
                 setIsCameraOpen(false);
-                setCameraMessage('Camera unavailable');
+                if (error?.name === 'NotAllowedError') {
+                    setCameraMessage('Camera permission denied. Please allow camera access in your browser settings.');
+                } else {
+                    setCameraMessage(getCameraUnavailableMessage());
+                }
             }
         };
 
