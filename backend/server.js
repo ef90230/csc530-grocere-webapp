@@ -1,5 +1,9 @@
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
+const https = require('https');
+const http = require('http');
+const path = require('path');
 require('dotenv').config();
 
 const { testConnection } = require('./config/db');
@@ -12,8 +16,33 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+const resolveSslFile = (explicitPath, fallbackRelativePath) => {
+  if (explicitPath && fs.existsSync(explicitPath)) {
+    return explicitPath;
+  }
+
+  const fallbackPath = path.join(__dirname, fallbackRelativePath);
+  return fs.existsSync(fallbackPath) ? fallbackPath : null;
+};
+
+const sslKeyPath = resolveSslFile(process.env.SSL_KEY_FILE, 'certs/server-key.pem');
+const sslCertPath = resolveSslFile(process.env.SSL_CERT_FILE, 'certs/server-cert.pem');
+const useHttps = Boolean(sslKeyPath && sslCertPath);
+
+// Serve frontend static files from the build directory
+const frontendBuildPath = path.join(__dirname, '../frontend/build');
+app.use(express.static(frontendBuildPath));
+
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  next();
+});
+
+// Compatibility shim: normalize accidental double API prefixes from older builds.
+app.use((req, res, next) => {
+  if (req.url.startsWith('/api/api/')) {
+    req.url = req.url.replace('/api/api/', '/api/');
+  }
   next();
 });
 
@@ -36,24 +65,9 @@ app.use('/api/pickpaths', require('./routes/pickPaths'));
 app.use('/api/staging-locations', require('./routes/stagingLocations'));
 app.use('/api/alerts', require('./routes/alerts'));
 
-app.get('/', (req, res) => {
-  res.json({
-    message: 'Welcome to Grocer-E API',
-    version: '1.0.0',
-    endpoints: {
-      health: '/health',
-      auth: '/api/auth',
-      employees: '/api/employees',
-      customers: '/api/customers',
-      items: '/api/items',
-      aisles: '/api/aisles',
-      cart: '/api/cart',
-      orders: '/api/orders',
-      pickPaths: '/api/pickpaths',
-      stagingLocations: '/api/staging-locations',
-      alerts: '/api/alerts'
-    }
-  });
+// Serve React app for all non-API routes (SPA routing)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(frontendBuildPath, 'index.html'));
 });
 
 app.use((req, res) => {
@@ -78,12 +92,29 @@ const startServer = async () => {
     await testConnection();
     await syncDatabase(false);
     initializeSchedulingMaintenance();
+
+    const server = useHttps
+      ? https.createServer(
+          {
+            key: fs.readFileSync(sslKeyPath),
+            cert: fs.readFileSync(sslCertPath)
+          },
+          app
+        )
+      : http.createServer(app);
     
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
+      const protocol = useHttps ? 'https' : 'http';
       console.log(`\nServer running on port ${PORT}`);
       console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`API URL: http://localhost:${PORT}`);
-      console.log(`Health check: http://localhost:${PORT}/health\n`);
+      console.log(`API URL: ${protocol}://localhost:${PORT}`);
+      console.log(`Health check: ${protocol}://localhost:${PORT}/health`);
+      if (useHttps) {
+        console.log(`HTTPS enabled with cert: ${sslCertPath}`);
+      } else {
+        console.log('HTTPS disabled. Set SSL_KEY_FILE and SSL_CERT_FILE or add backend/certs/server-key.pem and backend/certs/server-cert.pem to enable it.');
+      }
+      console.log('');
     });
   } catch (error) {
     console.error('Failed to start server:', error);

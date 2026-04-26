@@ -183,6 +183,129 @@ Managers configure pick routes with:
 
 Aisle and location coordinates are updated via a batch endpoint used by the MapScreen canvas.
 
+## Mobile Web App Access
+
+Grocer-E is designed to work seamlessly on mobile devices (phones and tablets) as a progressive web app. Employees can access the application directly from their device's browser without needing to install a native app.
+
+### 🎯 Quick Demo / Presentation Mode
+
+**See [PRESENTATION_MODE.md](PRESENTATION_MODE.md)** for the fastest way to show Grocer-E on phones during a presentation or demo (5 minutes setup, no laptop needed once running).
+
+### Features on Mobile
+
+- **Full barcode scanning support** — Use your device's camera to scan items during picking and inventory management
+- **Responsive design** — The interface automatically adapts to phone screens (portrait and landscape)
+- **Install to home screen** — On iOS and Android, you can add Grocer-E to your home screen for quick access (appears as a native app icon)
+- **Works on LAN** — Access the app from any device on your store's local network
+- **Offline-ready** — The app maintains local session state using browser storage
+
+### Quick Start on Your Phone
+
+#### Option 1: Access Via Local Network IP (Recommended for Same Store)
+
+1. **On your server/laptop**, ensure the app is running:
+   ```bash
+   cd backend && npm run dev
+   cd frontend && npm start
+   ```
+   By default: Backend runs on `http://localhost:5000` and frontend on `http://localhost:3000`
+
+2. **Find your server's local IP address**:
+   - **Mac/Linux**: Open terminal, run `ifconfig` and look for the IP under your WiFi adapter (e.g., `192.168.1.x`)
+   - **Windows**: Open Command Prompt, run `ipconfig` and look for IPv4 Address under your WiFi
+
+3. **On your phone**, open the browser and navigate to:
+   ```
+   http://<YOUR_SERVER_IP>:3000
+   ```
+   Example: `http://192.168.1.42:3000`
+
+4. **Log in** with your employee credentials
+
+**Note**: On mobile browsers, camera access requires HTTPS (or localhost). The backend can now serve HTTPS directly when you add a trusted certificate.
+
+#### Option 2: Access Via Local HTTPS on Your Laptop
+
+For phone camera scanning, run Grocer-E over HTTPS on your laptop and open that HTTPS URL from your phone:
+
+1. **Create a local trusted certificate** with [mkcert](https://github.com/FiloSottile/mkcert):
+   ```bash
+   mkcert -install
+   mkdir -p backend/certs
+   mkcert -key-file backend/certs/server-key.pem -cert-file backend/certs/server-cert.pem localhost 127.0.0.1 192.168.1.33
+   ```
+
+2. **Start the backend**:
+   ```bash
+   cd backend
+   npm run dev
+   ```
+
+3. **On your phone**, open:
+   ```
+   https://192.168.1.33:5000
+   ```
+
+4. **Log in** and use the camera in Picking/Inventory/Staging
+
+5. If your phone warns about trust, install and trust the mkcert CA on the device once
+
+The backend automatically switches to HTTPS when it finds `backend/certs/server-key.pem` and `backend/certs/server-cert.pem`.
+
+#### Option 3: Access Via Mobile Hotspot
+
+1. Start a hotspot on your store server device
+2. Connect your phone to that hotspot
+3. Use the server's local HTTPS address from Option 2
+
+### Installing as Home Screen App
+
+After opening Grocer-E in your phone's browser:
+
+**iOS (Safari)**:
+1. Tap the Share button (rectangle with arrow)
+2. Select "Add to Home Screen"
+3. Name it "Grocer-E" and tap "Add"
+
+**Android (Chrome)**:
+1. Tap the three-dot menu
+2. Select "Install app" or "Add to home screen"
+3. Confirm the installation
+
+Once installed, the app will open in fullscreen mode without the browser toolbar, giving it a native app feel.
+
+### Camera and Permissions
+
+Camera access is required for:
+- **PickingPage** — Scan items during order fulfillment
+- **InventoryScreen** — Check item locations and quantities
+- **StagingLocationsPage** — Organize items into staging areas
+
+**Permissions**:
+- Camera access is requested the first time you navigate to a scanning page
+- Grant permission for camera access to use these features
+- On iOS, ensure Settings > Safari > Camera Access is enabled for the website
+- On Android, grant permission in the app menu when prompted
+
+### Troubleshooting Mobile Access
+
+| Issue | Solution |
+|-------|----------|
+| **Can't connect to server IP** | Verify both devices are on the same WiFi network; check firewall settings on server |
+| **Camera not working** | Ensure you are on HTTPS using a trusted local certificate; check browser privacy settings for camera permission |
+| **Page loads but can't log in** | Verify backend is running on port 5000; check CORS settings in `backend/server.js` |
+| **App crashes when scanning** | Clear browser cache and reload; ensure barcode is well-lit and fully visible |
+| **Can't take a photo** | On iOS, check Settings > Safari > Camera; on Android, check app permissions in device settings |
+
+### For Production Deployment
+
+When deploying to production:
+1. Build the frontend: `cd frontend && npm run build`
+2. Serve both frontend and backend over HTTPS (use a reverse proxy like Nginx)
+3. Use a valid SSL certificate (not self-signed) for camera access to work reliably
+4. Enable CORS properly in `backend/server.js` for your domain
+5. Set environment variables for API URL in frontend build if backend is on a different domain
+
 ### Contributing
 
 For development, run the backend with `npm run dev` and the frontend with `npm start`.  The two parts communicate over `http://localhost:5000` by default.  See `BACKEND_SETUP.md` for database configuration and Docker instructions.
