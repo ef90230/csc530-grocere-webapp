@@ -97,6 +97,3 @@ Then access on phones from `http://<LAPTOP_IP>:5000`
 - **Database required**: PostgreSQL must be running (not cloud-deployed)
 
 ---
-
-**Status**: ✅ Ready for presentation
-**Last Updated**: April 23, 2026

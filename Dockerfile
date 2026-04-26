@@ -1,32 +1,24 @@
-# Build stage
-FROM node:24-alpine AS builder
+FROM node:24-alpine AS frontend-builder
 
-WORKDIR /app
-
-# Copy frontend source
+WORKDIR /app/frontend
 COPY frontend/package*.json ./
-RUN npm install
-
+RUN npm ci
 COPY frontend ./
 RUN npm run build
 
-# Runtime stage
-FROM node:24-alpine
+FROM node:24-alpine AS backend-runtime
 
-WORKDIR /app
+WORKDIR /app/backend
+COPY backend/package*.json ./
+RUN npm ci --omit=dev
+COPY backend ./
 
-# Install serve to run the frontend
-RUN npm install -g serve
+# Backend server serves static assets from ../frontend/build
+COPY --from=frontend-builder /app/frontend/build /app/frontend/build
 
-# Copy built app from builder
-COPY --from=builder /app/build ./build
+EXPOSE 5000
 
-# Expose frontend port
-EXPOSE 3000
+HEALTHCHECK --interval=15s --timeout=5s --retries=5 \
+  CMD wget -q -O /dev/null http://localhost:5000/health || exit 1
 
-# Health check
-HEALTHCHECK --interval=10s --timeout=5s --retries=5 \
-  CMD wget -q -O /dev/null http://localhost:3000 || exit 1
-
-# Serve the frontend
-CMD ["serve", "-s", "build", "-l", "3000"]
+CMD ["node", "server.js"]
