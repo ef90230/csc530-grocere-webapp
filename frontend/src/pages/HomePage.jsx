@@ -9,7 +9,7 @@ import storeManagementButtonSymbol from '../assets/home-buttons/store-management
 import { getOrderToteCount } from '../utils/customerOrderStatus';
 import './HomePage.css';
 
-const API_BASE = process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5000');
+const API_BASE = process.env.NODE_ENV === 'production' ? '' : (process.env.REACT_APP_API_URL || 'http://localhost:5000');
 const WAIT_THRESHOLD_STORAGE_KEY = 'grocereWaitThresholdMinutes';
 const DEFAULT_WAIT_THRESHOLD_MINUTES = 5;
 

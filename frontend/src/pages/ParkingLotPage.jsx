@@ -4,7 +4,7 @@ import Navbar from '../components/common/Navbar';
 import TopBar from '../components/common/TopBar';
 import './ParkingLotPage.css';
 
-const API_BASE = process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5000');
+const API_BASE = process.env.NODE_ENV === 'production' ? '' : (process.env.REACT_APP_API_URL || 'http://localhost:5000');
 const PARKING_SPACES_STORAGE_KEY_PREFIX = 'grocereParkingSpaces:store:';
 const WAIT_THRESHOLD_STORAGE_KEY = 'grocereWaitThresholdMinutes';
 const MAX_SPACES = 200;

@@ -11,7 +11,7 @@ import {
 } from '../utils/customerOrderStatus';
 import './StorefrontPage.css';
 
-const API_BASE = process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5000');
+const API_BASE = process.env.NODE_ENV === 'production' ? '' : (process.env.REACT_APP_API_URL || 'http://localhost:5000');
 const CLOSE_ANIMATION_MS = 280;
 
 const getOnHandTotal = (item) => {

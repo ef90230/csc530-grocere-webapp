@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import CustomerPopupMenu from '../components/customer/CustomerPopupMenu';
 import './SchedulingScreen.css';
 
-const API_BASE = process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5000');
+const API_BASE = process.env.NODE_ENV === 'production' ? '' : (process.env.REACT_APP_API_URL || 'http://localhost:5000');
 const CLOSE_ANIMATION_MS = 280;
 const SLOTS_PER_HOUR_CAPACITY = 20;
 

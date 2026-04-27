@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import './ItemCard.css';
 import StoreMapPreview from '../common/StoreMapPreview';
 
-const API_BASE = process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5000');
+const API_BASE = process.env.NODE_ENV === 'production' ? '' : (process.env.REACT_APP_API_URL || 'http://localhost:5000');
 
 const toCurrency = (value) => {
   const numeric = Number(value);
