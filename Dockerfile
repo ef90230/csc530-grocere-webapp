@@ -4,6 +4,7 @@ WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend ./
+ENV REACT_APP_API_URL=/api
 RUN npm run build
 
 FROM node:24-alpine AS backend-runtime
