@@ -17,7 +17,7 @@ import {
 import './StatBar.css';
 
 const TARGET_PICK_RATE = 100;
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+const API_BASE = process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5000');
 
 const getRateState = (pickRate, goalValue = TARGET_PICK_RATE, goalEnabled = true) => {
   if (!goalEnabled) {

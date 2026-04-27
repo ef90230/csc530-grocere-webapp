@@ -12,7 +12,7 @@ import {
     setActiveWalkTimeLimit
 } from '../utils/walkTimeLimit';
 
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+const API_BASE = process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5000');
 
 const REPORT_TYPE_OPTIONS = [
     { id: 'item_cannot_fit', label: 'Item cannot fit' },
