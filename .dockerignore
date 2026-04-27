@@ -14,3 +14,4 @@ build
 .vscode
 .idea
 cypress
+backend/certs

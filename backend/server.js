@@ -27,7 +27,12 @@ const resolveSslFile = (explicitPath, fallbackRelativePath) => {
 
 const sslKeyPath = resolveSslFile(process.env.SSL_KEY_FILE, 'certs/server-key.pem');
 const sslCertPath = resolveSslFile(process.env.SSL_CERT_FILE, 'certs/server-cert.pem');
-const useHttps = Boolean(sslKeyPath && sslCertPath);
+const runningInRailway = Boolean(
+  process.env.RAILWAY_ENVIRONMENT ||
+  process.env.RAILWAY_PROJECT_ID ||
+  process.env.RAILWAY_STATIC_URL
+);
+const useHttps = !runningInRailway && Boolean(sslKeyPath && sslCertPath);
 
 // Serve frontend static files from the build directory
 const frontendBuildPath = path.join(__dirname, '../frontend/build');
@@ -111,6 +116,8 @@ const startServer = async () => {
       console.log(`Health check: ${protocol}://localhost:${PORT}/health`);
       if (useHttps) {
         console.log(`HTTPS enabled with cert: ${sslCertPath}`);
+      } else if (runningInRailway) {
+        console.log('Railway environment detected. HTTPS is disabled inside the container (Railway terminates TLS at the edge).');
       } else {
         console.log('HTTPS disabled. Set SSL_KEY_FILE and SSL_CERT_FILE or add backend/certs/server-key.pem and backend/certs/server-cert.pem to enable it.');
       }
