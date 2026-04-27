@@ -12,28 +12,58 @@ const commonOptions = {
   }
 };
 
-const sequelize = process.env.DATABASE_URL
-  ? new Sequelize(process.env.DATABASE_URL, {
+const buildConnectionOptions = () => {
+  const useSsl = process.env.DB_SSL !== 'false';
+
+  if (process.env.DATABASE_URL) {
+    return {
+      url: process.env.DATABASE_URL,
+      options: {
+        ...commonOptions,
+        dialectOptions: useSsl
+          ? {
+              ssl: {
+                require: true,
+                rejectUnauthorized: false
+              }
+            }
+          : {}
+      }
+    };
+  }
+
+  const host = process.env.PGHOST || process.env.DB_HOST || 'localhost';
+  const port = Number(process.env.PGPORT || process.env.DB_PORT || 5432);
+  const database = process.env.PGDATABASE || process.env.DB_NAME || 'grocere_db';
+  const username = process.env.PGUSER || process.env.DB_USER || 'postgres';
+  const password = process.env.PGPASSWORD || process.env.DB_PASSWORD || '';
+
+  return {
+    url: null,
+    options: {
       ...commonOptions,
-      dialectOptions: process.env.DB_SSL === 'false'
-        ? {}
-        : {
+      host,
+      port,
+      database,
+      username,
+      password,
+      dialectOptions: useSsl
+        ? {
             ssl: {
               require: true,
               rejectUnauthorized: false
             }
           }
-    })
-  : new Sequelize(
-      process.env.DB_NAME || 'grocere_db',
-      process.env.DB_USER || 'postgres',
-      process.env.DB_PASSWORD || '',
-      {
-        ...commonOptions,
-        host: process.env.DB_HOST || 'localhost',
-        port: process.env.DB_PORT || 5432
-      }
-    );
+        : {}
+    }
+  };
+};
+
+const { url: connectionUrl, options: connectionOptions } = buildConnectionOptions();
+
+const sequelize = connectionUrl
+  ? new Sequelize(connectionUrl, connectionOptions)
+  : new Sequelize(connectionOptions);
 
 const testConnection = async () => {
   try {
