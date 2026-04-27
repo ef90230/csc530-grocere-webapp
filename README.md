@@ -1,6 +1,8 @@
 # csc530-grocere-webapp
 This repo contains the code and content for Grocer-E, a web app designed to manage and fulfill online orders in a similar vein to Walmart's Global Integrated Fulfillment (GIF) software and other apps. This project was created as part of the Murray State University Senior Software Project.
 
+v0.0.0: Production version for demo purposes only.
+
 ## Set Up Your Store
 Store managers can rearrange the aisles and path that pickers use to collect items for orders. You can even use AI to devise a path for you.
 ### What Makes a Store Efficient?
@@ -41,6 +43,8 @@ To power Grocer-E's powerful algorithmic paths, stores are set up with a databas
 - Weighted Efficiency - A special score assigned as an aggregate of the employee/store's pick rate and FTP. A perfect score results from a pick rate >= 100.00 items/hour and FTP of 100%.
 
 ## Note to Clients
+Grocer-E will be marketed as a Software as a Service (SaaS) only. It will not provide any physical items (parking space signage, backroom coolers and freezers, carts, labels) that may be necessary to maximize the potential of this service.
+
 Grocer-E only provides the digital infrastructure for your shopping management experience. It cannot account for every edge case within your store alone. It is up to you to address certain issues and shortcomings that may arise from use of the software, including, but not limited to, the following:
 - Items found in a location other than the listed intended location while picking: Notify a member of management to move the items or adjust locations in the Grocer-E app accordingly.
 - Items with On Hand in Grocer-E listed as 0: These items will still be able to be picked by staff, but cannot be ordered further by customers. This behavior is intentionally selected to account for delays in store inventory processing, such as items sold to in-store shoppers, damaged items, and supply chain issues. You are responsible for maintaining as close to an accurate On Hand figure as possible to minimize shopper issues.
@@ -88,10 +92,8 @@ Both unit and end-to-end tests are included to validate critical business logic 
 3. Tests create and tear down their own data; make sure the test database is accessible and can be dropped.
 
 The scheduling unit suite (`backend/tests/unit/schedulingService.test.js`) exercises every restriction:
-- no pickups between midnight–8 AM
 - minimum 3‑hour advance notice
 - maximum seven‑day lead time
-- hourly capacity of 20 orders
 - automatic purge of orders older than 48 hours
 
 Integration/E2E coverage (`backend/tests/integration/schedulingRoutes.test.js`) exercises the corresponding HTTP endpoints, including a manager‑only purge call.
@@ -187,9 +189,7 @@ Aisle and location coordinates are updated via a batch endpoint used by the MapS
 
 Grocer-E is designed to work seamlessly on mobile devices (phones and tablets) as a progressive web app. Employees can access the application directly from their device's browser without needing to install a native app.
 
-### 🎯 Quick Demo / Presentation Mode
-
-**See [PRESENTATION_MODE.md](PRESENTATION_MODE.md)** for the fastest way to show Grocer-E on phones during a presentation or demo (5 minutes setup, no laptop needed once running).
+Simply go to `http://grocere-production.up.railway.app` and sign in or sign up to use it.
 
 ### Features on Mobile
 
@@ -198,65 +198,6 @@ Grocer-E is designed to work seamlessly on mobile devices (phones and tablets) a
 - **Install to home screen** — On iOS and Android, you can add Grocer-E to your home screen for quick access (appears as a native app icon)
 - **Works on LAN** — Access the app from any device on your store's local network
 - **Offline-ready** — The app maintains local session state using browser storage
-
-### Quick Start on Your Phone
-
-#### Option 1: Access Via Local Network IP (Recommended for Same Store)
-
-1. **On your server/laptop**, ensure the app is running:
-   ```bash
-   cd backend && npm run dev
-   cd frontend && npm start
-   ```
-   By default: Backend runs on `http://localhost:5000` and frontend on `http://localhost:3000`
-
-2. **Find your server's local IP address**:
-   - **Mac/Linux**: Open terminal, run `ifconfig` and look for the IP under your WiFi adapter (e.g., `192.168.1.x`)
-   - **Windows**: Open Command Prompt, run `ipconfig` and look for IPv4 Address under your WiFi
-
-3. **On your phone**, open the browser and navigate to:
-   ```
-   http://<YOUR_SERVER_IP>:3000
-   ```
-   Example: `http://192.168.1.42:3000`
-
-4. **Log in** with your employee credentials
-
-**Note**: On mobile browsers, camera access requires HTTPS (or localhost). The backend can now serve HTTPS directly when you add a trusted certificate.
-
-#### Option 2: Access Via Local HTTPS on Your Laptop
-
-For phone camera scanning, run Grocer-E over HTTPS on your laptop and open that HTTPS URL from your phone:
-
-1. **Create a local trusted certificate** with [mkcert](https://github.com/FiloSottile/mkcert):
-   ```bash
-   mkcert -install
-   mkdir -p backend/certs
-   mkcert -key-file backend/certs/server-key.pem -cert-file backend/certs/server-cert.pem localhost 127.0.0.1 192.168.1.33
-   ```
-
-2. **Start the backend**:
-   ```bash
-   cd backend
-   npm run dev
-   ```
-
-3. **On your phone**, open:
-   ```
-   https://192.168.1.33:5000
-   ```
-
-4. **Log in** and use the camera in Picking/Inventory/Staging
-
-5. If your phone warns about trust, install and trust the mkcert CA on the device once
-
-The backend automatically switches to HTTPS when it finds `backend/certs/server-key.pem` and `backend/certs/server-cert.pem`.
-
-#### Option 3: Access Via Mobile Hotspot
-
-1. Start a hotspot on your store server device
-2. Connect your phone to that hotspot
-3. Use the server's local HTTPS address from Option 2
 
 ### Installing as Home Screen App
 
