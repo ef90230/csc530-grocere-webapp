@@ -545,6 +545,22 @@ const CartScreen = () => {
                                     Set Substitution
                                 </button>
                                 <button
+                                        type="button"
+                                        className="cart-item-options-card__action cart-item-options-card__action--danger"
+                                        disabled={!activeCartItem?.substitutionItem || updatingItemId === activeCartItem.id}
+                                        onClick={async () => {
+                                            const saved = await setCartItemOptions(activeCartItem.id, {
+                                                clearSubstitution: true
+                                            });
+
+                                            if (saved) {
+                                                setItemOptionsState({ cartItemId: activeCartItem.id, mode: 'menu' });
+                                            }
+                                        }}
+                                    >
+                                        Clear Substitution
+                                    </button>
+                                <button
                                     type="button"
                                     className="cart-item-options-card__action"
                                     onClick={() => {
@@ -582,22 +598,6 @@ const CartScreen = () => {
                                     rows={5}
                                 />
                                 <div className="cart-item-options-card__footer-actions">
-                                    <button
-                                        type="button"
-                                        className="cart-item-options-card__action cart-item-options-card__action--danger"
-                                        disabled={!activeCartItem?.substitutionItem || updatingItemId === activeCartItem.id}
-                                        onClick={async () => {
-                                            const saved = await setCartItemOptions(activeCartItem.id, {
-                                                clearSubstitution: true
-                                            });
-
-                                            if (saved) {
-                                                setItemOptionsState({ cartItemId: activeCartItem.id, mode: 'menu' });
-                                            }
-                                        }}
-                                    >
-                                        Clear Substitution
-                                    </button>
                                     <button
                                         type="button"
                                         className="cart-item-options-card__action cart-item-options-card__action--secondary"

@@ -1,6 +1,3 @@
-// simple authentication hook for login/register operations
-// in a real app this would interact with context and token storage
-
 const API_BASE = process.env.NODE_ENV === 'production' ? '' : (process.env.REACT_APP_API_URL || 'http://localhost:5000');
 
 const persistAuth = (payload, fallbackUserType) => {
