@@ -1018,7 +1018,7 @@ const MapScreen = () => {
                   <button className="btn btn-info" onClick={editPickPath}>
                     Edit Path
                   </button>
-                  <button className="btn btn-secondary" onClick={deletePickPath}>
+                  <button className="btn btn-danger" onClick={deletePickPath}>
                     Delete Path
                   </button>
                 </div>

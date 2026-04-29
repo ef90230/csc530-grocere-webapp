@@ -371,7 +371,7 @@ const CartScreen = () => {
                   aria-label="Go back"
                   onClick={() => navigate('/storefront')}
                 >
-                  ←
+                  <span aria-hidden="true">&#9664;</span>
                 </button>
                 <span className="cart-screen__welcome">Hello, {firstName}!</span>
                 <button

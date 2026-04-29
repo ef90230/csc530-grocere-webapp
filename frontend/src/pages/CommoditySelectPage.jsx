@@ -221,7 +221,7 @@ const CommoditySelectPage = () => {
                                     <span className="commodity-select-due-label">
                                         {commodity.dueItemCount || 0} {(commodity.dueItemCount || 0) === 1 ? 'item' : 'items'} due {formatDueTime(commodity.dueTime)}
                                     </span>
-                                    <span className="commodity-select-chevron" aria-hidden="true">&gt;</span>
+                                    <span className="commodity-select-chevron" aria-hidden="true">&#9654;</span>
                                 </div>
                             </button>
                         ))}

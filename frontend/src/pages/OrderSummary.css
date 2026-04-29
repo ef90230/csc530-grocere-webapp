@@ -25,13 +25,14 @@
 }
 
 .order-summary-back-button {
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
   border: none;
-  border-radius: 4px;
-  background: transparent;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.18);
   color: #000;
-  font-size: 1.7rem;
+  font-size: 1.2rem;
+  font-weight: 700;
   line-height: 1;
   cursor: pointer;
   display: flex;
@@ -41,7 +42,7 @@
 }
 
 .order-summary-back-button:hover {
-  background-color: rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.28);
 }
 
 .order-summary-title {

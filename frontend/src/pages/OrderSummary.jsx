@@ -245,7 +245,7 @@ const OrderSummary = () => {
           aria-label="Go back"
           onClick={() => navigate('/storefront')}
         >
-          ←
+          <span aria-hidden="true">&#9664;</span>
         </button>
         <h1 className="order-summary-title">My Orders</h1>
         <button

@@ -1126,7 +1126,7 @@ const PickingPage = () => {
                                 </button>
                             </div>
                             <button type="button" className="picking-skip-button" onClick={skipCurrentItem} aria-label="Skip item">
-                                &gt;
+                                <span aria-hidden="true">&#9654;</span>
                             </button>
                             <button
                                 type="button"

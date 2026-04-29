@@ -6,6 +6,7 @@ import StatBar from './StatBar';
 import './TopBar.css';
 
 const CLOSE_ANIMATION_MS = 280;
+const FILLED_LEFT_ARROW = '\u25C0';
 
 const CommentIcon = () => (
   <svg
@@ -132,7 +133,7 @@ const TopBar = ({
             aria-label={leftActionAriaLabel}
             onClick={onLeftAction}
           >
-            {leftActionLabel || '×'}
+            {leftActionLabel === '<' ? FILLED_LEFT_ARROW : (leftActionLabel || '×')}
           </button>
         ) : null}
         <span className="topbar-title">{title}</span>

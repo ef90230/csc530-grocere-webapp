@@ -291,7 +291,7 @@ const EmployeeSettingsPage = () => {
             aria-label="Back"
             onClick={() => navigate(backPath)}
           >
-            &lt;
+            <span aria-hidden="true">&#9664;</span>
           </button>
           <h1>User Settings</h1>
         </header>

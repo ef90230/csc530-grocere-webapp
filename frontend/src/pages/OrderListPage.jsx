@@ -847,7 +847,7 @@ const OrderListPage = () => {
                                             onClick={(event) => handleShortcutClick(event, order)}
                                         >
                                             <span>{getShortcutLabel(order)}</span>
-                                            <span className="order-shortcut-arrow">&gt;</span>
+                                            <span className="order-shortcut-arrow">&#9654;</span>
                                         </button>
                                     ) : null}
                                 </div>

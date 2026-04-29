@@ -115,6 +115,23 @@
   cursor: not-allowed;
 }
 
+.btn-danger {
+  background-color: #f44336;
+  color: white;
+  padding: 0.5rem 1rem;
+  font-size: 1rem;
+  font-weight: normal;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background-color: #da190b;
+}
+
+.btn-danger:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
 .map-canvas {
   border: 1px solid #ccc;
   background-color: #fff;
