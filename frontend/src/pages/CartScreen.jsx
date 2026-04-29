@@ -365,6 +365,14 @@ const CartScreen = () => {
     return (
         <div className="cart-screen">
             <header className="cart-screen__topbar">
+                <button
+                  type="button"
+                  className="cart-screen__button cart-screen__button--back"
+                  aria-label="Go back"
+                  onClick={() => navigate('/storefront')}
+                >
+                  ←
+                </button>
                 <span className="cart-screen__welcome">Hello, {firstName}!</span>
                 <button
                     type="button"
@@ -379,23 +387,6 @@ const CartScreen = () => {
             <main className="cart-screen__content">
                 <section className="cart-screen__header-row">
                     <h1 className="cart-screen__title">Your Cart</h1>
-                    <div className="cart-screen__header-actions">
-                        <button
-                            type="button"
-                            className="cart-screen__button cart-screen__button--back"
-                            onClick={() => navigate('/storefront')}
-                        >
-                            Back
-                        </button>
-                        <button
-                            type="button"
-                            className="cart-screen__button cart-screen__button--empty"
-                            onClick={handleEmptyCart}
-                            disabled={!hasItems || isClearingCart}
-                        >
-                            {isClearingCart ? 'Emptying...' : 'Empty Cart'}
-                        </button>
-                    </div>
                 </section>
 
                 <section className="cart-screen__items" aria-live="polite">
@@ -485,6 +476,14 @@ const CartScreen = () => {
                         </p>
                         <p className="cart-screen__total-value">{formatCurrency(estimatedTotal)}</p>
                     </div>
+                    <button
+                            type="button"
+                            className="cart-screen__button cart-screen__button--empty"
+                            onClick={handleEmptyCart}
+                            disabled={!hasItems || isClearingCart}
+                        >
+                            {isClearingCart ? 'Emptying...' : 'Empty Cart'}
+                        </button>
                     <button
                         type="button"
                         className="cart-screen__checkout-button"
